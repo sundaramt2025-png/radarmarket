@@ -38,7 +38,7 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 
   <!-- Custom Radar HUD Styles -->
-  <link rel="stylesheet" href="css/styles.css?v=2.8">
+  <link rel="stylesheet" href="css/styles.css?v=2.9">
 
   <script>
     tailwind.config = {
@@ -1232,6 +1232,11 @@
           <span>Handshake</span>
         </button>
 
+        <button type="button" id="btn-chat-make-offer" class="px-2 py-1 rounded bg-amber-950/70 hover:bg-amber-900/90 border border-amber-400/50 text-amber-300 flex items-center gap-1 text-[11px] shrink-0 font-bold transition shadow-[0_0_10px_rgba(245,158,11,0.2)] cursor-pointer" title="Negotiate price & make an offer">
+          <i data-lucide="tag" class="w-3.5 h-3.5 text-amber-400"></i>
+          <span>Offer</span>
+        </button>
+
         <button type="button" id="btn-open-upi-pay" class="px-2 py-1 rounded bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 flex items-center gap-1 text-[11px] shrink-0 font-bold transition cursor-pointer">
           <i data-lucide="qr-code" class="w-3.5 h-3.5"></i>
           <span>Pay UPI</span>
@@ -1253,6 +1258,10 @@
 
       <!-- Quick Suggestion Chips -->
       <div class="px-3 py-1.5 bg-slate-950/90 border-t border-slate-800 flex items-center gap-1.5 overflow-x-auto text-[11px] font-mono whitespace-nowrap">
+        <button type="button" id="btn-chip-make-offer" class="px-2.5 py-1 rounded bg-amber-950/50 hover:bg-amber-900/70 text-amber-300 border border-amber-500/40 transition flex items-center gap-1 shrink-0 font-bold cursor-pointer">
+          <i data-lucide="tag" class="w-3 h-3 text-amber-400"></i>
+          <span>🏷️ Make an Offer</span>
+        </button>
         <button class="quick-chip px-2.5 py-1 rounded bg-slate-900 hover:bg-slate-800 text-cyan-300 border border-slate-800 transition">
           Is this still available?
         </button>
@@ -1400,6 +1409,95 @@
           </button>
         </div>
 
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: MAKE AN OFFER / QUICK BARGAINING DIALOG -->
+  <div id="modal-make-offer" class="modal-overlay fixed inset-0 z-50 hidden flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+    <div class="glass-panel w-full max-w-sm border border-amber-400/60 shadow-[0_0_40px_rgba(245,158,11,0.3)] rounded-2xl overflow-hidden flex flex-col">
+      <div class="px-5 py-3.5 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
+        <div class="flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-lg bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400">
+            <i data-lucide="tag" class="w-4 h-4"></i>
+          </div>
+          <div>
+            <h3 class="font-bold text-white text-xs font-mono tracking-wider">MAKE AN OFFER</h3>
+            <p id="offer-modal-item-title" class="text-[10px] text-slate-400 truncate max-w-[200px]">Item Title</p>
+          </div>
+        </div>
+        <button type="button" id="btn-close-offer-modal" class="text-slate-400 hover:text-white p-1 rounded transition cursor-pointer">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="p-5 space-y-4 font-mono">
+        <div class="flex items-center justify-between p-3 rounded-xl bg-slate-900/90 border border-slate-800">
+          <span class="text-slate-400 text-xs">Original Listed Price:</span>
+          <span id="offer-modal-original-price" class="text-slate-100 font-bold text-base">₹0</span>
+        </div>
+
+        <!-- Quick Discount Chips -->
+        <div>
+          <label class="block text-[11px] text-slate-400 mb-2 uppercase font-bold">1-Tap Discount Preset:</label>
+          <div class="grid grid-cols-4 gap-2 text-xs">
+            <button type="button" class="btn-offer-chip py-2 rounded-lg bg-slate-900 hover:bg-amber-950/60 border border-slate-700 hover:border-amber-400 text-slate-200 transition cursor-pointer font-bold text-center" data-pct="10">-10%</button>
+            <button type="button" class="btn-offer-chip py-2 rounded-lg bg-slate-900 hover:bg-amber-950/60 border border-slate-700 hover:border-amber-400 text-slate-200 transition cursor-pointer font-bold text-center" data-pct="15">-15%</button>
+            <button type="button" class="btn-offer-chip py-2 rounded-lg bg-slate-900 hover:bg-amber-950/60 border border-slate-700 hover:border-amber-400 text-slate-200 transition cursor-pointer font-bold text-center" data-pct="20">-20%</button>
+            <button type="button" class="btn-offer-chip py-2 rounded-lg bg-slate-900 hover:bg-amber-950/60 border border-slate-700 hover:border-amber-400 text-slate-200 transition cursor-pointer font-bold text-center" data-pct="25">-25%</button>
+          </div>
+        </div>
+
+        <!-- Custom Amount Input -->
+        <div>
+          <label class="block text-[11px] text-slate-400 mb-1.5 uppercase font-bold">Proposed Deal Amount (₹):</label>
+          <div class="relative">
+            <span class="absolute left-3.5 top-2.5 text-amber-400 font-bold text-base">₹</span>
+            <input type="number" id="input-offer-amount" placeholder="e.g. 240" min="1" step="1"
+              class="w-full bg-slate-900 border border-slate-700 rounded-xl pl-8 pr-3 py-2.5 text-base text-slate-100 font-bold focus:outline-none focus:border-amber-400 placeholder:text-slate-600" />
+          </div>
+        </div>
+
+        <!-- Savings Indicator -->
+        <div id="offer-savings-preview" class="hidden p-2.5 rounded-xl bg-emerald-950/50 border border-emerald-500/40 text-xs text-emerald-300 flex items-center justify-between">
+          <span class="flex items-center gap-1"><i data-lucide="zap" class="w-3.5 h-3.5 text-emerald-400"></i> Potential Savings:</span>
+          <strong id="offer-savings-amount" class="text-emerald-400 font-bold">Save ₹0 (0%)</strong>
+        </div>
+
+        <button type="button" id="btn-submit-offer" class="w-full py-3 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(245,158,11,0.35)] transition cursor-pointer">
+          <i data-lucide="send" class="w-4 h-4"></i>
+          <span>Transmit Offer to Seller</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: SUBMIT COUNTER OFFER -->
+  <div id="modal-counter-offer" class="modal-overlay fixed inset-0 z-50 hidden flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+    <div class="glass-panel w-full max-w-sm border border-cyan-400/60 shadow-[0_0_40px_rgba(0,229,255,0.3)] rounded-2xl overflow-hidden flex flex-col">
+      <div class="px-5 py-3.5 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
+        <div class="flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-lg bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center text-cyan-400">
+            <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+          </div>
+          <h3 class="font-bold text-white text-xs font-mono tracking-wider uppercase">Submit Counter Offer</h3>
+        </div>
+        <button type="button" id="btn-close-counter-modal" class="text-slate-400 hover:text-white p-1 rounded transition cursor-pointer">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="p-5 space-y-4 font-mono">
+        <p class="text-xs text-slate-300">Enter an alternative counter price you would be willing to accept:</p>
+        <div class="relative">
+          <span class="absolute left-3.5 top-2.5 text-cyan-400 font-bold text-base">₹</span>
+          <input type="number" id="input-counter-amount" placeholder="e.g. 260" min="1" step="1"
+            class="w-full bg-slate-900 border border-slate-700 rounded-xl pl-8 pr-3 py-2.5 text-base text-slate-100 font-bold focus:outline-none focus:border-cyan-400 placeholder:text-slate-600" />
+        </div>
+        <button type="button" id="btn-submit-counter" class="w-full py-3 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition cursor-pointer shadow-[0_0_15px_rgba(0,229,255,0.3)]">
+          <i data-lucide="send" class="w-4 h-4"></i>
+          <span>Transmit Counter Offer</span>
+        </button>
       </div>
     </div>
   </div>
@@ -1979,11 +2077,11 @@
   </div>
 
   <!-- SCRIPTS -->
-  <script src="js/data.js?v=2.8"></script>
-  <script src="js/algorithm.js?v=2.8"></script>
-  <script src="js/radar.js?v=2.8"></script>
-  <script src="js/api.js?v=2.8"></script>
-  <script src="js/app.js?v=2.8"></script>
+  <script src="js/data.js?v=2.9"></script>
+  <script src="js/algorithm.js?v=2.9"></script>
+  <script src="js/radar.js?v=2.9"></script>
+  <script src="js/api.js?v=2.9"></script>
+  <script src="js/app.js?v=2.9"></script>
 
   <script>
     // Initialize Lucide icons on page load

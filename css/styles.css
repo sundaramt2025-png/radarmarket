@@ -530,3 +530,45 @@ input[type=range]::-webkit-slider-thumb {
   0% { transform: scale(0.92); opacity: 0; }
   100% { transform: scale(1); opacity: 1; }
 }
+
+/* ==========================================
+   OFFER BARGAINING HUD STYLES
+   ========================================== */
+
+.chat-offer-card {
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-top: 6px;
+  animation: offerSlideIn 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  transition: all 0.3s ease;
+}
+
+.chat-offer-pending {
+  border: 1px solid rgba(245, 158, 11, 0.6);
+  background: linear-gradient(135deg, rgba(30, 20, 8, 0.95), rgba(15, 23, 42, 0.95));
+  box-shadow: 0 0 20px rgba(245, 158, 11, 0.2);
+}
+
+.chat-offer-accepted {
+  border: 1px solid rgba(0, 255, 157, 0.65);
+  background: linear-gradient(135deg, rgba(8, 28, 21, 0.95), rgba(15, 23, 42, 0.95));
+  box-shadow: 0 0 25px rgba(0, 255, 157, 0.3);
+}
+
+.chat-offer-countered {
+  border: 1px solid rgba(0, 229, 255, 0.6);
+  background: linear-gradient(135deg, rgba(8, 26, 36, 0.95), rgba(15, 23, 42, 0.95));
+  box-shadow: 0 0 20px rgba(0, 229, 255, 0.2);
+}
+
+.chat-offer-declined {
+  border: 1px solid rgba(244, 63, 94, 0.4);
+  background: linear-gradient(135deg, rgba(35, 10, 15, 0.9), rgba(15, 23, 42, 0.95));
+  opacity: 0.85;
+}
+
+@keyframes offerSlideIn {
+  0% { transform: translateY(8px) scale(0.96); opacity: 0; }
+  100% { transform: translateY(0) scale(1); opacity: 1; }
+}
+

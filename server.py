@@ -156,13 +156,31 @@ def init_db():
         "ALTER TABLE items ADD COLUMN handshake_code TEXT;",
         "ALTER TABLE items ADD COLUMN completed_by TEXT;",
         "ALTER TABLE items ADD COLUMN completed_at REAL;",
-        "ALTER TABLE users ADD COLUMN trades_completed INTEGER DEFAULT 0;"
+        "ALTER TABLE users ADD COLUMN trades_completed INTEGER DEFAULT 0;",
+        "ALTER TABLE items ADD COLUMN agreed_price REAL;",
+        "ALTER TABLE items ADD COLUMN accepted_offer_id TEXT;"
     ]
     for stmt in auth_migrations:
         try:
             cur.execute(stmt)
         except Exception:
             pass
+
+    # Offers / Bargaining table
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS offers (
+            id TEXT PRIMARY KEY,
+            item_id TEXT NOT NULL,
+            buyer_id TEXT NOT NULL,
+            buyer_name TEXT NOT NULL,
+            seller_id TEXT NOT NULL,
+            original_price REAL NOT NULL,
+            offer_amount REAL NOT NULL,
+            status TEXT DEFAULT 'pending',
+            created_at REAL NOT NULL,
+            updated_at REAL NOT NULL
+        );
+    """)
 
     conn.commit()
 
@@ -996,6 +1014,232 @@ def verify_handshake(item_id):
         "message": "Secure Handshake completed! Trade verified and trust scores boosted."
     })
 
+# ==========================================
+# MAKE AN OFFER / QUICK BARGAINING ROUTES
+# ==========================================
+
+@app.route('/api/offers/<item_id>', methods=['POST'])
+def create_offer(item_id):
+    """Submit a discounted price offer on a listing."""
+    db = get_db()
+    cur = db.cursor()
+    data = request.get_json() or {}
+
+    cur.execute("SELECT * FROM items WHERE id = ?", (item_id,))
+    item = cur.fetchone()
+    if not item:
+        return jsonify({"success": False, "error": "Item not found"}), 404
+    item = dict(item)
+
+    if item.get("status") == "sold":
+        return jsonify({"success": False, "error": "This item has already been marked as SOLD."}), 400
+
+    auth_user = get_authenticated_user(db)
+    buyer_id = request.headers.get('X-Device-Id') or data.get('buyer_id') or "guest-buyer"
+    if auth_user and auth_user.get("is_verified"):
+        buyer_name = auth_user.get("nickname") or data.get('buyer_name') or "Student"
+    else:
+        buyer_name = data.get('buyer_name') or "Student"
+
+    try:
+        offer_amount = float(data.get('offer_amount', 0))
+    except (ValueError, TypeError):
+        return jsonify({"success": False, "error": "Invalid offer amount"}), 400
+
+    if offer_amount <= 0:
+        return jsonify({"success": False, "error": "Offer amount must be greater than ₹0"}), 400
+
+    original_price = float(item.get('price') or 0)
+    seller_id = item.get('seller_id')
+
+    if buyer_id == seller_id:
+        return jsonify({"success": False, "error": "You cannot make an offer on your own listing."}), 400
+
+    offer_id = f"off-{uuid.uuid4().hex[:10]}"
+    now = time.time()
+
+    cur.execute("""
+        INSERT INTO offers (id, item_id, buyer_id, buyer_name, seller_id, original_price, offer_amount, status, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)
+    """, (offer_id, item_id, buyer_id, buyer_name, seller_id, original_price, offer_amount, now, now))
+
+    # Post special offer message into chat
+    chat_text = f"[OFFER:{offer_id}:{offer_amount:g}:{original_price:g}:pending:{buyer_name}]"
+    cur.execute("""
+        INSERT INTO messages (item_id, sender_id, sender_name, text, created_at)
+        VALUES (?, ?, ?, ?, ?)
+    """, (item_id, buyer_id, buyer_name, chat_text, now))
+
+    offer_payload = {
+        "offer_id": offer_id,
+        "item_id": item_id,
+        "buyer_id": buyer_id,
+        "buyer_name": buyer_name,
+        "seller_id": seller_id,
+        "original_price": original_price,
+        "offer_amount": offer_amount,
+        "status": "pending",
+        "created_at": now
+    }
+
+    # Emit sync event for real-time live notification
+    cur.execute("""
+        INSERT INTO sync_events (event_type, item_id, payload, created_at)
+        VALUES ('new_offer', ?, ?, ?)
+    """, (item_id, json.dumps(offer_payload), now))
+
+    db.commit()
+
+    return jsonify({
+        "success": True,
+        "offer": offer_payload
+    }), 201
+
+@app.route('/api/offers/<offer_id>/respond', methods=['POST'])
+def respond_offer(offer_id):
+    """Seller or Buyer responds to an offer: accept, counter, or decline."""
+    db = get_db()
+    cur = db.cursor()
+    data = request.get_json() or {}
+    action = (data.get('action') or '').lower().strip()
+
+    cur.execute("SELECT * FROM offers WHERE id = ?", (offer_id,))
+    offer = cur.fetchone()
+    if not offer:
+        return jsonify({"success": False, "error": "Offer not found"}), 404
+    offer = dict(offer)
+
+    item_id = offer['item_id']
+    cur.execute("SELECT * FROM items WHERE id = ?", (item_id,))
+    item = cur.fetchone()
+    if not item:
+        return jsonify({"success": False, "error": "Listing not found"}), 404
+    item = dict(item)
+
+    now = time.time()
+    auth_user = get_authenticated_user(db)
+    caller_id = request.headers.get('X-Device-Id') or data.get('user_id') or (auth_user['id'] if auth_user else "user")
+    sender_name = data.get('sender_name') or (auth_user.get('nickname') if auth_user else "Seller")
+
+    if action == 'accept':
+        agreed_price = float(offer['offer_amount'])
+        cur.execute("UPDATE offers SET status = 'accepted', updated_at = ? WHERE id = ?", (now, offer_id))
+        cur.execute("UPDATE items SET agreed_price = ?, accepted_offer_id = ? WHERE id = ?", (agreed_price, offer_id, item_id))
+
+        chat_text = f"[OFFER_ACCEPTED:{offer_id}:{agreed_price:g}]"
+        cur.execute("""
+            INSERT INTO messages (item_id, sender_id, sender_name, text, created_at)
+            VALUES (?, ?, ?, ?, ?)
+        """, (item_id, caller_id, sender_name, chat_text, now))
+
+        cur.execute("""
+            INSERT INTO sync_events (event_type, item_id, payload, created_at)
+            VALUES ('offer_accepted', ?, ?, ?)
+        """, (item_id, json.dumps({
+            "offer_id": offer_id,
+            "item_id": item_id,
+            "agreed_price": agreed_price,
+            "status": "accepted"
+        }), now))
+
+        db.commit()
+        return jsonify({
+            "success": True,
+            "status": "accepted",
+            "offer_id": offer_id,
+            "agreed_price": agreed_price,
+            "message": f"Offer accepted at ₹{agreed_price:g}! UPI payment amount updated."
+        })
+
+    elif action == 'counter':
+        try:
+            counter_amount = float(data.get('counter_amount', 0))
+        except (ValueError, TypeError):
+            return jsonify({"success": False, "error": "Invalid counter amount"}), 400
+        if counter_amount <= 0:
+            return jsonify({"success": False, "error": "Counter amount must be greater than ₹0"}), 400
+
+        cur.execute("""
+            UPDATE offers 
+            SET offer_amount = ?, status = 'countered', updated_at = ? 
+            WHERE id = ?
+        """, (counter_amount, now, offer_id))
+
+        chat_text = f"[OFFER_COUNTERED:{offer_id}:{counter_amount:g}]"
+        cur.execute("""
+            INSERT INTO messages (item_id, sender_id, sender_name, text, created_at)
+            VALUES (?, ?, ?, ?, ?)
+        """, (item_id, caller_id, sender_name, chat_text, now))
+
+        cur.execute("""
+            INSERT INTO sync_events (event_type, item_id, payload, created_at)
+            VALUES ('offer_countered', ?, ?, ?)
+        """, (item_id, json.dumps({
+            "offer_id": offer_id,
+            "item_id": item_id,
+            "counter_amount": counter_amount,
+            "status": "countered"
+        }), now))
+
+        db.commit()
+        return jsonify({
+            "success": True,
+            "status": "countered",
+            "offer_id": offer_id,
+            "counter_amount": counter_amount,
+            "message": f"Counter-offer of ₹{counter_amount:g} submitted!"
+        })
+
+    elif action == 'decline':
+        cur.execute("UPDATE offers SET status = 'declined', updated_at = ? WHERE id = ?", (now, offer_id))
+
+        chat_text = f"[OFFER_DECLINED:{offer_id}:{offer['offer_amount']:g}]"
+        cur.execute("""
+            INSERT INTO messages (item_id, sender_id, sender_name, text, created_at)
+            VALUES (?, ?, ?, ?, ?)
+        """, (item_id, caller_id, sender_name, chat_text, now))
+
+        cur.execute("""
+            INSERT INTO sync_events (event_type, item_id, payload, created_at)
+            VALUES ('offer_declined', ?, ?, ?)
+        """, (item_id, json.dumps({
+            "offer_id": offer_id,
+            "item_id": item_id,
+            "status": "declined"
+        }), now))
+
+        db.commit()
+        return jsonify({
+            "success": True,
+            "status": "declined",
+            "offer_id": offer_id,
+            "message": "Offer declined."
+        })
+
+    return jsonify({"success": False, "error": "Invalid action. Must be accept, counter, or decline"}), 400
+
+@app.route('/api/offers/<item_id>', methods=['GET'])
+def get_offers(item_id):
+    """Get active offers and agreed price for an item."""
+    db = get_db()
+    cur = db.cursor()
+    cur.execute("SELECT * FROM offers WHERE item_id = ? ORDER BY created_at DESC", (item_id,))
+    rows = [dict(r) for r in cur.fetchall()]
+
+    cur.execute("SELECT price, agreed_price, accepted_offer_id FROM items WHERE id = ?", (item_id,))
+    item_row = cur.fetchone()
+    original_price = item_row[0] if item_row else None
+    agreed_price = item_row[1] if item_row else None
+    accepted_offer_id = item_row[2] if item_row else None
+
+    return jsonify({
+        "success": True,
+        "offers": rows,
+        "original_price": original_price,
+        "agreed_price": agreed_price,
+        "accepted_offer_id": accepted_offer_id
+    })
+
 @app.route('/api/chat/<item_id>', methods=['GET'])
 def get_chat(item_id):
     """Get all conversation messages for an item."""
@@ -1091,7 +1335,7 @@ def delta_sync():
     has_item_changes = (
         since == 0 or
         latest_item_ts > since or
-        any(e['event_type'] in ('new_item', 'reserve_toggle', 'item_status_changed') for e in events)
+        any(e['event_type'] in ('new_item', 'reserve_toggle', 'item_status_changed', 'offer_accepted') for e in events)
     )
 
     items = []

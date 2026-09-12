@@ -18,6 +18,7 @@
     selectedTarget: null,
     audioEnabled: false,
     activeChatId: null,
+    activeChatAgreedPrice: null,
     chatMessagesCache: new Map() // itemId -> Array
   };
 
@@ -37,6 +38,8 @@
   let pinpointActiveLayerType = "streets";
   let googleMapsModalInitialized = false;
   let handshakeModal = null;
+  let makeOfferModal = null;
+  let counterOfferModal = null;
 
   // Google Maps Public Tile Configuration (Official Google Roadmaps & Satellite Imagery, No API Key Required)
   const GOOGLE_TILE_CONFIG = {
@@ -147,6 +150,24 @@
     MarketAPI.on("newChatMessage", (msg) => {
       if (state.activeChatId === msg.item_id) {
         appendMessageBubble(msg);
+      }
+    });
+
+    // When an offer bargaining update arrives
+    MarketAPI.on("offerUpdated", (payload) => {
+      if (state.activeChatId === payload.item_id) {
+        if (payload.type === "offer_accepted" && payload.agreed_price) {
+          state.activeChatAgreedPrice = payload.agreed_price;
+          const priceDisplay = document.getElementById("chat-item-price");
+          let target = state.selectedTarget;
+          if (!target && state.activeChatId) {
+            target = state.evaluatedItems.find(t => t.item.id === state.activeChatId);
+          }
+          if (priceDisplay && target) {
+            priceDisplay.innerHTML = `<span class="line-through text-slate-500 text-xs mr-1">₹${target.item.price}</span><span class="text-emerald-400 font-bold">₹${payload.agreed_price}</span>`;
+          }
+          playHandshakeChime();
+        }
       }
     });
 
@@ -3420,14 +3441,24 @@
 
     if (upiPayBtn && upiSheet) {
       upiPayBtn.addEventListener("click", () => {
-        if (!state.selectedTarget) return;
-        const item = state.selectedTarget.item;
+        let target = state.selectedTarget;
+        if (!target && state.activeChatId) {
+          target = state.evaluatedItems.find(t => t.item.id === state.activeChatId);
+        }
+        if (!target) return;
+        const item = target.item;
         const upiId = item.upi_id || "campus-trade@okhdfcbank";
         const sellerName = item.seller?.name || item.seller_name || "Campus Seller";
-        const price = item.price;
-        const upiUrl = `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(sellerName)}&am=${price}&tn=${encodeURIComponent(item.title)}`;
+        const effectivePrice = state.activeChatAgreedPrice || item.agreed_price || item.price;
+        const upiUrl = `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(sellerName)}&am=${effectivePrice}&tn=${encodeURIComponent(item.title)}`;
 
-        if (upiAmount) upiAmount.textContent = `₹${price}`;
+        if (upiAmount) {
+          if (effectivePrice < item.price) {
+            upiAmount.innerHTML = `<span class="line-through text-slate-500 text-xs mr-1">₹${item.price}</span>₹${effectivePrice} <span class="text-[9px] text-emerald-400 bg-emerald-950 px-1.5 py-0.5 rounded border border-emerald-500/40 font-bold">BARGAIN DEAL</span>`;
+          } else {
+            upiAmount.textContent = `₹${effectivePrice}`;
+          }
+        }
         if (upiIdDisplay) upiIdDisplay.textContent = upiId;
         if (upiQrImg) {
           upiQrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(upiUrl)}&bgcolor=0d1522&color=00ff9d`;
@@ -3458,6 +3489,24 @@
         }
       });
     }
+
+    // Make an Offer button & quick chip in Chat Toolbar
+    const makeOfferBtn = document.getElementById("btn-chat-make-offer");
+    const chipOfferBtn = document.getElementById("btn-chip-make-offer");
+    const handleMakeOfferClick = () => {
+      if (!makeOfferModal) makeOfferModal = setupMakeOfferModal();
+      let target = state.selectedTarget;
+      if (!target && state.activeChatId) {
+        target = state.evaluatedItems.find(t => t.item.id === state.activeChatId);
+      }
+      if (target && makeOfferModal) {
+        makeOfferModal.open(target.item);
+      } else {
+        showToast("NO ITEM SELECTED", "Please select an active item to make an offer.");
+      }
+    };
+    if (makeOfferBtn) makeOfferBtn.addEventListener("click", handleMakeOfferClick);
+    if (chipOfferBtn) chipOfferBtn.addEventListener("click", handleMakeOfferClick);
 
     signalBtn.addEventListener("click", () => {
       if (state.selectedTarget) {
@@ -3738,6 +3787,163 @@
   }
 
   /**
+   * Setup Make an Offer Modal (Quick Discount Chips + Custom Keypad)
+   */
+  function setupMakeOfferModal() {
+    const modal = document.getElementById("modal-make-offer");
+    const closeBtn = document.getElementById("btn-close-offer-modal");
+    const titleElem = document.getElementById("offer-modal-item-title");
+    const origPriceElem = document.getElementById("offer-modal-original-price");
+    const amountInput = document.getElementById("input-offer-amount");
+    const savingsPreview = document.getElementById("offer-savings-preview");
+    const savingsAmount = document.getElementById("offer-savings-amount");
+    const submitBtn = document.getElementById("btn-submit-offer");
+    const chipBtns = modal ? modal.querySelectorAll(".btn-offer-chip") : [];
+
+    if (!modal) return null;
+
+    let currentItem = null;
+
+    function updateSavings() {
+      if (!currentItem) return;
+      const orig = parseFloat(currentItem.price) || 0;
+      const offer = parseFloat(amountInput.value) || 0;
+      if (offer > 0 && offer < orig) {
+        const saved = orig - offer;
+        const pct = Math.round((saved / orig) * 100);
+        savingsPreview.classList.remove("hidden");
+        savingsAmount.textContent = `Save ₹${saved} (${pct}% off)`;
+      } else {
+        savingsPreview.classList.add("hidden");
+      }
+    }
+
+    amountInput.addEventListener("input", updateSavings);
+
+    chipBtns.forEach((btn) => {
+      btn.addEventListener("click", () => {
+        if (!currentItem) return;
+        const pct = parseInt(btn.dataset.pct, 10) || 10;
+        const orig = parseFloat(currentItem.price) || 0;
+        const discounted = Math.max(1, Math.round(orig * (1 - pct / 100)));
+        amountInput.value = discounted;
+        updateSavings();
+
+        chipBtns.forEach(b => b.className = "btn-offer-chip py-2 rounded-lg bg-slate-900 hover:bg-amber-950/60 border border-slate-700 hover:border-amber-400 text-slate-200 transition cursor-pointer font-bold text-center");
+        btn.className = "btn-offer-chip py-2 rounded-lg bg-amber-500 border border-amber-400 text-slate-950 transition cursor-pointer font-bold text-center";
+      });
+    });
+
+    submitBtn.addEventListener("click", async () => {
+      if (!currentItem) return;
+      const offerVal = parseFloat(amountInput.value);
+      if (!offerVal || offerVal <= 0) {
+        showToast("INVALID OFFER", "Please enter a valid offer amount.");
+        return;
+      }
+      submitBtn.disabled = true;
+      submitBtn.textContent = "TRANSMITTING...";
+
+      const res = await MarketAPI.createOffer(currentItem.id, offerVal);
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = `<i data-lucide="send" class="w-4 h-4"></i><span>Transmit Offer to Seller</span>`;
+      lucide.createIcons();
+
+      if (res && res.success) {
+        modal.classList.add("hidden");
+        showToast("OFFER TRANSMITTED", `Offer of ₹${offerVal} sent to seller!`);
+        playHandshakeChime();
+      } else {
+        showToast("OFFER FAILED", res.error || "Could not transmit offer.");
+      }
+    });
+
+    const closeAll = () => {
+      modal.classList.add("hidden");
+      currentItem = null;
+      amountInput.value = "";
+      savingsPreview.classList.add("hidden");
+    };
+
+    if (closeBtn) closeBtn.addEventListener("click", closeAll);
+    modal.addEventListener("click", (e) => {
+      if (e.target === modal) closeAll();
+    });
+
+    return {
+      open: (item) => {
+        currentItem = item;
+        if (titleElem) titleElem.textContent = item.title;
+        if (origPriceElem) origPriceElem.textContent = `₹${item.price}`;
+        amountInput.value = "";
+        savingsPreview.classList.add("hidden");
+        chipBtns.forEach(b => b.className = "btn-offer-chip py-2 rounded-lg bg-slate-900 hover:bg-amber-950/60 border border-slate-700 hover:border-amber-400 text-slate-200 transition cursor-pointer font-bold text-center");
+        modal.classList.remove("hidden");
+        lucide.createIcons();
+        setTimeout(() => amountInput.focus(), 150);
+      }
+    };
+  }
+
+  /**
+   * Setup Counter Offer Modal
+   */
+  let activeCounterOfferId = null;
+
+  function setupCounterOfferModal() {
+    const modal = document.getElementById("modal-counter-offer");
+    const closeBtn = document.getElementById("btn-close-counter-modal");
+    const input = document.getElementById("input-counter-amount");
+    const submitBtn = document.getElementById("btn-submit-counter");
+
+    if (!modal) return null;
+
+    submitBtn.addEventListener("click", async () => {
+      if (!activeCounterOfferId) return;
+      const counterVal = parseFloat(input.value);
+      if (!counterVal || counterVal <= 0) {
+        showToast("INVALID COUNTER", "Please enter a valid counter amount.");
+        return;
+      }
+      submitBtn.disabled = true;
+      submitBtn.textContent = "TRANSMITTING...";
+
+      const res = await MarketAPI.respondOffer(activeCounterOfferId, "counter", counterVal);
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = `<i data-lucide="send" class="w-4 h-4"></i><span>Transmit Counter Offer</span>`;
+      lucide.createIcons();
+
+      if (res && res.success) {
+        modal.classList.add("hidden");
+        showToast("COUNTER TRANSMITTED", `Counter-offer of ₹${counterVal} sent!`);
+      } else {
+        showToast("COUNTER FAILED", res.error || "Could not transmit counter-offer.");
+      }
+    });
+
+    const closeAll = () => {
+      modal.classList.add("hidden");
+      activeCounterOfferId = null;
+      input.value = "";
+    };
+
+    if (closeBtn) closeBtn.addEventListener("click", closeAll);
+    modal.addEventListener("click", (e) => {
+      if (e.target === modal) closeAll();
+    });
+
+    return {
+      open: (offerId, suggestedPrice = null) => {
+        activeCounterOfferId = offerId;
+        input.value = suggestedPrice ? String(suggestedPrice) : "";
+        modal.classList.remove("hidden");
+        lucide.createIcons();
+        setTimeout(() => input.focus(), 150);
+      }
+    };
+  }
+
+  /**
    * Setup My Beacons Management Drawer
    */
   async function updateMyBeaconsBadge() {
@@ -3845,12 +4051,19 @@
     const modal = document.getElementById("modal-chat");
     const item = target.item;
     state.activeChatId = item.id;
+    state.activeChatAgreedPrice = item.agreed_price || null;
 
     document.getElementById("chat-seller-avatar").src =
       item.seller?.avatar || item.seller_avatar || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80";
     document.getElementById("chat-seller-name").textContent = item.seller?.name || item.seller_name || "Seller";
     document.getElementById("chat-item-title").textContent = item.title;
-    document.getElementById("chat-item-price").textContent = `₹${item.price}`;
+    
+    const priceDisplay = document.getElementById("chat-item-price");
+    if (item.agreed_price && item.agreed_price < item.price) {
+      priceDisplay.innerHTML = `<span class="line-through text-slate-500 text-xs mr-1">₹${item.price}</span><span class="text-emerald-400 font-bold">₹${item.agreed_price}</span>`;
+    } else {
+      priceDisplay.textContent = `₹${item.price}`;
+    }
 
     const landmarkElem = document.getElementById("chat-item-landmark");
     if (landmarkElem) {
@@ -3957,6 +4170,215 @@
           <div class="flex items-center justify-between text-[10px] text-slate-400">
             <span class="text-amber-300 font-bold">${stars} (${feedback})</span>
             <span class="text-emerald-400 font-bold">+50 Trust Boost</span>
+          </div>
+        </div>
+      `;
+      container.appendChild(bubble);
+      lucide.createIcons();
+      container.scrollTop = container.scrollHeight;
+    // 1. Check for [OFFER:offer_id:amount:original_price:status:buyer_name]
+    const offerMatch = msg.text && msg.text.match(/^\[OFFER:([^:]+):([0-9.]+):([0-9.]+):([^:]+):(.*?)\]$/);
+    if (offerMatch) {
+      const offerId = offerMatch[1];
+      const amount = parseFloat(offerMatch[2]);
+      const origPrice = parseFloat(offerMatch[3]);
+      const status = offerMatch[4];
+      const buyerName = offerMatch[5] || "Student";
+      const savings = Math.max(0, origPrice - amount);
+      const pct = Math.round((savings / origPrice) * 100);
+
+      const bubble = document.createElement("div");
+      bubble.className = "w-full flex flex-col items-center my-2 font-mono";
+      bubble.innerHTML = `
+        <div class="chat-offer-card chat-offer-pending w-full max-w-[95%] text-slate-100">
+          <div class="flex items-center justify-between gap-2 pb-1 mb-1.5 border-b border-amber-500/30 text-xs">
+            <div class="flex items-center gap-1.5 text-amber-400 font-bold">
+              <i data-lucide="tag" class="w-4 h-4"></i>
+              <span>PRICE OFFER PROPOSED</span>
+            </div>
+            <span class="text-[9px] px-1.5 py-0.2 rounded bg-amber-950 text-amber-300 border border-amber-500/40">PENDING</span>
+          </div>
+          <div class="flex items-baseline justify-between mb-1">
+            <div>
+              <span class="text-sm font-bold text-white">₹${amount}</span>
+              <span class="line-through text-xs text-slate-500 ml-1.5">₹${origPrice}</span>
+            </div>
+            <span class="text-[11px] text-emerald-400 font-bold">⚡ Save ₹${savings} (${pct}%)</span>
+          </div>
+          <div class="text-[11px] text-slate-400 mb-2">
+            Proposed by <strong class="text-slate-200">${buyerName}</strong>
+          </div>
+          <div class="offer-actions flex items-center gap-1.5 pt-1 border-t border-slate-800">
+            ${isMe ? `
+              <span class="text-[11px] text-amber-300/80 italic flex items-center gap-1">
+                <i data-lucide="clock" class="w-3.5 h-3.5 animate-spin"></i> Awaiting seller response...
+              </span>
+            ` : `
+              <button type="button" class="btn-offer-accept flex-1 py-1.5 px-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-[11px] flex items-center justify-center gap-1 transition cursor-pointer">
+                <i data-lucide="check" class="w-3.5 h-3.5"></i> Accept ₹${amount}
+              </button>
+              <button type="button" class="btn-offer-counter py-1.5 px-2.5 rounded-lg bg-cyan-950 hover:bg-cyan-900 border border-cyan-400 text-cyan-300 font-bold text-[11px] flex items-center justify-center gap-1 transition cursor-pointer">
+                <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> Counter
+              </button>
+              <button type="button" class="btn-offer-decline py-1.5 px-2 rounded-lg bg-slate-900 hover:bg-rose-950/60 border border-slate-700 hover:border-rose-400 text-slate-400 hover:text-rose-300 font-bold text-[11px] transition cursor-pointer">
+                ✕
+              </button>
+            `}
+          </div>
+        </div>
+      `;
+
+      const acceptBtn = bubble.querySelector(".btn-offer-accept");
+      if (acceptBtn) {
+        acceptBtn.addEventListener("click", async () => {
+          acceptBtn.disabled = true;
+          acceptBtn.textContent = "ACCEPTING...";
+          const res = await MarketAPI.respondOffer(offerId, "accept");
+          if (res && res.success) {
+            state.activeChatAgreedPrice = amount;
+            playHandshakeChime();
+            showToast("OFFER ACCEPTED", `Deal agreed at ₹${amount}! UPI QR updated.`);
+          }
+        });
+      }
+
+      const counterBtn = bubble.querySelector(".btn-offer-counter");
+      if (counterBtn) {
+        counterBtn.addEventListener("click", () => {
+          if (!counterOfferModal) counterOfferModal = setupCounterOfferModal();
+          if (counterOfferModal) counterOfferModal.open(offerId, Math.round((origPrice + amount) / 2));
+        });
+      }
+
+      const declineBtn = bubble.querySelector(".btn-offer-decline");
+      if (declineBtn) {
+        declineBtn.addEventListener("click", async () => {
+          if (confirm("Decline this offer?")) {
+            await MarketAPI.respondOffer(offerId, "decline");
+          }
+        });
+      }
+
+      container.appendChild(bubble);
+      lucide.createIcons();
+      container.scrollTop = container.scrollHeight;
+      return;
+    }
+
+    // 2. Check for [OFFER_ACCEPTED:offer_id:agreed_amount]
+    const acceptMatch = msg.text && msg.text.match(/^\[OFFER_ACCEPTED:([^:]+):([0-9.]+)\]$/);
+    if (acceptMatch) {
+      const agreedAmount = parseFloat(acceptMatch[2]);
+      state.activeChatAgreedPrice = agreedAmount;
+
+      const bubble = document.createElement("div");
+      bubble.className = "w-full flex flex-col items-center my-2 font-mono";
+      bubble.innerHTML = `
+        <div class="chat-offer-card chat-offer-accepted w-full max-w-[95%] text-slate-100">
+          <div class="flex items-center justify-between gap-2 pb-1 mb-1.5 border-b border-emerald-500/30 text-xs">
+            <div class="flex items-center gap-1.5 text-emerald-400 font-bold">
+              <i data-lucide="check-circle-2" class="w-4 h-4"></i>
+              <span>OFFER ACCEPTED!</span>
+            </div>
+            <span class="text-[9px] px-1.5 py-0.2 rounded bg-emerald-950 text-emerald-300 border border-emerald-500/40 font-bold">DEAL AGREED</span>
+          </div>
+          <div class="text-xs text-slate-200 mb-2">
+            🤝 Price agreed at <strong class="text-emerald-300 text-sm font-bold">₹${agreedAmount}</strong>!
+          </div>
+          <button type="button" class="btn-card-pay-upi w-full py-1.5 px-3 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer shadow-[0_0_15px_rgba(0,255,157,0.3)]">
+            <i data-lucide="qr-code" class="w-4 h-4"></i>
+            <span>Scan & Pay Negotiated ₹${agreedAmount} via UPI</span>
+          </button>
+        </div>
+      `;
+      const payBtn = bubble.querySelector(".btn-card-pay-upi");
+      if (payBtn) {
+        payBtn.addEventListener("click", () => {
+          const upiBtn = document.getElementById("btn-open-upi-pay");
+          if (upiBtn) upiBtn.click();
+        });
+      }
+      container.appendChild(bubble);
+      lucide.createIcons();
+      container.scrollTop = container.scrollHeight;
+      return;
+    }
+
+    // 3. Check for [OFFER_COUNTERED:offer_id:counter_amount]
+    const counterMatch = msg.text && msg.text.match(/^\[OFFER_COUNTERED:([^:]+):([0-9.]+)\]$/);
+    if (counterMatch) {
+      const offerId = counterMatch[1];
+      const counterAmount = parseFloat(counterMatch[2]);
+
+      const bubble = document.createElement("div");
+      bubble.className = "w-full flex flex-col items-center my-2 font-mono";
+      bubble.innerHTML = `
+        <div class="chat-offer-card chat-offer-countered w-full max-w-[95%] text-slate-100">
+          <div class="flex items-center justify-between gap-2 pb-1 mb-1.5 border-b border-cyan-500/30 text-xs">
+            <div class="flex items-center gap-1.5 text-cyan-300 font-bold">
+              <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+              <span>COUNTER-OFFER PROPOSED</span>
+            </div>
+            <span class="text-[9px] px-1.5 py-0.2 rounded bg-cyan-950 text-cyan-300 border border-cyan-500/40">COUNTER</span>
+          </div>
+          <div class="text-xs text-slate-200 mb-2">
+            Alternative price proposed: <strong class="text-cyan-300 text-sm font-bold">₹${counterAmount}</strong>
+          </div>
+          <div class="flex items-center gap-2 pt-1 border-t border-slate-800">
+            ${isMe ? `
+              <span class="text-[11px] text-cyan-300/80 italic flex items-center gap-1">
+                <i data-lucide="clock" class="w-3.5 h-3.5"></i> Awaiting response...
+              </span>
+            ` : `
+              <button type="button" class="btn-counter-accept flex-1 py-1.5 px-2 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-[11px] flex items-center justify-center gap-1 transition cursor-pointer">
+                <i data-lucide="check" class="w-3.5 h-3.5"></i> Accept ₹${counterAmount}
+              </button>
+              <button type="button" class="btn-counter-decline py-1.5 px-2.5 rounded-lg bg-slate-900 hover:bg-rose-950/60 border border-slate-700 hover:border-rose-400 text-slate-400 hover:text-rose-300 font-bold text-[11px] transition cursor-pointer">
+                ✕ Decline
+              </button>
+            `}
+          </div>
+        </div>
+      `;
+      const acceptBtn = bubble.querySelector(".btn-counter-accept");
+      if (acceptBtn) {
+        acceptBtn.addEventListener("click", async () => {
+          acceptBtn.disabled = true;
+          acceptBtn.textContent = "ACCEPTING...";
+          const res = await MarketAPI.respondOffer(offerId, "accept");
+          if (res && res.success) {
+            state.activeChatAgreedPrice = counterAmount;
+            playHandshakeChime();
+            showToast("COUNTER ACCEPTED", `Deal agreed at ₹${counterAmount}! UPI QR updated.`);
+          }
+        });
+      }
+      const declineBtn = bubble.querySelector(".btn-counter-decline");
+      if (declineBtn) {
+        declineBtn.addEventListener("click", async () => {
+          await MarketAPI.respondOffer(offerId, "decline");
+        });
+      }
+      container.appendChild(bubble);
+      lucide.createIcons();
+      container.scrollTop = container.scrollHeight;
+      return;
+    }
+
+    // 4. Check for [OFFER_DECLINED:offer_id:amount]
+    const declineMatch = msg.text && msg.text.match(/^\[OFFER_DECLINED:([^:]+):([0-9.]+)\]$/);
+    if (declineMatch) {
+      const decAmount = parseFloat(declineMatch[2]);
+      const bubble = document.createElement("div");
+      bubble.className = "w-full flex flex-col items-center my-2 font-mono";
+      bubble.innerHTML = `
+        <div class="chat-offer-card chat-offer-declined w-full max-w-[95%] text-slate-100">
+          <div class="flex items-center justify-between gap-2 text-xs">
+            <div class="flex items-center gap-1.5 text-rose-400 font-bold">
+              <i data-lucide="x-circle" class="w-4 h-4"></i>
+              <span>Offer of ₹${decAmount} was declined</span>
+            </div>
+            <span class="text-[9px] px-1.5 py-0.2 rounded bg-rose-950 text-rose-300 border border-rose-500/40">DECLINED</span>
           </div>
         </div>
       `;

@@ -427,6 +427,67 @@
   }
 
   /**
+   * Submit a discounted price offer on an item
+   */
+  async function createOffer(itemId, offerAmount) {
+    try {
+      const data = await request(`/api/offers/${itemId}`, {
+        method: "POST",
+        body: JSON.stringify({
+          offer_amount: parseFloat(offerAmount),
+          buyer_name: state.currentUser?.nickname || "Campus Student"
+        })
+      });
+      if (data && data.success) {
+        pollSync();
+      }
+      return data;
+    } catch (err) {
+      console.warn("Failed to submit offer:", err.message);
+      return { success: false, error: err.message };
+    }
+  }
+
+  /**
+   * Respond to an offer: accept, counter, or decline
+   */
+  async function respondOffer(offerId, action, counterAmount = null) {
+    try {
+      const body = {
+        action,
+        sender_name: state.currentUser?.nickname || "Campus Trader"
+      };
+      if (counterAmount) {
+        body.counter_amount = parseFloat(counterAmount);
+      }
+      const data = await request(`/api/offers/${offerId}/respond`, {
+        method: "POST",
+        body: JSON.stringify(body)
+      });
+      if (data && data.success) {
+        pollSync();
+      }
+      return data;
+    } catch (err) {
+      console.warn("Failed to respond to offer:", err.message);
+      return { success: false, error: err.message };
+    }
+  }
+
+  /**
+   * Get all active offers and agreed price for an item
+   */
+  async function getOffers(itemId) {
+    try {
+      const data = await request(`/api/offers/${itemId}`);
+      return data;
+    } catch (err) {
+      console.warn("Failed to fetch offers:", err.message);
+      return { success: false, error: err.message };
+    }
+  }
+
+  /**
    * Real-time Delta Sync Loop (every 1.5 seconds)
    */
   async function pollSync() {
@@ -466,6 +527,17 @@
           handshakeEvents.forEach((ev) => {
             const payload = typeof ev.payload === "string" ? JSON.parse(ev.payload) : ev.payload;
             emit("handshakeCompleted", payload);
+          });
+        }
+
+        // If offer bargaining events arrived
+        const offerEvents = (data.events || []).filter(
+          (e) => ["new_offer", "offer_accepted", "offer_countered", "offer_declined"].includes(e.event_type)
+        );
+        if (offerEvents.length > 0) {
+          offerEvents.forEach((ev) => {
+            const payload = typeof ev.payload === "string" ? JSON.parse(ev.payload) : ev.payload;
+            emit("offerUpdated", { type: ev.event_type, ...payload });
           });
         }
       }
@@ -605,6 +677,9 @@
     sendChatMessage,
     getHandshakeStatus,
     verifyHandshake,
+    createOffer,
+    respondOffer,
+    getOffers,
     startSyncLoop,
     stopSyncLoop,
     lookupIsbn,
