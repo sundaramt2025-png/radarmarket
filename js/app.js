@@ -908,6 +908,25 @@
     updateMyBeaconsBadge();
     setupBountyBoardModal();
     updateBountyBadge();
+    arCompassModalInstance = setupARCompassModal();
+
+    // AR Live Finder Button in Spotlight Panel
+    const arFinderBtn = document.getElementById("btn-open-ar-compass");
+    if (arFinderBtn) {
+      arFinderBtn.addEventListener("click", () => {
+        if (!arCompassModalInstance) arCompassModalInstance = setupARCompassModal();
+        let target = state.selectedTarget;
+        if (!target && state.filteredItems.length > 0) {
+          target = state.filteredItems[0];
+          selectTarget(target);
+        }
+        if (target && arCompassModalInstance) {
+          arCompassModalInstance.open(target);
+        } else {
+          showToast("NO TARGET ACQUIRED", "Please click on any radar beacon or item first.");
+        }
+      });
+    }
 
     // 9. Reserve Item Button
     document.getElementById("btn-reserve-item").addEventListener("click", async () => {
@@ -2471,6 +2490,320 @@
   }
 
   /**
+   * Setup AR Camera Compass & Live Direction Finder HUD Modal
+   */
+  let arCompassModalInstance = null;
+
+  function setupARCompassModal() {
+    const modal = document.getElementById("modal-ar-compass");
+    const video = document.getElementById("ar-camera-video");
+    const closeBtn = document.getElementById("btn-close-ar-compass");
+    const calibrateBtn = document.getElementById("btn-ar-calibrate");
+    const compassTape = document.getElementById("ar-compass-tape");
+    const targetPin = document.getElementById("ar-target-tape-pin");
+    const reticleContainer = document.getElementById("ar-reticle-container");
+    const reticleTitle = document.getElementById("ar-reticle-title");
+    const reticleDistance = document.getElementById("ar-reticle-distance");
+    const reticleStatus = document.getElementById("ar-reticle-status");
+    const arrowLeft = document.getElementById("ar-arrow-left");
+    const arrowLeftDeg = document.getElementById("ar-arrow-left-deg");
+    const arrowRight = document.getElementById("ar-arrow-right");
+    const arrowRightDeg = document.getElementById("ar-arrow-right-deg");
+    const hudTitle = document.getElementById("ar-hud-title");
+    const hudLandmark = document.getElementById("ar-hud-landmark");
+    const hudPrice = document.getElementById("ar-hud-price");
+    const hudAzimuth = document.getElementById("ar-hud-azimuth");
+    const hudDistance = document.getElementById("ar-hud-distance");
+    const hudWalk = document.getElementById("ar-hud-walk");
+    const openMapsBtn = document.getElementById("btn-ar-open-maps");
+    const openChatBtn = document.getElementById("btn-ar-open-chat");
+    const manualContainer = document.getElementById("ar-manual-heading-container");
+    const manualSlider = document.getElementById("ar-manual-heading-slider");
+    const manualVal = document.getElementById("ar-manual-heading-val");
+
+    if (!modal) return null;
+
+    let activeStream = null;
+    let currentTarget = null;
+    let currentHeading = 0; // degrees (0 = N, 90 = E, 180 = S, 270 = W)
+    let targetBearing = 0;
+    let isLocked = false;
+    let manualMode = false;
+    let orientationBound = false;
+
+    // Generate 360 degree compass ribbon ticks: 0° to 360° + repeat to 720° for continuous scroll
+    function initCompassRibbon() {
+      if (!compassTape || compassTape.children.length > 0) return;
+      const cardinals = { 0: "N", 45: "NE", 90: "E", 135: "SE", 180: "S", 225: "SW", 270: "W", 315: "NW" };
+      let html = "";
+      for (let cycle = 0; cycle < 2; cycle++) {
+        for (let deg = 0; deg < 360; deg += 15) {
+          const isCardinal = cardinals[deg] !== undefined;
+          const label = isCardinal ? cardinals[deg] : `${deg}°`;
+          html += `<div class="ar-compass-tick ${isCardinal ? 'cardinal' : ''}"><span>${label}</span></div>`;
+        }
+      }
+      compassTape.innerHTML = html;
+    }
+
+    initCompassRibbon();
+
+    function updateCompassDisplay() {
+      if (!currentTarget) return;
+
+      // 1. Calculate relative angle between device heading and target bearing
+      // relativeDiff: negative = target is to the left, positive = target is to the right (-180 to +180)
+      let diff = (targetBearing - currentHeading + 540) % 360 - 180;
+      const absDiff = Math.abs(diff);
+
+      // 2. Update Horizontal Compass Tape
+      if (compassTape) {
+        const pxPerDeg = 40 / 15;
+        const normalizedHeading = (currentHeading % 360 + 360) % 360;
+        const offset = normalizedHeading * pxPerDeg;
+        compassTape.style.transform = `translateX(-${offset}px)`;
+      }
+
+      // 3. Update Target Pin on Compass Tape
+      if (targetPin) {
+        targetPin.classList.remove("hidden");
+        const pxPerDeg = 40 / 15;
+        const pinOffsetPx = diff * pxPerDeg;
+        const maxOffset = 190;
+        const clampedOffset = Math.max(-maxOffset, Math.min(maxOffset, pinOffsetPx));
+        targetPin.style.left = `calc(50% + ${clampedOffset}px)`;
+      }
+
+      // 4. Camera horizontal Field Of View is roughly 60° (±30° from center)
+      const fov = 60;
+      const halfFov = fov / 2;
+
+      if (absDiff <= halfFov) {
+        // Target is INSIDE camera viewport
+        if (arrowLeft) arrowLeft.classList.add("hidden");
+        if (arrowRight) arrowRight.classList.add("hidden");
+
+        if (reticleContainer) {
+          reticleContainer.classList.remove("hidden");
+          reticleContainer.style.opacity = "1";
+          const screenPercent = (diff / halfFov) * 42; // max ±42vw offset from center
+          reticleContainer.style.transform = `translate(calc(-50% + ${screenPercent}vw), -50%)`;
+
+          // Check if tightly locked (within ±6 degrees)
+          if (absDiff <= 6) {
+            reticleContainer.classList.add("ar-reticle-locked");
+            if (reticleStatus) reticleStatus.textContent = "LOCKED ON TARGET";
+            if (!isLocked) {
+              isLocked = true;
+              playHandshakeChime();
+              if ("vibrate" in navigator) {
+                try { navigator.vibrate([40, 30, 40]); } catch (e) {}
+              }
+            }
+          } else {
+            reticleContainer.classList.remove("ar-reticle-locked");
+            if (reticleStatus) reticleStatus.textContent = "ALIGNING...";
+            isLocked = false;
+          }
+        }
+      } else {
+        // Target is OUTSIDE camera viewport -> show turn direction arrows
+        isLocked = false;
+        if (reticleContainer) {
+          reticleContainer.classList.remove("ar-reticle-locked");
+          reticleContainer.style.opacity = "0.2";
+          reticleContainer.style.transform = `translate(${diff < 0 ? "-44vw" : "44vw"}, -50%)`;
+        }
+
+        if (diff < 0) {
+          // Turn Left
+          if (arrowLeft) {
+            arrowLeft.classList.remove("hidden");
+            if (arrowLeftDeg) arrowLeftDeg.textContent = `${Math.round(absDiff)}°`;
+          }
+          if (arrowRight) arrowRight.classList.add("hidden");
+        } else {
+          // Turn Right
+          if (arrowRight) {
+            arrowRight.classList.remove("hidden");
+            if (arrowRightDeg) arrowRightDeg.textContent = `${Math.round(absDiff)}°`;
+          }
+          if (arrowLeft) arrowLeft.classList.add("hidden");
+        }
+      }
+    }
+
+    function handleOrientation(e) {
+      if (manualMode) return;
+      let heading = null;
+
+      // iOS Safari provides webkitCompassHeading directly (0 = North)
+      if (typeof e.webkitCompassHeading !== "undefined") {
+        heading = e.webkitCompassHeading;
+      } else if (e.alpha !== null) {
+        // Android / Chrome provides alpha (0 to 360, counter-clockwise)
+        heading = (360 - e.alpha) % 360;
+      }
+
+      if (heading !== null && !isNaN(heading)) {
+        currentHeading = heading;
+        updateCompassDisplay();
+      }
+    }
+
+    async function startAR() {
+      // 1. Start live rear camera
+      try {
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+          activeStream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              facingMode: { ideal: "environment" },
+              width: { ideal: 1280 },
+              height: { ideal: 720 }
+            },
+            audio: false
+          });
+          if (video) {
+            video.srcObject = activeStream;
+            video.play().catch(() => {});
+          }
+        }
+      } catch (err) {
+        console.warn("AR Camera unavailable:", err);
+      }
+
+      // 2. Request DeviceOrientation permission for iOS 13+
+      if (typeof DeviceOrientationEvent !== "undefined" && typeof DeviceOrientationEvent.requestPermission === "function") {
+        try {
+          const perm = await DeviceOrientationEvent.requestPermission();
+          if (perm === "granted") {
+            window.addEventListener("deviceorientation", handleOrientation, true);
+            orientationBound = true;
+          }
+        } catch (e) {
+          console.warn("Orientation permission prompt error:", e);
+        }
+      } else if (window.DeviceOrientationEvent) {
+        window.addEventListener("deviceorientation", handleOrientation, true);
+        orientationBound = true;
+      }
+
+      // If no sensor updates within 1s or desktop, show manual heading slider automatically
+      setTimeout(() => {
+        if (!orientationBound || manualMode) {
+          if (manualContainer) manualContainer.classList.remove("hidden");
+        }
+      }, 1000);
+    }
+
+    function stopAR() {
+      if (activeStream) {
+        activeStream.getTracks().forEach(t => t.stop());
+        activeStream = null;
+      }
+      if (video) {
+        video.srcObject = null;
+      }
+      if (orientationBound) {
+        window.removeEventListener("deviceorientation", handleOrientation, true);
+        orientationBound = false;
+      }
+      isLocked = false;
+      currentTarget = null;
+    }
+
+    // Manual slider listener
+    if (manualSlider) {
+      manualSlider.addEventListener("input", (e) => {
+        currentHeading = parseFloat(e.target.value) || 0;
+        if (manualVal) manualVal.textContent = `${Math.round(currentHeading)}°`;
+        updateCompassDisplay();
+      });
+    }
+
+    if (calibrateBtn) {
+      calibrateBtn.addEventListener("click", () => {
+        manualMode = !manualMode;
+        if (manualContainer) {
+          manualContainer.classList.toggle("hidden", !manualMode);
+        }
+        calibrateBtn.classList.toggle("border-cyan-400", manualMode);
+        showToast("AR SENSOR MODE", manualMode ? "Manual drag heading active" : "Device compass sensors active");
+      });
+    }
+
+    if (closeBtn) {
+      closeBtn.addEventListener("click", () => {
+        stopAR();
+        modal.classList.add("hidden");
+      });
+    }
+
+    if (openMapsBtn) {
+      openMapsBtn.addEventListener("click", () => {
+        if (currentTarget) {
+          const item = currentTarget.item;
+          openGoogleMapsDirections(item.lat, item.lng, item.landmark);
+        }
+      });
+    }
+
+    if (openChatBtn) {
+      openChatBtn.addEventListener("click", () => {
+        if (currentTarget) {
+          const target = currentTarget;
+          stopAR();
+          modal.classList.add("hidden");
+          setTimeout(() => openChatModal(target), 200);
+        }
+      });
+    }
+
+    return {
+      open: (target) => {
+        if (!target) return;
+        currentTarget = target;
+        const item = target.item;
+
+        // Compute bearing and distance relative to current userLocation
+        targetBearing = target.bearing || RadarAlgorithm.calculateBearingDegrees(
+          state.userLocation.lat,
+          state.userLocation.lng,
+          item.lat,
+          item.lng
+        );
+
+        const distM = calculateDistanceMeters(
+          state.userLocation.lat,
+          state.userLocation.lng,
+          item.lat,
+          item.lng
+        );
+        const distStr = formatDistance(distM);
+        const walkStr = estimateWalkingTime(distM);
+
+        if (reticleTitle) reticleTitle.textContent = item.title;
+        if (reticleDistance) reticleDistance.textContent = distStr;
+        if (hudTitle) hudTitle.textContent = item.title;
+        if (hudLandmark) hudLandmark.textContent = item.landmark || "Campus";
+        if (hudPrice) hudPrice.textContent = `₹${item.price}`;
+        if (hudAzimuth) hudAzimuth.textContent = `BEARING: ${Math.round(targetBearing)}°`;
+        if (hudDistance) hudDistance.textContent = distStr;
+        if (hudWalk) hudWalk.textContent = `(${walkStr})`;
+
+        modal.classList.remove("hidden");
+        lucide.createIcons();
+        startAR();
+        updateCompassDisplay();
+      },
+      close: () => {
+        stopAR();
+        modal.classList.add("hidden");
+      }
+    };
+  }
+
+  /**
    * Setup Interactive Campus Map Pinpoint Picker Modal (Reticle & Pin Drop)
    */
   let pinpointCallback = null;
@@ -3533,6 +3866,23 @@
     };
     if (makeOfferBtn) makeOfferBtn.addEventListener("click", handleMakeOfferClick);
     if (chipOfferBtn) chipOfferBtn.addEventListener("click", handleMakeOfferClick);
+
+    // AR Live Direction button in Chat Toolbar
+    const arGuideBtn = document.getElementById("btn-chat-ar-direction");
+    if (arGuideBtn) {
+      arGuideBtn.addEventListener("click", () => {
+        if (!arCompassModalInstance) arCompassModalInstance = setupARCompassModal();
+        let target = state.selectedTarget;
+        if (!target && state.activeChatId) {
+          target = state.evaluatedItems.find(t => t.item.id === state.activeChatId);
+        }
+        if (target && arCompassModalInstance) {
+          arCompassModalInstance.open(target);
+        } else {
+          showToast("NO TARGET FOUND", "Could not acquire target coordinates for AR Finder.");
+        }
+      });
+    }
 
     signalBtn.addEventListener("click", () => {
       if (state.selectedTarget) {
