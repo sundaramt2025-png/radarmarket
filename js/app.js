@@ -456,8 +456,8 @@
 
       itemCard.innerHTML = `
         <div class="flex items-center gap-2.5 min-w-0">
-          <div class="relative shrink-0">
-            <img src="${item.image || PRESET_PHOTOS[item.category][0]}" alt="${item.title}" class="w-10 h-10 rounded-md object-cover border border-slate-700 bg-slate-950" />
+          <div class="relative shrink-0 cursor-zoom-in feed-img-container" title="Click to inspect photo">
+            <img src="${item.image || PRESET_PHOTOS[item.category][0]}" alt="${item.title}" class="w-10 h-10 rounded-md object-cover border border-slate-700 hover:border-cyan-400 bg-slate-950 transition" />
             <span class="absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-slate-950 ${
               item.category === 'stationery' ? 'bg-[#00ff9d]' : 'bg-[#00e5ff]'
             }"></span>
@@ -482,6 +482,16 @@
           }">SCORE: ${target.algorithmScore}</div>
         </div>
       `;
+
+      const imgTrigger = itemCard.querySelector(".feed-img-container");
+      if (imgTrigger) {
+        imgTrigger.addEventListener("click", (e) => {
+          e.stopPropagation();
+          if (window.openPhotoLightbox) {
+            window.openPhotoLightbox(item.image || PRESET_PHOTOS[item.category][0], item.title, item.condition || "Authentic Photo");
+          }
+        });
+      }
 
       itemCard.addEventListener("click", () => {
         selectTarget(target);
@@ -534,12 +544,17 @@
       card.innerHTML = `
         <div>
           <!-- Top Media & Badges -->
-          <div class="relative w-full aspect-video rounded-lg overflow-hidden mb-3 bg-slate-950 border border-slate-800">
+          <div class="relative w-full aspect-video rounded-lg overflow-hidden mb-3 bg-slate-950 border border-slate-800 cursor-zoom-in catalog-image-trigger group/img" title="Click to inspect photo in high resolution">
             <img 
               src="${item.image || PRESET_PHOTOS[item.category][0]}" 
               alt="${item.title}" 
               class="w-full h-full object-cover group-hover:scale-105 transition duration-300"
             />
+            <div class="absolute inset-0 bg-slate-950/30 opacity-0 group-hover/img:opacity-100 transition flex items-center justify-center">
+              <span class="px-2 py-1 rounded bg-slate-950/80 border border-cyan-400/50 text-cyan-300 font-mono text-[10px] font-bold flex items-center gap-1 shadow-md">
+                <i data-lucide="zoom-in" class="w-3.5 h-3.5"></i> Inspect
+              </span>
+            </div>
             <div class="absolute top-2 left-2 flex items-center gap-1.5">
               <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase ${
                 item.beacon_type === 'wanted' ? 'bg-pink-950 text-pink-300 border border-pink-500/40' : item.category === 'stationery' ? 'badge-stationery' : 'badge-book'
@@ -603,6 +618,17 @@
           </div>
         </div>
       `;
+
+      // Media Lightbox trigger
+      const imgTrigger = card.querySelector(".catalog-image-trigger");
+      if (imgTrigger) {
+        imgTrigger.addEventListener("click", (e) => {
+          e.stopPropagation();
+          if (window.openPhotoLightbox) {
+            window.openPhotoLightbox(item.image || PRESET_PHOTOS[item.category][0], item.title, item.condition || "Authentic Photo");
+          }
+        });
+      }
 
       // Button listeners
       card.querySelector(".btn-grid-chat").addEventListener("click", () => {
@@ -774,6 +800,7 @@
 
     // 8. Modals
     setupSellModal();
+    setupPhotoLightbox();
     setupAlgorithmModal();
     setupChatModal();
     setupMobileModal();
@@ -950,12 +977,27 @@
   }
 
   /**
-   * Client-side canvas image compressor (<80KB for fast multi-device sync)
+   * Client-side canvas image compressor (<70KB for fast multi-device sync)
+   * Resizes large smartphone photos down to max 800px and calculates reduction stats.
    */
-  function compressImageFile(file, callback) {
+  function compressImageFile(file, callback, onError) {
+    if (!file || !file.type.startsWith("image/")) {
+      if (onError) onError(new Error("Selected file is not an image."));
+      return;
+    }
+
+    const originalSizeBytes = file.size;
     const reader = new FileReader();
+
+    reader.onerror = (err) => {
+      if (onError) onError(err);
+    };
+
     reader.onload = (e) => {
       const img = new Image();
+      img.onerror = (err) => {
+        if (onError) onError(err);
+      };
       img.onload = () => {
         const canvas = document.createElement("canvas");
         let width = img.width;
@@ -973,7 +1015,20 @@
         const ctx = canvas.getContext("2d");
         ctx.drawImage(img, 0, 0, width, height);
         const compressed = canvas.toDataURL("image/jpeg", 0.75);
-        callback(compressed);
+
+        // Approximate byte size from base64 string
+        const base64Content = compressed.split(",")[1] || "";
+        const compressedSizeBytes = Math.round((base64Content.length * 3) / 4);
+
+        const stats = {
+          originalKb: Math.round(originalSizeBytes / 1024),
+          compressedKb: Math.max(1, Math.round(compressedSizeBytes / 1024)),
+          reductionPct: originalSizeBytes > 0 ? Math.max(0, Math.round(((originalSizeBytes - compressedSizeBytes) / originalSizeBytes) * 100)) : 0,
+          width,
+          height
+        };
+
+        callback(compressed, stats);
       };
       img.src = e.target.result;
     };
@@ -1808,32 +1863,88 @@
     // Initialize ISBN Scanner Subsystem
     const isbnScanner = setupIsbnScanner();
 
-    // Camera / File input hooks
-    const fileInput = document.getElementById("sell-file-input");
-    const triggerBtn = document.getElementById("btn-trigger-file-upload");
+    // Camera & Gallery File Input Hooks
+    const cameraInput = document.getElementById("sell-camera-input");
+    const galleryInput = document.getElementById("sell-gallery-input");
+    const triggerCameraBtn = document.getElementById("btn-trigger-camera");
+    const triggerGalleryBtn = document.getElementById("btn-trigger-gallery");
+    const photoActions = document.getElementById("photo-upload-actions");
+    const spinner = document.getElementById("image-compressing-spinner");
     const previewBox = document.getElementById("image-preview-box");
     const previewThumb = document.getElementById("image-preview-thumb");
+    const compressionBadge = document.getElementById("image-compression-badge");
+    const retakeBtn = document.getElementById("btn-retake-photo");
     const removePhotoBtn = document.getElementById("btn-remove-photo");
 
-    if (triggerBtn && fileInput) {
-      triggerBtn.addEventListener("click", () => fileInput.click());
-      fileInput.addEventListener("change", (e) => {
-        const file = e.target.files[0];
-        if (file) {
-          compressImageFile(file, (base64) => {
-            uploadedPhotoBase64 = base64;
-            previewThumb.src = base64;
-            previewBox.classList.remove("hidden");
-          });
+    function processSelectedImage(file) {
+      if (!file) return;
+      if (spinner) spinner.classList.remove("hidden");
+      if (photoActions) photoActions.classList.add("opacity-50", "pointer-events-none");
+
+      compressImageFile(
+        file,
+        (base64, stats) => {
+          uploadedPhotoBase64 = base64;
+          if (previewThumb) previewThumb.src = base64;
+          if (compressionBadge) {
+            compressionBadge.textContent = `${stats.compressedKb} KB (${stats.reductionPct}% smaller)`;
+          }
+          if (previewBox) previewBox.classList.remove("hidden");
+          if (spinner) spinner.classList.add("hidden");
+          if (photoActions) {
+            photoActions.classList.remove("opacity-50", "pointer-events-none");
+            photoActions.classList.add("hidden");
+          }
+          lucide.createIcons();
+          showToast("PHOTO OPTIMIZED", `Item photo compressed to ${stats.compressedKb} KB (${stats.reductionPct}% smaller). Ready to broadcast!`);
+        },
+        (err) => {
+          if (spinner) spinner.classList.add("hidden");
+          if (photoActions) photoActions.classList.remove("opacity-50", "pointer-events-none");
+          showToast("IMAGE ERROR", err.message || "Failed to process photo.");
         }
-      });
-      if (removePhotoBtn) {
-        removePhotoBtn.addEventListener("click", () => {
-          uploadedPhotoBase64 = null;
-          fileInput.value = "";
-          previewBox.classList.add("hidden");
-        });
+      );
+    }
+
+    function clearUploadedPhoto() {
+      uploadedPhotoBase64 = null;
+      if (cameraInput) cameraInput.value = "";
+      if (galleryInput) galleryInput.value = "";
+      if (previewThumb) previewThumb.src = "";
+      if (previewBox) previewBox.classList.add("hidden");
+      if (spinner) spinner.classList.add("hidden");
+      if (photoActions) {
+        photoActions.classList.remove("opacity-50", "pointer-events-none", "hidden");
       }
+    }
+
+    if (triggerCameraBtn && cameraInput) {
+      triggerCameraBtn.addEventListener("click", () => cameraInput.click());
+      cameraInput.addEventListener("change", (e) => {
+        const file = e.target.files[0];
+        processSelectedImage(file);
+      });
+    }
+
+    if (triggerGalleryBtn && galleryInput) {
+      triggerGalleryBtn.addEventListener("click", () => galleryInput.click());
+      galleryInput.addEventListener("change", (e) => {
+        const file = e.target.files[0];
+        processSelectedImage(file);
+      });
+    }
+
+    if (retakeBtn) {
+      retakeBtn.addEventListener("click", () => {
+        clearUploadedPhoto();
+        if (cameraInput) cameraInput.click();
+      });
+    }
+
+    if (removePhotoBtn) {
+      removePhotoBtn.addEventListener("click", () => {
+        clearUploadedPhoto();
+      });
     }
 
     // Beacon Type Tab Switcher (Sell vs Wanted)
@@ -1864,11 +1975,13 @@
     });
     closeBtn.addEventListener("click", () => {
       modal.classList.add("hidden");
+      clearUploadedPhoto();
       if (isbnScanner) isbnScanner.reset();
     });
     modal.addEventListener("click", (e) => {
       if (e.target === modal) {
         modal.classList.add("hidden");
+        clearUploadedPhoto();
         if (isbnScanner) isbnScanner.reset();
       }
     });
@@ -1932,8 +2045,7 @@
       // Reset & close
       form.reset();
       if (isbnScanner) isbnScanner.reset();
-      uploadedPhotoBase64 = null;
-      if (previewBox) previewBox.classList.add("hidden");
+      clearUploadedPhoto();
       modal.classList.add("hidden");
 
       // Refresh market and select new item
@@ -1956,6 +2068,61 @@
         radarEngine.playSonarPing(beaconType === "wanted" ? 1400 : 1200, 0.1);
       }
     });
+  }
+
+  /**
+   * Setup Fullscreen Photo Lightbox Modal (Inspect Condition & Editions)
+   */
+  function setupPhotoLightbox() {
+    const modal = document.getElementById("modal-photo-lightbox");
+    const closeBtn = document.getElementById("btn-close-lightbox");
+    const lightboxImg = document.getElementById("lightbox-image");
+    const lightboxTitle = document.getElementById("lightbox-title");
+    const lightboxCondition = document.getElementById("lightbox-condition");
+
+    function openPhotoLightbox(src, title, conditionText) {
+      if (!modal || !lightboxImg || !src) return;
+      lightboxImg.src = src;
+      if (lightboxTitle) lightboxTitle.textContent = title || "Item Photo";
+      if (lightboxCondition) lightboxCondition.textContent = conditionText || "Authentic Photo";
+      modal.classList.remove("hidden");
+      if (window.lucide) lucide.createIcons();
+    }
+
+    function closePhotoLightbox() {
+      if (!modal) return;
+      modal.classList.add("hidden");
+      if (lightboxImg) lightboxImg.src = "";
+    }
+
+    if (closeBtn) {
+      closeBtn.addEventListener("click", closePhotoLightbox);
+    }
+    if (modal) {
+      modal.addEventListener("click", (e) => {
+        if (e.target === modal) closePhotoLightbox();
+      });
+    }
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && modal && !modal.classList.contains("hidden")) {
+        closePhotoLightbox();
+      }
+    });
+
+    // Wire up target spotlight image container
+    const targetImageContainer = document.getElementById("target-image-container");
+    if (targetImageContainer) {
+      targetImageContainer.addEventListener("click", () => {
+        if (state.selectedTarget && state.selectedTarget.item) {
+          const item = state.selectedTarget.item;
+          const imgSrc = item.image || PRESET_PHOTOS[item.category][0];
+          openPhotoLightbox(imgSrc, item.title, item.condition || "Authentic Photo");
+        }
+      });
+    }
+
+    window.openPhotoLightbox = openPhotoLightbox;
+    window.closePhotoLightbox = closePhotoLightbox;
   }
 
   /**
