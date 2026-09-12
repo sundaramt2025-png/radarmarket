@@ -34,7 +34,8 @@
       newItemBroadcast: [],
       newChatMessage: [],
       profileUpdated: [],
-      authStateChanged: []
+      authStateChanged: [],
+      bountyPosted: []
     }
   };
 
@@ -488,6 +489,27 @@
   }
 
   /**
+   * Match a bounty — tell the bounty poster "I have this item!"
+   */
+  async function matchBounty(itemId) {
+    try {
+      const data = await request(`/api/bounty/${itemId}/match`, {
+        method: "POST",
+        body: JSON.stringify({
+          responder_name: state.currentUser?.nickname || "Campus Student"
+        })
+      });
+      if (data && data.success) {
+        pollSync();
+      }
+      return data;
+    } catch (err) {
+      console.warn("Failed to match bounty:", err.message);
+      return { success: false, error: err.message };
+    }
+  }
+
+  /**
    * Real-time Delta Sync Loop (every 1.5 seconds)
    */
   async function pollSync() {
@@ -538,6 +560,17 @@
           offerEvents.forEach((ev) => {
             const payload = typeof ev.payload === "string" ? JSON.parse(ev.payload) : ev.payload;
             emit("offerUpdated", { type: ev.event_type, ...payload });
+          });
+        }
+
+        // If a new bounty / wanted request was posted
+        const bountyEvents = (data.events || []).filter(
+          (e) => e.event_type === "new_bounty"
+        );
+        if (bountyEvents.length > 0) {
+          bountyEvents.forEach((ev) => {
+            const payload = typeof ev.payload === "string" ? JSON.parse(ev.payload) : ev.payload;
+            emit("bountyPosted", payload);
           });
         }
       }
@@ -680,6 +713,7 @@
     createOffer,
     respondOffer,
     getOffers,
+    matchBounty,
     startSyncLoop,
     stopSyncLoop,
     lookupIsbn,

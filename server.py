@@ -795,6 +795,20 @@ def create_item():
         VALUES ('new_item', ?, ?, ?)
     """, (item_id, json.dumps({"item_id": item_id, "title": data.get('title'), "beacon_type": beacon_type}), now))
 
+    # If this is a Wanted/Bounty request, also emit a dedicated bounty event
+    if beacon_type == "wanted":
+        cur.execute("""
+            INSERT INTO sync_events (event_type, item_id, payload, created_at)
+            VALUES ('new_bounty', ?, ?, ?)
+        """, (item_id, json.dumps({
+            "item_id": item_id,
+            "title": data.get('title') or "Wanted Item",
+            "category": data.get('category') or "stationery",
+            "max_budget": float(data.get('price') or 0),
+            "poster_name": seller_name,
+            "created_at": now
+        }), now))
+
     db.commit()
 
     # Retrieve and return created item
@@ -1012,6 +1026,63 @@ def verify_handshake(item_id):
         "status": "sold",
         "completed_at": now,
         "message": "Secure Handshake completed! Trade verified and trust scores boosted."
+    })
+
+# ==========================================
+# BOUNTY BOARD — "I HAVE THIS!" MATCH ROUTE
+# ==========================================
+
+@app.route('/api/bounty/<item_id>/match', methods=['POST'])
+def match_bounty(item_id):
+    """Respond to a Wanted/Bounty request with 'I HAVE THIS!'."""
+    db = get_db()
+    cur = db.cursor()
+    data = request.get_json() or {}
+
+    cur.execute("SELECT * FROM items WHERE id = ?", (item_id,))
+    item = cur.fetchone()
+    if not item:
+        return jsonify({"success": False, "error": "Bounty not found"}), 404
+    item = dict(item)
+
+    if item.get("beacon_type") != "wanted":
+        return jsonify({"success": False, "error": "This item is not a bounty request"}), 400
+
+    auth_user = get_authenticated_user(db)
+    responder_id = request.headers.get('X-Device-Id') or data.get('responder_id') or "guest"
+    responder_name = (auth_user.get("nickname") if auth_user else None) or data.get('responder_name') or "Campus Student"
+
+    if responder_id == item.get('seller_id'):
+        return jsonify({"success": False, "error": "You cannot respond to your own bounty"}), 400
+
+    now = time.time()
+
+    # Post a system chat message into the bounty chat thread
+    chat_text = f"[BOUNTY_MATCH:{responder_id}:{responder_name}]"
+    cur.execute("""
+        INSERT INTO messages (item_id, sender_id, sender_name, text, created_at)
+        VALUES (?, ?, ?, ?, ?)
+    """, (item_id, responder_id, responder_name, chat_text, now))
+
+    # Emit bounty_matched sync event
+    cur.execute("""
+        INSERT INTO sync_events (event_type, item_id, payload, created_at)
+        VALUES ('bounty_matched', ?, ?, ?)
+    """, (item_id, json.dumps({
+        "item_id": item_id,
+        "responder_id": responder_id,
+        "responder_name": responder_name,
+        "bounty_title": item.get("title", "Item"),
+        "matched_at": now
+    }), now))
+
+    db.commit()
+
+    return jsonify({
+        "success": True,
+        "message": f"{responder_name} responded to your bounty! Open the chat to connect.",
+        "item_id": item_id,
+        "responder_name": responder_name
     })
 
 # ==========================================

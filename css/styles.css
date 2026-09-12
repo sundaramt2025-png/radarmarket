@@ -572,3 +572,55 @@ input[type=range]::-webkit-slider-thumb {
   100% { transform: translateY(0) scale(1); opacity: 1; }
 }
 
+/* ==========================================
+   BOUNTY BOARD STYLES
+   ========================================== */
+
+.bounty-card {
+  border-radius: 12px;
+  border: 1px solid rgba(255, 0, 119, 0.5);
+  background: linear-gradient(135deg, rgba(35, 8, 22, 0.97), rgba(15, 23, 42, 0.97));
+  box-shadow: 0 0 22px rgba(255, 0, 119, 0.18), inset 0 0 20px rgba(255, 0, 119, 0.04);
+  padding: 12px 14px;
+  animation: bountySlideIn 0.38s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  transition: all 0.25s ease;
+}
+
+.bounty-card:hover {
+  border-color: rgba(255, 0, 119, 0.75);
+  box-shadow: 0 0 30px rgba(255, 0, 119, 0.28);
+  transform: translateY(-1px);
+}
+
+@keyframes bountySlideIn {
+  0%  { transform: translateY(10px) scale(0.96); opacity: 0; }
+  100% { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+@keyframes bountyUrgentPulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 8px rgba(239, 68, 68, 0.7); }
+  50%       { opacity: 0.75; box-shadow: 0 0 18px rgba(239, 68, 68, 0.9); }
+}
+
+.bounty-urgent-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: rgba(220, 38, 38, 0.25);
+  border: 1px solid rgba(239, 68, 68, 0.6);
+  color: #fca5a5;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  animation: bountyUrgentPulse 1.4s ease-in-out infinite;
+}
+
+.bounty-board-panel {
+  background: linear-gradient(135deg, rgba(15, 6, 24, 0.98), rgba(13, 21, 34, 0.98));
+  border: 1px solid rgba(255, 0, 119, 0.3);
+  box-shadow: 0 0 50px rgba(255, 0, 119, 0.12);
+}
+

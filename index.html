@@ -38,7 +38,7 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 
   <!-- Custom Radar HUD Styles -->
-  <link rel="stylesheet" href="css/styles.css?v=3.0">
+  <link rel="stylesheet" href="css/styles.css?v=3.1">
 
   <script>
     tailwind.config = {
@@ -204,7 +204,17 @@
           <button class="filter-category-btn px-3 py-1.5 rounded-md text-slate-400 hover:text-cyan-300 transition" data-category="books">
             📖 BOOKS
           </button>
+          <button class="filter-category-btn px-3 py-1.5 rounded-md text-slate-400 hover:text-pink-300 transition" data-category="wanted">
+            🎯 BOUNTIES
+          </button>
         </div>
+
+        <!-- Bounty Board Quick-Access Button -->
+        <button id="btn-open-bounty-board" class="px-2.5 py-1.5 rounded-lg bg-pink-950/70 hover:bg-pink-900/60 border border-pink-500/50 hover:border-pink-400 text-pink-300 font-bold font-mono text-xs flex items-center gap-1.5 transition shadow-[0_0_12px_rgba(255,0,119,0.2)] hover:shadow-[0_0_20px_rgba(255,0,119,0.4)]" title="View all Wanted Requests on campus">
+          <i data-lucide="target" class="w-3.5 h-3.5 animate-pulse"></i>
+          <span>BOUNTY BOARD</span>
+          <span id="bounty-board-badge" class="hidden px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-pink-500/30 text-pink-200 border border-pink-400/50"></span>
+        </button>
 
         <!-- Radar Range Slider -->
         <div class="flex items-center gap-2 bg-slate-900/90 border border-slate-800 px-3 py-1.5 rounded-lg text-xs font-mono">
@@ -2076,12 +2086,60 @@
     </div>
   </div>
 
+  <!-- ==========================================
+       BOUNTY BOARD MODAL (Campus Wanted Requests)
+       ========================================== -->
+  <div id="modal-bounty-board" class="modal-overlay fixed inset-0 z-50 hidden flex items-start justify-center pt-16 px-4">
+    <div class="bounty-board-panel w-full max-w-lg rounded-2xl overflow-hidden flex flex-col" style="max-height:80vh;">
+      <!-- Header -->
+      <div class="px-5 py-4 border-b border-pink-500/25 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 rounded-xl bg-pink-950/80 border border-pink-500/40 flex items-center justify-center shadow-[0_0_18px_rgba(255,0,119,0.35)]">
+            <i data-lucide="target" class="w-4.5 h-4.5 text-pink-400"></i>
+          </div>
+          <div>
+            <h2 class="font-bold font-mono text-sm text-pink-200 uppercase tracking-wider">Campus Bounty Board</h2>
+            <p class="text-[10px] text-slate-400 font-mono">Students looking to BUY — tap "I HAVE THIS!" to respond</p>
+          </div>
+        </div>
+        <button id="btn-close-bounty-board" class="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition cursor-pointer">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <!-- Bounty Count Bar -->
+      <div class="px-5 py-2 bg-pink-950/20 border-b border-pink-500/15 flex items-center justify-between text-[11px] font-mono">
+        <span class="text-pink-300 font-bold">
+          <span id="bounty-count-display">0</span> ACTIVE BOUNTIES ON CAMPUS
+        </span>
+        <span class="text-slate-500">🎯 = magenta blip on radar</span>
+      </div>
+
+      <!-- Bounty List -->
+      <div id="bounty-list-container" class="flex-1 overflow-y-auto p-4 space-y-3">
+        <div class="py-10 text-center text-slate-500 font-mono text-xs" id="bounty-empty-state">
+          <i data-lucide="target" class="w-10 h-10 mx-auto mb-3 opacity-30 text-pink-400"></i>
+          <p>No active bounties right now.</p>
+          <p class="text-slate-600 mt-1">Post a "Wanted Request" beacon to appear here!</p>
+        </div>
+      </div>
+
+      <!-- Footer CTA -->
+      <div class="px-5 py-4 border-t border-pink-500/20 bg-pink-950/10">
+        <button id="btn-bounty-post-wanted" class="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 hover:to-rose-500 text-white font-bold font-mono text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition shadow-[0_0_15px_rgba(255,0,119,0.3)] cursor-pointer">
+          <i data-lucide="plus-circle" class="w-4 h-4"></i>
+          <span>Post My Own Wanted Request</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- SCRIPTS -->
-  <script src="js/data.js?v=3.0"></script>
-  <script src="js/algorithm.js?v=3.0"></script>
-  <script src="js/radar.js?v=3.0"></script>
-  <script src="js/api.js?v=3.0"></script>
-  <script src="js/app.js?v=3.0"></script>
+  <script src="js/data.js?v=3.1"></script>
+  <script src="js/algorithm.js?v=3.1"></script>
+  <script src="js/radar.js?v=3.1"></script>
+  <script src="js/api.js?v=3.1"></script>
+  <script src="js/app.js?v=3.1"></script>
 
   <script>
     // Initialize Lucide icons on page load

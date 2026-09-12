@@ -129,6 +129,7 @@
       state.rawItems = items || [];
       recalculateAndRender();
       updateMyBeaconsBadge();
+      updateBountyBadge();
     });
 
     // When a new radar beacon is broadcasted by someone else on the network
@@ -168,6 +169,21 @@
           }
           playHandshakeChime();
         }
+      }
+    });
+
+    // When a new bounty / wanted request is posted by another device
+    MarketAPI.on("bountyPosted", (payload) => {
+      if (payload && payload.title) {
+        showToast(
+          "🎯 CAMPUS BOUNTY DETECTED",
+          `"${payload.title}" — Someone needs this! Tap BOUNTY BOARD if you have it.`
+        );
+        if (radarEngine) {
+          radarEngine.triggerActiveSonarSweep();
+        }
+        // Update bounty badge count
+        updateBountyBadge();
       }
     });
 
@@ -282,9 +298,13 @@
     // 2. Apply anti-collision spatial jitter for overlapping coordinates
     state.evaluatedItems = RadarAlgorithm.applyRadarClusterSolver(evaluated);
 
-    // 3. Filter by category & search query
+    // 3. Filter by category / beacon_type & search query
     state.filteredItems = state.evaluatedItems.filter((entry) => {
-      // Category match
+      // Special filter: BOUNTIES tab shows only wanted beacon_type
+      if (state.selectedCategory === "wanted") {
+        return entry.item.beacon_type === "wanted";
+      }
+      // Category match (skip wanted items in normal category tabs unless ALL)
       if (state.selectedCategory !== "all" && entry.item.category !== state.selectedCategory) {
         return false;
       }
@@ -322,6 +342,7 @@
 
     // 8. Render UI Views
     renderNearbyFeed();
+    updateBountyBadge();
     if (state.currentView === "map") {
       renderCampusMapPins();
     } else if (state.currentView === "grid") {
@@ -779,7 +800,10 @@
         filterBtns.forEach((b) => {
           b.className = "filter-category-btn px-3 py-1.5 rounded-md text-slate-400 hover:text-slate-200 transition";
         });
-        btn.className = "filter-category-btn px-3 py-1.5 rounded-md text-cyan-400 bg-cyan-950/80 border border-cyan-500/30 transition";
+        const isBounty = btn.dataset.category === "wanted";
+        btn.className = isBounty
+          ? "filter-category-btn px-3 py-1.5 rounded-md text-pink-300 bg-pink-950/80 border border-pink-500/40 transition"
+          : "filter-category-btn px-3 py-1.5 rounded-md text-cyan-400 bg-cyan-950/80 border border-cyan-500/30 transition";
         state.selectedCategory = btn.dataset.category;
         recalculateAndRender();
       });
@@ -882,6 +906,8 @@
     setupGoogleAuthModal();
     setupMyBeaconsModal();
     updateMyBeaconsBadge();
+    setupBountyBoardModal();
+    updateBountyBadge();
 
     // 9. Reserve Item Button
     document.getElementById("btn-reserve-item").addEventListener("click", async () => {
@@ -4391,6 +4417,33 @@
       return;
     }
 
+    // 5. Check for [BOUNTY_MATCH:responder_id:responder_name]
+    const bountyMatchRx = msg.text && msg.text.match(/^\[BOUNTY_MATCH:([^:]+):(.*?)\]$/);
+    if (bountyMatchRx) {
+      const responderName = bountyMatchRx[2] || "Campus Student";
+      const bubble = document.createElement("div");
+      bubble.className = "w-full flex flex-col items-center my-2 font-mono";
+      bubble.innerHTML = `
+        <div class="bounty-card w-full max-w-[95%] text-slate-100">
+          <div class="flex items-center justify-between gap-2 pb-1.5 mb-2 border-b border-pink-500/30 text-xs">
+            <div class="flex items-center gap-1.5 text-pink-300 font-bold">
+              <i data-lucide="check-circle-2" class="w-4 h-4 text-pink-400"></i>
+              <span>BOUNTY MATCH!</span>
+            </div>
+            <span class="text-[9px] px-1.5 py-0.2 rounded bg-pink-950 text-pink-300 border border-pink-500/40 font-bold">SELLER FOUND</span>
+          </div>
+          <div class="text-[11px] text-slate-200">
+            🎯 <strong class="text-pink-200">${responderName}</strong> says they have this item and is ready to sell!
+          </div>
+          <div class="mt-2 text-[10px] text-slate-400">Reply in chat to arrange a campus meetup.</div>
+        </div>
+      `;
+      container.appendChild(bubble);
+      lucide.createIcons();
+      container.scrollTop = container.scrollHeight;
+      return;
+    }
+
     const bubble = document.createElement("div");
     bubble.className = `flex flex-col ${isMe ? "items-end" : "items-start"}`;
     bubble.innerHTML = `
@@ -4416,6 +4469,164 @@
       appendMessageBubble(msg);
     } else {
       appendMessageBubble({ sender: "me", text });
+    }
+  }
+
+  /**
+   * Update the Bounty Board badge with count of active wanted requests
+   */
+  function updateBountyBadge() {
+    const bounties = state.rawItems.filter(it => it.beacon_type === "wanted" && it.status !== "sold");
+    const badge = document.getElementById("bounty-board-badge");
+    if (!badge) return;
+    if (bounties.length > 0) {
+      badge.textContent = bounties.length;
+      badge.classList.remove("hidden");
+    } else {
+      badge.classList.add("hidden");
+    }
+  }
+
+  /**
+   * Setup Campus Bounty Board Modal
+   */
+  function setupBountyBoardModal() {
+    const modal = document.getElementById("modal-bounty-board");
+    const closeBtn = document.getElementById("btn-close-bounty-board");
+    const openBtn = document.getElementById("btn-open-bounty-board");
+    const listContainer = document.getElementById("bounty-list-container");
+    const emptyState = document.getElementById("bounty-empty-state");
+    const countDisplay = document.getElementById("bounty-count-display");
+    const postWantedBtn = document.getElementById("btn-bounty-post-wanted");
+
+    if (!modal) return;
+
+    function renderBounties() {
+      const bounties = state.rawItems.filter(it => it.beacon_type === "wanted" && it.status !== "sold");
+      if (countDisplay) countDisplay.textContent = bounties.length;
+
+      // Remove existing bounty cards (not the empty state)
+      const existingCards = listContainer.querySelectorAll(".bounty-card-wrapper");
+      existingCards.forEach(c => c.remove());
+
+      if (bounties.length === 0) {
+        if (emptyState) emptyState.classList.remove("hidden");
+        return;
+      }
+      if (emptyState) emptyState.classList.add("hidden");
+
+      const now = Date.now() / 1000;
+      const currentDeviceId = window.MarketAPI ? MarketAPI.getDeviceId() : null;
+
+      bounties.forEach((item) => {
+        const isUrgent = (now - (item.created_at || now)) < 1800; // within 30 mins
+        const ageSeconds = now - (item.created_at || now);
+        let ageStr;
+        if (ageSeconds < 60) ageStr = "just now";
+        else if (ageSeconds < 3600) ageStr = `${Math.floor(ageSeconds / 60)}m ago`;
+        else if (ageSeconds < 86400) ageStr = `${Math.floor(ageSeconds / 3600)}h ago`;
+        else ageStr = `${Math.floor(ageSeconds / 86400)}d ago`;
+
+        const isMyBounty = item.seller_id === currentDeviceId;
+
+        const wrapper = document.createElement("div");
+        wrapper.className = "bounty-card-wrapper";
+        wrapper.innerHTML = `
+          <div class="bounty-card">
+            <div class="flex items-start justify-between gap-2 mb-2">
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2 mb-1 flex-wrap">
+                  ${isUrgent ? '<span class="bounty-urgent-badge">🔥 URGENT</span>' : ''}
+                  <span class="text-[10px] font-mono text-slate-500">${ageStr}</span>
+                </div>
+                <h4 class="font-bold text-sm text-white leading-snug line-clamp-2">${item.title}</h4>
+              </div>
+              <div class="text-right shrink-0 font-mono">
+                <div class="text-xs text-pink-300 font-bold">Max Budget</div>
+                <div class="text-base font-black text-emerald-400">₹${item.price}</div>
+              </div>
+            </div>
+            <div class="text-[11px] text-slate-400 mb-2.5 line-clamp-2">${item.description || "No description provided."}</div>
+            <div class="flex items-center justify-between gap-2 pt-2 border-t border-pink-500/20">
+              <div class="text-[10px] text-slate-500 font-mono flex items-center gap-1">
+                <span class="text-slate-400 font-semibold">${item.seller_name || "Student"}</span>
+                • <span class="text-pink-400/80">${item.landmark || "Campus"}</span>
+              </div>
+              ${isMyBounty
+                ? '<span class="text-[10px] font-mono text-amber-400 px-2 py-1 rounded bg-amber-950/50 border border-amber-500/30">YOUR BOUNTY</span>'
+                : `<button type="button" class="btn-bounty-match py-1.5 px-3 rounded-lg bg-pink-600 hover:bg-pink-500 text-white font-bold font-mono text-[11px] flex items-center gap-1.5 transition shadow-[0_0_10px_rgba(255,0,119,0.3)] cursor-pointer" data-item-id="${item.id}" data-title="${item.title.replace(/"/g, '&quot;')}">
+                  <i data-lucide="zap" class="w-3.5 h-3.5"></i> I HAVE THIS!
+                </button>`
+              }
+            </div>
+          </div>
+        `;
+        listContainer.appendChild(wrapper);
+      });
+
+      // Wire "I HAVE THIS!" buttons
+      listContainer.querySelectorAll(".btn-bounty-match").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const itemId = btn.dataset.itemId;
+          const itemTitle = btn.dataset.title || "Item";
+          btn.disabled = true;
+          btn.innerHTML = `<i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i> Signaling...`;
+          lucide.createIcons();
+
+          const res = await MarketAPI.matchBounty(itemId);
+          if (res && res.success) {
+            btn.innerHTML = `<i data-lucide="check" class="w-3.5 h-3.5"></i> Signaled!`;
+            lucide.createIcons();
+            showToast("BOUNTY SIGNAL SENT", `You signalled that you have "${itemTitle}". The buyer will chat you!`);
+            // Open chat for the bounty item
+            const target = state.evaluatedItems.find(t => t.item.id === itemId);
+            if (target) {
+              modal.classList.add("hidden");
+              setTimeout(() => openChatModal(target), 300);
+            }
+          } else {
+            btn.disabled = false;
+            btn.innerHTML = `<i data-lucide="zap" class="w-3.5 h-3.5"></i> I HAVE THIS!`;
+            lucide.createIcons();
+            showToast("SIGNAL FAILED", res.error || "Could not signal bounty.");
+          }
+        });
+      });
+
+      lucide.createIcons();
+    }
+
+    if (openBtn) {
+      openBtn.addEventListener("click", () => {
+        renderBounties();
+        modal.classList.remove("hidden");
+        lucide.createIcons();
+      });
+    }
+
+    if (closeBtn) {
+      closeBtn.addEventListener("click", () => modal.classList.add("hidden"));
+    }
+    modal.addEventListener("click", (e) => {
+      if (e.target === modal) modal.classList.add("hidden");
+    });
+
+    if (postWantedBtn) {
+      postWantedBtn.addEventListener("click", () => {
+        modal.classList.add("hidden");
+        const sellBtn = document.getElementById("btn-open-sell-modal");
+        if (sellBtn) {
+          sellBtn.click();
+          // Pre-select the "Wanted" radio after modal opens
+          setTimeout(() => {
+            const wantedRadio = document.querySelector('input[name="sell-beacon-type"][value="wanted"]');
+            if (wantedRadio) {
+              wantedRadio.checked = true;
+              wantedRadio.dispatchEvent(new Event("change"));
+            }
+          }, 300);
+        }
+      });
     }
   }
 
