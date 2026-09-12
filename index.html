@@ -340,10 +340,21 @@
           <div class="w-full flex flex-wrap items-center justify-between gap-2 mb-3 text-xs font-mono text-slate-400">
             <div class="flex items-center gap-2">
               <span class="w-2 h-2 rounded-full bg-cyan-400 animate-ping"></span>
-              <span class="text-cyan-300 font-bold uppercase">LIVE CAMPUS STREET MAP</span>
+              <span class="text-cyan-300 font-bold uppercase">LIVE GOOGLE MAP</span>
               <span id="map-pin-count-badge" class="px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-500/30 text-[10px] font-bold">0 SELLERS</span>
             </div>
             <div class="flex items-center gap-2">
+              <!-- Google Map Layer Switcher (Streets vs Satellite) -->
+              <div class="flex items-center bg-slate-900/90 border border-slate-700/80 rounded-lg p-0.5 text-[11px]">
+                <button id="btn-map-layer-streets" type="button" class="px-2 py-1 rounded bg-cyan-500 text-slate-950 font-bold transition flex items-center gap-1 cursor-pointer" title="Show official Google Streets Roadmap">
+                  <i data-lucide="map" class="w-3 h-3"></i>
+                  <span>Streets</span>
+                </button>
+                <button id="btn-map-layer-satellite" type="button" class="px-2 py-1 rounded text-slate-400 hover:text-slate-200 transition flex items-center gap-1 cursor-pointer" title="Show Google Satellite Aerial Imagery">
+                  <i data-lucide="satellite" class="w-3 h-3"></i>
+                  <span>Satellite</span>
+                </button>
+              </div>
               <button id="btn-map-center-me" type="button" class="px-2.5 py-1.5 rounded-lg bg-cyan-950/80 hover:bg-cyan-900 border border-cyan-400 text-cyan-300 font-bold flex items-center gap-1.5 shadow-[0_0_10px_rgba(0,229,255,0.2)] transition text-xs cursor-pointer" title="Center map on my location">
                 <i data-lucide="crosshair" class="w-3.5 h-3.5 text-cyan-400"></i>
                 <span>CENTER ME</span>
@@ -1672,9 +1683,20 @@
       <div class="px-5 py-2.5 bg-slate-950 border-b border-slate-800/80 flex flex-wrap items-center justify-between gap-2 text-xs font-mono">
         <div class="text-slate-400 flex items-center gap-1.5">
           <i data-lucide="info" class="w-3.5 h-3.5 text-cyan-400"></i>
-          <span>Click anywhere on the map or drag the glowing marker</span>
+          <span>Click anywhere or drag the glowing reticle marker</span>
         </div>
-        <div class="flex items-center gap-1.5">
+        <div class="flex items-center gap-2">
+          <!-- Google Map Layer Switcher -->
+          <div class="flex items-center bg-slate-900 border border-slate-700/80 rounded-lg p-0.5 text-[10px]">
+            <button type="button" id="btn-pinpoint-layer-streets" class="px-2 py-0.5 rounded bg-emerald-500 text-slate-950 font-bold transition flex items-center gap-1 cursor-pointer" title="Show official Google Streets">
+              <i data-lucide="map" class="w-3 h-3"></i>
+              <span>Google Streets</span>
+            </button>
+            <button type="button" id="btn-pinpoint-layer-satellite" class="px-2 py-0.5 rounded text-slate-400 hover:text-white transition flex items-center gap-1 cursor-pointer" title="Show Google Satellite Aerial Imagery">
+              <i data-lucide="satellite" class="w-3 h-3"></i>
+              <span>Satellite</span>
+            </button>
+          </div>
           <button type="button" id="btn-pinpoint-center-me" class="px-2.5 py-1 rounded bg-slate-900 hover:bg-slate-800 border border-cyan-500/40 text-cyan-300 text-[11px] font-bold flex items-center gap-1 transition cursor-pointer">
             <i data-lucide="crosshair" class="w-3 h-3"></i>
             <span>Center on Me</span>
@@ -1726,6 +1748,72 @@
     </div>
   </div>
 
+  <!-- MODAL: GOOGLE MAPS INTERACTIVE VIEWER & NAVIGATION (OFFICIAL GOOGLE MAPS EMBED - NO API KEY REQUIRED) -->
+  <div id="modal-google-maps-embed" class="modal-overlay fixed inset-0 z-50 hidden flex items-center justify-center p-3 sm:p-6 bg-black/90 backdrop-blur-md">
+    <div class="relative w-full max-w-3xl bg-slate-950 border border-cyan-500/50 rounded-2xl overflow-hidden shadow-[0_0_50px_rgba(0,229,255,0.35)] flex flex-col max-h-[94vh]">
+      <!-- Header -->
+      <div class="px-5 py-3.5 bg-slate-900/90 border-b border-slate-800 flex items-center justify-between gap-3">
+        <div class="flex items-center gap-2.5 min-w-0">
+          <div class="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center border border-emerald-500/40 shrink-0">
+            <i data-lucide="map-pin" class="w-4 h-4"></i>
+          </div>
+          <div class="min-w-0">
+            <div class="flex items-center gap-2">
+              <h3 class="font-bold text-white text-sm uppercase tracking-wide truncate">Google Maps Live Reticle</h3>
+              <span class="text-[9px] px-1.5 py-0.2 rounded bg-emerald-950 text-emerald-400 border border-emerald-500/30 font-mono shrink-0 font-bold">OFFICIAL GOOGLE MAPS</span>
+            </div>
+            <p id="gmaps-modal-subtitle" class="text-slate-400 text-xs font-mono truncate">Campus Pickup Spot</p>
+          </div>
+        </div>
+        <button id="btn-close-gmaps-modal" type="button" class="text-slate-400 hover:text-white transition cursor-pointer p-1">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- Google Maps Iframe Container -->
+      <div class="relative w-full h-[360px] sm:h-[440px] bg-slate-900">
+        <iframe 
+          id="gmaps-embed-iframe"
+          class="w-full h-full border-0"
+          loading="lazy"
+          allowfullscreen
+          referrerpolicy="no-referrer-when-downgrade"
+          src="about:blank"
+        ></iframe>
+        <!-- Loading indicator overlay -->
+        <div id="gmaps-iframe-loader" class="absolute inset-0 bg-slate-950 flex flex-col items-center justify-center gap-2 text-cyan-400 pointer-events-none transition-opacity duration-300">
+          <i data-lucide="loader-2" class="w-8 h-8 animate-spin"></i>
+          <span class="font-mono text-xs text-slate-300">Connecting to Google Maps live satellite/street stream...</span>
+        </div>
+      </div>
+
+      <!-- Bottom Controls & Navigation Action Bar -->
+      <div class="p-4 bg-slate-900/95 border-t border-slate-800 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 font-mono text-xs">
+        <div class="flex items-center gap-3">
+          <div>
+            <span class="text-slate-500 text-[10px] uppercase block">Coordinates:</span>
+            <span id="gmaps-modal-coords" class="text-emerald-400 font-bold text-xs">28.54510, 77.19260</span>
+          </div>
+          <div class="border-l border-slate-800 pl-3">
+            <span class="text-slate-500 text-[10px] uppercase block">Landmark Name:</span>
+            <span id="gmaps-modal-landmark" class="text-cyan-300 font-bold text-xs truncate max-w-[200px] inline-block">Campus Spot</span>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <button id="btn-gmaps-copy-coords" type="button" class="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white flex items-center justify-center gap-1.5 transition text-xs cursor-pointer">
+            <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+            <span>Copy Coords</span>
+          </button>
+          <button id="btn-gmaps-launch-app" type="button" class="px-4 py-2 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-400 hover:to-blue-400 text-slate-950 font-bold uppercase tracking-wider transition shadow-[0_0_15px_rgba(0,229,255,0.4)] flex items-center justify-center gap-1.5 cursor-pointer">
+            <i data-lucide="navigation" class="w-4 h-4 stroke-[2.5]"></i>
+            <span>Launch Google Directions</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- REAL-TIME RADAR TOAST NOTIFICATION POPUP -->
   <div id="radar-toast" class="fixed bottom-5 right-5 z-50 hidden transition-all transform duration-300 translate-y-2 opacity-0 max-w-sm">
     <div class="p-3.5 rounded-xl bg-slate-950/95 border border-cyan-400/80 shadow-[0_0_25px_rgba(0,229,255,0.4)] backdrop-blur-md flex items-start gap-3">
@@ -1765,11 +1853,11 @@
   </div>
 
   <!-- SCRIPTS -->
-  <script src="js/data.js?v=2.6"></script>
-  <script src="js/algorithm.js?v=2.6"></script>
-  <script src="js/radar.js?v=2.6"></script>
-  <script src="js/api.js?v=2.6"></script>
-  <script src="js/app.js?v=2.6"></script>
+  <script src="js/data.js?v=2.7"></script>
+  <script src="js/algorithm.js?v=2.7"></script>
+  <script src="js/radar.js?v=2.7"></script>
+  <script src="js/api.js?v=2.7"></script>
+  <script src="js/app.js?v=2.7"></script>
 
   <script>
     // Initialize Lucide icons on page load

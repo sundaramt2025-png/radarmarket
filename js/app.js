@@ -23,14 +23,39 @@
 
   let radarEngine = null;
 
-  // Interactive Campus Street Map & Pinpoint Reticle State (Leaflet)
+  // Interactive Campus Street Map & Pinpoint Reticle State (Leaflet + Google Maps)
   let campusMap = null;
   let campusUserMarker = null;
   let campusMapMarkers = [];
   let campusPathLine = null;
+  let campusCurrentTileLayer = null;
+  let campusActiveLayerType = "streets";
   let pinpointMap = null;
   let pinpointMarker = null;
   let pinpointPicker = null;
+  let pinpointCurrentTileLayer = null;
+  let pinpointActiveLayerType = "streets";
+  let googleMapsModalInitialized = false;
+
+  // Google Maps Public Tile Configuration (Official Google Roadmaps & Satellite Imagery, No API Key Required)
+  const GOOGLE_TILE_CONFIG = {
+    streets: {
+      url: "https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}",
+      options: {
+        maxZoom: 20,
+        subdomains: ["mt0", "mt1", "mt2", "mt3"],
+        attribution: "&copy; Google Maps"
+      }
+    },
+    satellite: {
+      url: "https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}", // hybrid satellite + road overlays & landmark labels
+      options: {
+        maxZoom: 20,
+        subdomains: ["mt0", "mt1", "mt2", "mt3"],
+        attribution: "&copy; Google Maps Satellite"
+      }
+    }
+  };
 
   // Preset fallback photos for quick posting
   const PRESET_PHOTOS = {
@@ -898,24 +923,135 @@
   }
 
   /**
-   * Universal Google Maps Walking Directions launcher
-   * Opens official Google Maps app intent or web browser walking directions
+   * Open Official Interactive Google Maps Modal
+   * Loads public Google Maps embed iframe + provides 1-tap walking directions intent (No API Key Required)
    */
-  function openGoogleMapsDirections(destLat, destLng, landmarkName) {
+  function openGoogleMapsModal(destLat, destLng, landmarkName) {
     if (!destLat || !destLng) {
       showToast("LOCATION MISSING", "Coordinates not available for this item.");
       return;
     }
-    let url = `https://www.google.com/maps/dir/?api=1&destination=${destLat},${destLng}&travelmode=walking`;
-    if (state.userLocation && state.userLocation.lat && state.userLocation.lng) {
-      url += `&origin=${state.userLocation.lat},${state.userLocation.lng}`;
+
+    const modal = document.getElementById("modal-google-maps-embed");
+    const iframe = document.getElementById("gmaps-embed-iframe");
+    const loader = document.getElementById("gmaps-iframe-loader");
+    const subtitle = document.getElementById("gmaps-modal-subtitle");
+    const coordsEl = document.getElementById("gmaps-modal-coords");
+    const landmarkEl = document.getElementById("gmaps-modal-landmark");
+    const copyBtn = document.getElementById("btn-gmaps-copy-coords");
+    const launchBtn = document.getElementById("btn-gmaps-launch-app");
+    const closeBtn = document.getElementById("btn-close-gmaps-modal");
+
+    const cleanLat = Number(destLat).toFixed(5);
+    const cleanLng = Number(destLng).toFixed(5);
+    const cleanLandmark = landmarkName || "Campus Pickup Spot";
+
+    if (!modal || !iframe) {
+      // Direct fallback to Google Maps directions
+      window.open(`https://www.google.com/maps/dir/?api=1&destination=${cleanLat},${cleanLng}&travelmode=walking`, "_blank");
+      return;
     }
-    window.open(url, "_blank");
-    showToast("GOOGLE MAPS", `Launching walking navigation to ${landmarkName || "pickup spot"}...`);
+
+    if (subtitle) subtitle.textContent = cleanLandmark;
+    if (coordsEl) coordsEl.textContent = `${cleanLat}, ${cleanLng}`;
+    if (landmarkEl) landmarkEl.textContent = cleanLandmark;
+
+    if (loader) {
+      loader.classList.remove("opacity-0", "hidden");
+    }
+
+    // Official Google Maps public embed (100% free, full interactive map with pins, zero API key)
+    iframe.src = `https://maps.google.com/maps?q=${cleanLat},${cleanLng}&hl=en&z=16&output=embed`;
+
+    iframe.onload = () => {
+      if (loader) {
+        loader.classList.add("opacity-0");
+        setTimeout(() => loader.classList.add("hidden"), 300);
+      }
+    };
+
+    let navUrl = `https://www.google.com/maps/dir/?api=1&destination=${cleanLat},${cleanLng}&travelmode=walking`;
+    if (state.userLocation && state.userLocation.lat && state.userLocation.lng) {
+      navUrl += `&origin=${state.userLocation.lat},${state.userLocation.lng}`;
+    }
+
+    if (launchBtn) {
+      launchBtn.onclick = () => {
+        window.open(navUrl, "_blank");
+        showToast("GOOGLE MAPS", `Launching turn-by-turn navigation to ${cleanLandmark}...`);
+      };
+    }
+
+    if (copyBtn) {
+      copyBtn.onclick = () => {
+        const text = `${cleanLat}, ${cleanLng}`;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(() => {
+            showToast("COORDINATES COPIED", text);
+          }).catch(() => {
+            showToast("COORDINATES", text);
+          });
+        } else {
+          showToast("COORDINATES", text);
+        }
+      };
+    }
+
+    if (!googleMapsModalInitialized) {
+      googleMapsModalInitialized = true;
+      if (closeBtn) {
+        closeBtn.addEventListener("click", () => {
+          modal.classList.add("hidden");
+          iframe.src = "about:blank";
+        });
+      }
+      modal.addEventListener("click", (e) => {
+        if (e.target === modal) {
+          modal.classList.add("hidden");
+          iframe.src = "about:blank";
+        }
+      });
+    }
+
+    modal.classList.remove("hidden");
+    lucide.createIcons();
   }
 
   /**
-   * Initialize Leaflet Interactive Campus Street Map
+   * Universal Google Maps Walking Directions launcher
+   * Opens official Google Maps modal viewer and turn-by-turn navigation
+   */
+  function openGoogleMapsDirections(destLat, destLng, landmarkName) {
+    openGoogleMapsModal(destLat, destLng, landmarkName);
+  }
+
+  /**
+   * Switch Google Map Tile Layer (Streets vs Satellite)
+   */
+  function setCampusMapLayer(type) {
+    if (!campusMap || typeof L === "undefined") return;
+    if (campusCurrentTileLayer) {
+      campusMap.removeLayer(campusCurrentTileLayer);
+    }
+    campusActiveLayerType = type;
+    const cfg = GOOGLE_TILE_CONFIG[type] || GOOGLE_TILE_CONFIG.streets;
+    campusCurrentTileLayer = L.tileLayer(cfg.url, cfg.options).addTo(campusMap);
+
+    const streetsBtn = document.getElementById("btn-map-layer-streets");
+    const satBtn = document.getElementById("btn-map-layer-satellite");
+    if (streetsBtn && satBtn) {
+      if (type === "streets") {
+        streetsBtn.className = "px-2 py-1 rounded bg-cyan-500 text-slate-950 font-bold transition flex items-center gap-1 cursor-pointer";
+        satBtn.className = "px-2 py-1 rounded text-slate-400 hover:text-slate-200 transition flex items-center gap-1 cursor-pointer";
+      } else {
+        satBtn.className = "px-2 py-1 rounded bg-cyan-500 text-slate-950 font-bold transition flex items-center gap-1 cursor-pointer";
+        streetsBtn.className = "px-2 py-1 rounded text-slate-400 hover:text-slate-200 transition flex items-center gap-1 cursor-pointer";
+      }
+    }
+  }
+
+  /**
+   * Initialize Leaflet Interactive Campus Google Map
    */
   function initCampusMap() {
     if (typeof L === "undefined") return;
@@ -935,11 +1071,8 @@
       attributionControl: false
     }).setView([lat, lng], 16);
 
-    // CartoDB Dark Matter Cyberpunk Tiles
-    L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-      maxZoom: 19,
-      subdomains: "abcd"
-    }).addTo(campusMap);
+    // Initial Google Map Tile Layer (Streets)
+    setCampusMapLayer(campusActiveLayerType || "streets");
 
     // Add User pulsing beacon marker
     const userIcon = L.divIcon({
@@ -950,6 +1083,16 @@
     });
     campusUserMarker = L.marker([lat, lng], { icon: userIcon }).addTo(campusMap);
     campusUserMarker.bindPopup(`<strong class="text-cyan-400 font-mono text-xs">📍 YOU ARE HERE</strong><br><span class="text-[11px] text-slate-400 font-mono">Pulsing Radar Ground Zero</span>`);
+
+    // Google Layer switcher buttons
+    const streetsBtn = document.getElementById("btn-map-layer-streets");
+    const satBtn = document.getElementById("btn-map-layer-satellite");
+    if (streetsBtn) {
+      streetsBtn.addEventListener("click", () => setCampusMapLayer("streets"));
+    }
+    if (satBtn) {
+      satBtn.addEventListener("click", () => setCampusMapLayer("satellite"));
+    }
 
     // Center me button
     const centerBtn = document.getElementById("btn-map-center-me");
@@ -2312,6 +2455,28 @@
       }
     }
 
+    function setPinpointMapLayer(type) {
+      if (!pinpointMap || typeof L === "undefined") return;
+      if (pinpointCurrentTileLayer) {
+        pinpointMap.removeLayer(pinpointCurrentTileLayer);
+      }
+      pinpointActiveLayerType = type;
+      const cfg = GOOGLE_TILE_CONFIG[type] || GOOGLE_TILE_CONFIG.streets;
+      pinpointCurrentTileLayer = L.tileLayer(cfg.url, cfg.options).addTo(pinpointMap);
+
+      const streetsBtn = document.getElementById("btn-pinpoint-layer-streets");
+      const satBtn = document.getElementById("btn-pinpoint-layer-satellite");
+      if (streetsBtn && satBtn) {
+        if (type === "streets") {
+          streetsBtn.className = "px-2 py-0.5 rounded bg-emerald-500 text-slate-950 font-bold transition flex items-center gap-1 cursor-pointer";
+          satBtn.className = "px-2 py-0.5 rounded text-slate-400 hover:text-white transition flex items-center gap-1 cursor-pointer";
+        } else {
+          satBtn.className = "px-2 py-0.5 rounded bg-emerald-500 text-slate-950 font-bold transition flex items-center gap-1 cursor-pointer";
+          streetsBtn.className = "px-2 py-0.5 rounded text-slate-400 hover:text-white transition flex items-center gap-1 cursor-pointer";
+        }
+      }
+    }
+
     function initPinpointMap() {
       if (pinpointMap) {
         setTimeout(() => pinpointMap.invalidateSize(), 150);
@@ -2327,10 +2492,18 @@
         attributionControl: false
       }).setView([currentPinCoords.lat, currentPinCoords.lng], 16);
 
-      L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-        maxZoom: 19,
-        subdomains: "abcd"
-      }).addTo(pinpointMap);
+      // Official Google Maps Tile Layer
+      setPinpointMapLayer(pinpointActiveLayerType || "streets");
+
+      // Wire Google Map Layer buttons in Pinpoint modal
+      const streetsBtn = document.getElementById("btn-pinpoint-layer-streets");
+      const satBtn = document.getElementById("btn-pinpoint-layer-satellite");
+      if (streetsBtn) {
+        streetsBtn.addEventListener("click", () => setPinpointMapLayer("streets"));
+      }
+      if (satBtn) {
+        satBtn.addEventListener("click", () => setPinpointMapLayer("satellite"));
+      }
 
       const reticleIcon = L.divIcon({
         className: "reticle-map-marker",
@@ -2385,7 +2558,11 @@
 
     if (gmapsBtn) {
       gmapsBtn.addEventListener("click", () => {
-        window.open(`https://www.google.com/maps/search/?api=1&query=${currentPinCoords.lat},${currentPinCoords.lng}`, "_blank");
+        openGoogleMapsModal(
+          currentPinCoords.lat,
+          currentPinCoords.lng,
+          currentPinCoords.landmark || (landmarkInput ? landmarkInput.value.trim() : "") || "Pickup Spot"
+        );
       });
     }
 
@@ -2656,7 +2833,8 @@
       previewMapsBtn.addEventListener("click", () => {
         const lat = state.selectedPickupCoords?.lat || state.userLocation.lat;
         const lng = state.selectedPickupCoords?.lng || state.userLocation.lng;
-        window.open(`https://www.google.com/maps/search/?api=1&query=${lat},${lng}`, "_blank");
+        const landmark = (landmarkInput ? landmarkInput.value.trim() : "") || state.selectedPickupCoords?.landmark || "Pickup Spot";
+        openGoogleMapsModal(lat, lng, landmark);
       });
     }
 
