@@ -289,6 +289,7 @@
       });
 
       if (data && data.item) {
+        pollSync();
         return data.item;
       }
     } catch (err) {
@@ -401,11 +402,11 @@
         state.lastSyncTimestamp = data.timestamp;
 
         // If items changed on another phone or laptop
-        if (data.has_item_changes && data.items && data.items.length > 0) {
+        if (data.has_item_changes && data.items !== undefined) {
           emit("itemsUpdated", data.items);
 
           // Check if there's a new item posted by another device
-          const newItems = data.events.filter(
+          const newItems = (data.events || []).filter(
             (e) => e.event_type === "new_item"
           );
           if (newItems.length > 0) {
@@ -427,7 +428,7 @@
     }
   }
 
-  function startSyncLoop(intervalMs = 1500) {
+  function startSyncLoop(intervalMs = 1200) {
     if (state.syncIntervalId) clearInterval(state.syncIntervalId);
     state.syncIntervalId = setInterval(pollSync, intervalMs);
     // Initial sync

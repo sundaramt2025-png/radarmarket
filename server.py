@@ -757,10 +757,10 @@ def create_item():
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NULL, ?, ?, 'active', ?, ?, ?, ?)
     """, (
         item_id, device_id, seller_name, 5.0, seller_verified, seller_avatar,
-        data.get('title'), data.get('category'), data.get('sub_category'),
-        data.get('price'), data.get('original_price'), data.get('condition'),
-        data.get('condition_score', 0.85), data.get('lat'), data.get('lng'),
-        data.get('landmark'), data.get('image'), data.get('description'),
+        data.get('title') or "Untitled Listing", data.get('category') or "stationery", data.get('sub_category') or "General",
+        float(data.get('price') or 0), float(data.get('original_price') or data.get('price') or 0), data.get('condition') or "Good",
+        float(data.get('condition_score', 0.85) or 0.85), float(data.get('lat') or 28.6139), float(data.get('lng') or 77.2090),
+        data.get('landmark') or "Campus Ground Zero", data.get('image'), data.get('description') or "",
         tags_json, now, beacon_type, upi_id,
         seller_email, seller_campus_verified, seller_google_id
     ))
@@ -944,10 +944,20 @@ def delta_sync():
     """, (since,))
     events = [dict(r) for r in cur.fetchall()]
 
-    # If any item was added or changed, return updated items
-    has_item_changes = any(e['event_type'] in ('new_item', 'reserve_toggle', 'item_status_changed') for e in events)
+    # Check latest item timestamp to guarantee synchronization across multiple phones
+    cur.execute("SELECT max(created_at), count(*) FROM items WHERE status != 'deleted'")
+    latest_row = cur.fetchone()
+    latest_item_ts = latest_row[0] or 0
+
+    # If any item was added, changed, or client is initializing
+    has_item_changes = (
+        since == 0 or
+        latest_item_ts > since or
+        any(e['event_type'] in ('new_item', 'reserve_toggle', 'item_status_changed') for e in events)
+    )
+
     items = []
-    if has_item_changes or since == 0:
+    if has_item_changes:
         cur.execute("SELECT * FROM items WHERE status != 'deleted' ORDER BY created_at DESC")
         for r in cur.fetchall():
             item = dict(r)

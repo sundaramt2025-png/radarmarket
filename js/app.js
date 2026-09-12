@@ -87,8 +87,9 @@
 
     // When another device lists or reserves an item
     MarketAPI.on("itemsUpdated", (items) => {
-      state.rawItems = items;
+      state.rawItems = items || [];
       recalculateAndRender();
+      updateMyBeaconsBadge();
     });
 
     // When a new radar beacon is broadcasted by someone else on the network
@@ -97,8 +98,11 @@
         const first = events[0];
         const payload = typeof first.payload === "string" ? JSON.parse(first.payload) : first.payload;
         showToast("RADAR BEACON DETECTED", `New listing: "${payload.title || 'Item'}" was just broadcasted!`);
-        if (state.audioEnabled && radarEngine) {
-          radarEngine.playSonarPing(1100, 0.1);
+        if (radarEngine) {
+          radarEngine.triggerActiveSonarSweep();
+          if (state.audioEnabled) {
+            radarEngine.playSonarPing(1100, 0.1);
+          }
         }
       } catch (e) {}
     });
@@ -296,8 +300,9 @@
    */
   function updateHUDStats() {
     const inRangeCount = state.filteredItems.filter((t) => t.inRadarRange).length;
-    document.getElementById("hud-target-count").textContent = inRangeCount;
-    document.getElementById("feed-count").textContent = state.filteredItems.length;
+    const totalCount = state.filteredItems.length;
+    document.getElementById("hud-target-count").textContent = inRangeCount > 0 ? inRangeCount : totalCount;
+    document.getElementById("feed-count").textContent = totalCount;
     document.getElementById("hud-location-text").textContent = state.userLocation.name;
   }
 
@@ -978,22 +983,16 @@
 
   /**
    * Client-side canvas image compressor (<70KB for fast multi-device sync)
-   * Resizes large smartphone photos down to max 800px and calculates reduction stats.
+   * Handles both file uploads and live camera canvas snapshots.
    */
-  function compressImageFile(file, callback, onError) {
-    if (!file || !file.type.startsWith("image/")) {
-      if (onError) onError(new Error("Selected file is not an image."));
+  function compressImageFile(input, callback, onError) {
+    if (!input) {
+      if (onError) onError(new Error("No image data provided."));
       return;
     }
 
-    const originalSizeBytes = file.size;
-    const reader = new FileReader();
-
-    reader.onerror = (err) => {
-      if (onError) onError(err);
-    };
-
-    reader.onload = (e) => {
+    // Helper to process loaded image data URL
+    function processDataUrl(dataUrl, originalSizeBytes) {
       const img = new Image();
       img.onerror = (err) => {
         if (onError) onError(err);
@@ -1030,9 +1029,26 @@
 
         callback(compressed, stats);
       };
-      img.src = e.target.result;
-    };
-    reader.readAsDataURL(file);
+      img.src = dataUrl;
+    }
+
+    if (typeof input === "string" && input.startsWith("data:image/")) {
+      const rawContent = input.split(",")[1] || "";
+      const rawBytes = Math.round((rawContent.length * 3) / 4);
+      processDataUrl(input, rawBytes);
+    } else if (input instanceof Blob || input instanceof File) {
+      const originalSizeBytes = input.size;
+      const reader = new FileReader();
+      reader.onerror = (err) => {
+        if (onError) onError(err);
+      };
+      reader.onload = (e) => {
+        processDataUrl(e.target.result, originalSizeBytes);
+      };
+      reader.readAsDataURL(input);
+    } else {
+      if (onError) onError(new Error("Unsupported image format."));
+    }
   }
 
   /**
@@ -1850,6 +1866,181 @@
   }
 
   /**
+   * Sound synthesizer for optical camera shutter snap
+   */
+  function playCameraShutterSound() {
+    try {
+      const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtxClass) return;
+      const ctx = new AudioCtxClass();
+      const now = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(1200, now);
+      osc.frequency.exponentialRampToValueAtTime(300, now + 0.08);
+
+      gain.gain.setValueAtTime(0.35, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.09);
+    } catch (e) {}
+  }
+
+  /**
+   * Real-Time In-App Live Camera Viewfinder with Hardware Shutter
+   */
+  let liveCameraStream = null;
+  let currentCameraFacing = "environment"; // "environment" (rear) or "user" (front)
+  let onCameraCaptureCallback = null;
+
+  function setupLiveCameraModal() {
+    const modal = document.getElementById("modal-live-camera");
+    const video = document.getElementById("live-camera-video");
+    const loading = document.getElementById("live-camera-loading");
+    const shutterBtn = document.getElementById("btn-camera-shutter");
+    const closeBtn = document.getElementById("btn-close-live-camera");
+    const flipBtn = document.getElementById("btn-flip-camera");
+    const galleryFallbackBtn = document.getElementById("btn-camera-open-gallery");
+    const galleryInput = document.getElementById("sell-gallery-input");
+
+    async function startLiveCamera() {
+      stopLiveCamera();
+      if (loading) loading.classList.remove("hidden");
+      if (modal) modal.classList.remove("hidden");
+      if (window.lucide) lucide.createIcons();
+
+      try {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          throw new Error("Live WebRTC video not supported.");
+        }
+
+        const constraints = {
+          video: {
+            facingMode: { ideal: currentCameraFacing },
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          },
+          audio: false
+        };
+
+        liveCameraStream = await navigator.mediaDevices.getUserMedia(constraints);
+        if (video) {
+          video.srcObject = liveCameraStream;
+          video.onloadedmetadata = () => {
+            video.play();
+            if (loading) loading.classList.add("hidden");
+          };
+        }
+      } catch (err) {
+        console.warn("Live camera stream error:", err);
+        stopLiveCamera();
+        if (modal) modal.classList.add("hidden");
+
+        // Fallback gracefully to native camera file picker
+        showToast("CAMERA PERMISSION NOTICE", "Opening device camera directly...");
+        const cameraFallback = document.getElementById("sell-camera-input");
+        if (cameraFallback) cameraFallback.click();
+      }
+    }
+
+    function stopLiveCamera() {
+      if (liveCameraStream) {
+        liveCameraStream.getTracks().forEach((track) => track.stop());
+        liveCameraStream = null;
+      }
+      if (video) {
+        video.srcObject = null;
+      }
+    }
+
+    function captureLiveFrame() {
+      if (!video || !video.videoWidth) {
+        showToast("CAMERA NOTICE", "Camera feed is activating. Please tap shutter again.");
+        return;
+      }
+
+      playCameraShutterSound();
+      if ("vibrate" in navigator) {
+        try { navigator.vibrate(50); } catch (e) {}
+      }
+
+      // Render live video frame directly onto canvas
+      const canvas = document.createElement("canvas");
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext("2d");
+
+      // Flip back if mirrored on front camera
+      if (currentCameraFacing === "user") {
+        ctx.translate(canvas.width, 0);
+        ctx.scale(-1, 1);
+      }
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      const capturedBase64 = canvas.toDataURL("image/jpeg", 0.85);
+
+      // Stop camera stream & close modal
+      stopLiveCamera();
+      if (modal) modal.classList.add("hidden");
+
+      if (onCameraCaptureCallback) {
+        onCameraCaptureCallback(capturedBase64);
+      }
+    }
+
+    if (shutterBtn) {
+      shutterBtn.addEventListener("click", captureLiveFrame);
+    }
+
+    if (closeBtn) {
+      closeBtn.addEventListener("click", () => {
+        stopLiveCamera();
+        if (modal) modal.classList.add("hidden");
+      });
+    }
+
+    if (modal) {
+      modal.addEventListener("click", (e) => {
+        if (e.target === modal) {
+          stopLiveCamera();
+          modal.classList.add("hidden");
+        }
+      });
+    }
+
+    if (flipBtn) {
+      flipBtn.addEventListener("click", () => {
+        currentCameraFacing = currentCameraFacing === "environment" ? "user" : "environment";
+        startLiveCamera();
+      });
+    }
+
+    if (galleryFallbackBtn && galleryInput) {
+      galleryFallbackBtn.addEventListener("click", () => {
+        stopLiveCamera();
+        if (modal) modal.classList.add("hidden");
+        galleryInput.click();
+      });
+    }
+
+    return {
+      open: (callback) => {
+        onCameraCaptureCallback = callback;
+        startLiveCamera();
+      },
+      close: () => {
+        stopLiveCamera();
+        if (modal) modal.classList.add("hidden");
+      }
+    };
+  }
+
+  /**
    * Setup Broadcast Beacon (Sell Modal with Camera Upload & Wanted Request support)
    */
   function setupSellModal() {
@@ -1918,8 +2109,21 @@
       }
     }
 
-    if (triggerCameraBtn && cameraInput) {
-      triggerCameraBtn.addEventListener("click", () => cameraInput.click());
+    const liveCamera = setupLiveCameraModal();
+
+    if (triggerCameraBtn) {
+      triggerCameraBtn.addEventListener("click", () => {
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+          liveCamera.open((rawBase64) => {
+            processSelectedImage(rawBase64);
+          });
+        } else if (cameraInput) {
+          cameraInput.click();
+        }
+      });
+    }
+
+    if (cameraInput) {
       cameraInput.addEventListener("change", (e) => {
         const file = e.target.files[0];
         processSelectedImage(file);
@@ -1937,7 +2141,13 @@
     if (retakeBtn) {
       retakeBtn.addEventListener("click", () => {
         clearUploadedPhoto();
-        if (cameraInput) cameraInput.click();
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+          liveCamera.open((rawBase64) => {
+            processSelectedImage(rawBase64);
+          });
+        } else if (cameraInput) {
+          cameraInput.click();
+        }
       });
     }
 
@@ -1976,12 +2186,14 @@
     closeBtn.addEventListener("click", () => {
       modal.classList.add("hidden");
       clearUploadedPhoto();
+      liveCamera.close();
       if (isbnScanner) isbnScanner.reset();
     });
     modal.addEventListener("click", (e) => {
       if (e.target === modal) {
         modal.classList.add("hidden");
         clearUploadedPhoto();
+        liveCamera.close();
         if (isbnScanner) isbnScanner.reset();
       }
     });

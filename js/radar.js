@@ -174,7 +174,8 @@ class RadarEngine {
     // Bearing 0 is North (up), 90 is East (right)
     // In canvas: 0 rad is East, -PI/2 is North.
     const rad = ((effectiveBearing - 90) * Math.PI) / 180;
-    const normDist = Math.min(1.0, effectiveDistance / this.options.maxRadiusMeters);
+    // If distance exceeds current radius, clamp to 0.92 (outer sector boundary ring) so blip is always visible
+    const normDist = Math.min(0.92, Math.max(0.12, effectiveDistance / this.options.maxRadiusMeters));
     const r = normDist * this.radius;
 
     return {
@@ -419,8 +420,7 @@ class RadarEngine {
     const now = performance.now();
 
     for (const target of this.targets) {
-      if (!target.inRadarRange) continue;
-
+      // Targets beyond maxRadius are clamped to boundary perimeter ring
       const coords = this.getScreenCoords(target);
       const isHovered = this.hoveredTarget && this.hoveredTarget.item.id === target.item.id;
       const isSelected = this.selectedTargetId === target.item.id;
