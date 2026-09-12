@@ -4176,6 +4176,9 @@
       container.appendChild(bubble);
       lucide.createIcons();
       container.scrollTop = container.scrollHeight;
+      return;
+    }
+
     // 1. Check for [OFFER:offer_id:amount:original_price:status:buyer_name]
     const offerMatch = msg.text && msg.text.match(/^\[OFFER:([^:]+):([0-9.]+):([0-9.]+):([^:]+):(.*?)\]$/);
     if (offerMatch) {
