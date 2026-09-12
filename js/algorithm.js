@@ -66,6 +66,36 @@ function formatDistance(meters) {
 }
 
 /**
+ * Estimate walking time based on distance (standard walking speed ~80 meters / min)
+ */
+function estimateWalkingTime(meters) {
+  if (meters < 70) {
+    return "< 1 min walk";
+  }
+  const mins = Math.max(1, Math.round(meters / 80));
+  if (mins === 1) return "~1 min walk";
+  if (mins < 60) return `~${mins} min walk`;
+  const hours = (mins / 60).toFixed(1);
+  return `~${hours} hr walk`;
+}
+
+/**
+ * Categorize distance into visual proximity tier
+ */
+function calculateProximityTier(meters) {
+  if (meters <= 150) {
+    return { tier: "immediate", label: "Immediate (< 2 min)", colorClass: "text-emerald-400", bgClass: "bg-emerald-950/80 border-emerald-500/40" };
+  }
+  if (meters <= 500) {
+    return { tier: "near", label: "Campus Quad (~5 min)", colorClass: "text-cyan-400", bgClass: "bg-cyan-950/80 border-cyan-500/40" };
+  }
+  if (meters <= 1200) {
+    return { tier: "mid", label: "Vicinity (~10-15 min)", colorClass: "text-amber-400", bgClass: "bg-amber-950/80 border-amber-500/40" };
+  }
+  return { tier: "far", label: "Outer Zone (> 15 min)", colorClass: "text-slate-400", bgClass: "bg-slate-900 border-slate-700" };
+}
+
+/**
  * Multi-Factor DSP-VI Algorithm (Dynamic Spatial Proximity & Value Index)
  * Evaluates an item relative to user position, max scan radius, and search filters.
  */
@@ -173,6 +203,8 @@ function evaluateItemAlgorithm(item, userLocation, maxRadiusMeters, searchQuery 
     item,
     distance,
     distanceFormatted: formatDistance(distance),
+    walkingTime: estimateWalkingTime(distance),
+    proximityTier: calculateProximityTier(distance),
     bearing,
     bearingFormatted: `${Math.round(bearing)}°`,
     inRadarRange: distance <= maxRadiusMeters,
@@ -227,6 +259,8 @@ window.RadarAlgorithm = {
   calculateDistanceMeters,
   calculateBearingDegrees,
   formatDistance,
+  estimateWalkingTime,
+  calculateProximityTier,
   evaluateItemAlgorithm,
   applyRadarClusterSolver
 };

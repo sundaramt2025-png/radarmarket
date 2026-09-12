@@ -270,6 +270,27 @@ class RadarEngine {
     ctx.arc(cx, cy, maxR, 0, Math.PI * 2);
     ctx.stroke();
 
+    // Expanding Area Sonar Scan Wave Pulse
+    if (this.isScanningArea) {
+      this.scanRippleRadius = ((this.scanRippleRadius || 0) + 3.5) % maxR;
+      ctx.save();
+      ctx.strokeStyle = "rgba(0, 255, 157, 0.7)";
+      ctx.lineWidth = 2.5;
+      ctx.shadowColor = "#00ff9d";
+      ctx.shadowBlur = 12;
+      ctx.beginPath();
+      ctx.arc(cx, cy, this.scanRippleRadius, 0, Math.PI * 2);
+      ctx.stroke();
+      
+      const secondWave = (this.scanRippleRadius + maxR * 0.5) % maxR;
+      ctx.strokeStyle = "rgba(0, 229, 255, 0.5)";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(cx, cy, secondWave, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+
     // Concentric range rings
     const numRings = this.options.rings;
     ctx.lineWidth = 1;
@@ -582,6 +603,20 @@ class RadarEngine {
     ctx.textAlign = "right";
     ctx.fillText(`RANGE: ${this.options.maxRadiusMeters >= 1000 ? (this.options.maxRadiusMeters / 1000) + ' km' : this.options.maxRadiusMeters + ' m'}`, this.width - 16, this.height - 12);
     ctx.restore();
+  }
+
+  triggerActiveSonarSweep(callback) {
+    const originalRpm = this.options.rpm;
+    this.options.rpm = 48; // Boost to 48 RPM for high-speed active scan
+    this.isScanningArea = true;
+    this.scanRippleRadius = 0;
+    this.playSonarPing(1200, 0.15);
+
+    setTimeout(() => {
+      this.options.rpm = originalRpm;
+      this.isScanningArea = false;
+      if (typeof callback === "function") callback();
+    }, 2800);
   }
 }
 
