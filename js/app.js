@@ -3737,13 +3737,26 @@
    */
   let deferredPrompt = null;
   function setupPWA() {
-    // 1. Register Service Worker
+    // 1. Register Service Worker with proactive update check
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => {
         navigator.serviceWorker
-          .register("/sw.js")
+          .register("/sw.js?v=2.7")
           .then((reg) => {
             console.log("[PWA] Service Worker registered with scope:", reg.scope);
+            // Force active update check on every load
+            if (reg.update) reg.update();
+            reg.onupdatefound = () => {
+              const installingWorker = reg.installing;
+              if (installingWorker) {
+                installingWorker.onstatechange = () => {
+                  if (installingWorker.state === "installed" && navigator.serviceWorker.controller) {
+                    console.log("[PWA] New version installed; refreshing for Google Maps.");
+                    window.location.reload();
+                  }
+                };
+              }
+            };
           })
           .catch((err) => {
             console.warn("[PWA] Service Worker registration failed:", err);

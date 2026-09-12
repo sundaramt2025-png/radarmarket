@@ -3,18 +3,16 @@
  * Provides instant app launching, asset caching, and offline support.
  */
 
-const CACHE_NAME = 'radarmarket-cache-v1';
+const CACHE_NAME = 'radarmarket-cache-v2.7';
 const PRECACHE_ASSETS = [
   '/',
   '/index.html',
   '/css/styles.css',
-  '/js/app.js',
-  '/js/algorithm.js',
-  '/js/api.js',
-  '/js/data.js',
-  '/js/radar.js',
-  '/js/html5-qrcode.min.js?v=2.6',
-  '/js/quagga.min.js?v=2.6',
+  '/js/app.js?v=2.7',
+  '/js/algorithm.js?v=2.7',
+  '/js/api.js?v=2.7',
+  '/js/data.js?v=2.7',
+  '/js/radar.js?v=2.7',
   '/manifest.json',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
@@ -22,12 +20,12 @@ const PRECACHE_ASSETS = [
   '/icons/icon.svg'
 ];
 
-// Install: Precache shell assets
+// Install: Precache shell assets and activate immediately
 self.addEventListener('install', (event) => {
   self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      console.log('[PWA Service Worker] Precaching shell assets');
+      console.log('[PWA Service Worker] Precaching shell assets v2.7');
       return cache.addAll(PRECACHE_ASSETS).catch((err) => {
         console.warn('[PWA Service Worker] Precache warning:', err);
       });
@@ -35,14 +33,14 @@ self.addEventListener('install', (event) => {
   );
 });
 
-// Activate: Clean up old cache versions
+// Activate: Delete all old caches immediately
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) => {
       return Promise.all(
         keys.map((key) => {
           if (key !== CACHE_NAME) {
-            console.log('[PWA Service Worker] Removing old cache:', key);
+            console.log('[PWA Service Worker] Purging stale cache:', key);
             return caches.delete(key);
           }
         })
@@ -77,7 +75,23 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 2. Static Assets & Pages: Stale-While-Revalidate
+  // 2. HTML & Core Scripts: Network-First so updates appear instantly
+  if (request.mode === 'navigate' || url.pathname.endsWith('.html') || url.pathname.endsWith('.js') || url.pathname === '/') {
+    event.respondWith(
+      fetch(request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            const clone = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+          }
+          return networkResponse;
+        })
+        .catch(() => caches.match(request))
+    );
+    return;
+  }
+
+  // 3. Static Media & Icons: Stale-While-Revalidate
   event.respondWith(
     caches.match(request).then((cachedResponse) => {
       const fetchPromise = fetch(request).then((networkResponse) => {
@@ -86,10 +100,7 @@ self.addEventListener('fetch', (event) => {
           caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
         }
         return networkResponse;
-      }).catch(() => {
-        // Return cached page or offline fallback
-        return cachedResponse;
-      });
+      }).catch(() => cachedResponse);
 
       return cachedResponse || fetchPromise;
     })
