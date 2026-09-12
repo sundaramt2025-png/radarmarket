@@ -161,113 +161,20 @@ def init_db():
 
     conn.commit()
 
-    # Seed initial items if database is empty
-    cur.execute("SELECT COUNT(*) FROM items")
-    count = cur.fetchone()[0]
-    if count == 0:
-        seed_initial_items(conn)
+    # One-time cleanup to permanently remove all fake seed items & test broadcasts
+    try:
+        cur.execute("CREATE TABLE IF NOT EXISTS _cleanup_v1 (done INTEGER);")
+        cur.execute("SELECT COUNT(*) FROM _cleanup_v1")
+        if cur.fetchone()[0] == 0:
+            cur.execute("DELETE FROM items;")
+            cur.execute("DELETE FROM messages;")
+            cur.execute("DELETE FROM sync_events;")
+            cur.execute("INSERT INTO _cleanup_v1 (done) VALUES (1);")
+            conn.commit()
+    except Exception as e:
+        print("[init_db] Cleanup notice:", e)
 
     conn.close()
-
-def seed_initial_items(conn):
-    """Seed high quality university stationery & books dataset."""
-    now = time.time()
-    initial_items = [
-        # Stationery
-        (
-            "stat-001", "seller-system-1", "Aarav Sharma (Campus)", 4.9, 1,
-            "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80",
-            "Casio fx-991EX ClassWiz Scientific Calculator", "stationery", "Calculators & Electronics",
-            650, 1595, "Like New", 0.95, 28.6165, 77.2110, "2nd Floor, Science Library",
-            "https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?auto=format&fit=crop&w=600&q=80",
-            "Barely used for 1 semester. Matrix, vector, spreadsheet functions working. Has solar + battery.",
-            json.dumps(["calculator", "casio", "engineering", "math"]), 1, None, now - 18000
-        ),
-        (
-            "stat-002", "seller-system-2", "Sneha Patel (Arch)", 4.7, 1,
-            "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=120&q=80",
-            "Rotring Professional Technical Drafting Compass Set", "stationery", "Drafting & Architecture",
-            850, 2200, "Good", 0.85, 28.6075, 77.2085, "Architecture Design Studio 4",
-            "https://images.unsplash.com/photo-1581291518857-4e27b48ff24e?auto=format&fit=crop&w=600&q=80",
-            "German precision brass compass with extension bar, lead container, and universal adapter.",
-            json.dumps(["drafting", "compass", "rotring", "architecture"]), 1, None, now - 36000
-        ),
-        (
-            "stat-003", "seller-system-3", "Vikram Mehta", 5.0, 1,
-            "https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=120&q=80",
-            "Lamy Safari Charcoal Fountain Pen (Fine Nib)", "stationery", "Fine Writing & Pens",
-            1100, 2400, "Like New", 0.95, 28.6142, 77.2070, "Campus Cafe Lounge",
-            "https://images.unsplash.com/photo-1583485088034-697b5bc54ccd?auto=format&fit=crop&w=600&q=80",
-            "Matte black ABS body, original Z28 piston converter included + 3 blue cartridges.",
-            json.dumps(["pen", "lamy", "fountain pen", "calligraphy"]), 1, None, now - 7200
-        ),
-        (
-            "stat-004", "seller-system-4", "Tanya Sen (Arts)", 4.8, 0,
-            "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80",
-            "Copic Sketch & Touch Twin Alcohol Art Markers (24 Colors)", "stationery", "Art Supplies & Illustration",
-            1400, 3800, "Good", 0.80, 28.6210, 77.2010, "Fine Arts Faculty Wing",
-            "https://images.unsplash.com/photo-1513364776144-60967b0f800f?auto=format&fit=crop&w=600&q=80",
-            "Dual tip (chisel and brush). Tested with plenty of ink left. Includes desk organizer.",
-            json.dumps(["art", "markers", "copic", "drawing"]), 1, None, now - 86400
-        ),
-        # Books
-        (
-            "book-001", "seller-system-5", "Rohan Varma (Math)", 4.9, 1,
-            "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=120&q=80",
-            "Advanced Engineering Mathematics (10th Ed) - Erwin Kreyszig", "books", "Engineering & Mathematics",
-            490, 1250, "Good", 0.85, 28.6160, 77.2095, "Reading Room 3, Central Library",
-            "https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=600&q=80",
-            "Standard text for ODE, PDE, Linear Algebra, Complex Analysis. Binding intact.",
-            json.dumps(["mathematics", "kreyszig", "engineering", "textbook"]), 1, None, now - 28000
-        ),
-        (
-            "book-002", "seller-system-6", "Ananya Iyer (CS)", 5.0, 1,
-            "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=120&q=80",
-            "Introduction to Algorithms (CLRS 3rd Edition)", "books", "Computer Science",
-            920, 2400, "Like New", 0.95, 28.6175, 77.2055, "CS Department Lab 102",
-            "https://images.unsplash.com/photo-1532012164546-f432f2e3777a?auto=format&fit=crop&w=600&q=80",
-            "Hardcover edition, pristine pages, zero markings. Essential computer science foundation.",
-            json.dumps(["algorithms", "clrs", "dsa", "coding", "mit"]), 1, None, now - 10800
-        ),
-        (
-            "book-003", "seller-system-7", "Karan Johar", 4.8, 1,
-            "https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?auto=format&fit=crop&w=120&q=80",
-            "Concepts of Physics (Vol 1 & 2 Complete Set) - HC Verma", "books", "Physics & Exam Prep",
-            380, 990, "Good", 0.85, 28.6080, 77.2030, "Hostel 7 Common Hall",
-            "https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&w=600&q=80",
-            "Both volumes with full solved examples and conceptual questions.",
-            json.dumps(["physics", "hc verma", "jee", "neet", "mechanics"]), 1, None, now - 43200
-        ),
-        (
-            "book-004", "seller-system-8", "Devika Rao", 4.9, 1,
-            "https://images.unsplash.com/photo-1548142813-c348350df52b?auto=format&fit=crop&w=120&q=80",
-            "1984 + Animal Farm (George Orwell Collector's Duo)", "books", "Literature & Fiction",
-            250, 650, "Like New", 0.95, 28.6168, 77.2060, "Humanities Courtyard",
-            "https://images.unsplash.com/photo-1495446815901-a7297e633e8d?auto=format&fit=crop&w=600&q=80",
-            "Pristine spine, no creases or markings. Classic dystopian literature.",
-            json.dumps(["fiction", "orwell", "classics", "novels"]), 1, None, now - 21600
-        ),
-        (
-            "book-005", "seller-system-9", "Kabir Singh", 4.8, 1,
-            "https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?auto=format&fit=crop&w=120&q=80",
-            "Atomic Habits - James Clear (Hardcover Edition)", "books", "Self-Help & Productivity",
-            320, 799, "Like New", 0.95, 28.6090, 77.2135, "Student Sports Pavilion",
-            "https://images.unsplash.com/photo-1544947950-fa07a98d237f?auto=format&fit=crop&w=600&q=80",
-            "Hardcover edition with original bookmark ribbon. Excellent condition.",
-            json.dumps(["atomic habits", "productivity", "bestseller"]), 1, None, now - 54000
-        )
-    ]
-
-    cur = conn.cursor()
-    cur.executemany("""
-        INSERT INTO items (
-            id, seller_id, seller_name, seller_rating, seller_verified, seller_avatar,
-            title, category, sub_category, price, original_price, condition,
-            condition_score, lat, lng, landmark, image, description, tags,
-            is_available, reserved_by, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, initial_items)
-    conn.commit()
 
 # --- STATIC ASSET ROUTES ---
 

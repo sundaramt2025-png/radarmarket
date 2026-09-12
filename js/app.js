@@ -875,68 +875,47 @@
         if (bannerText) bannerText.textContent = "TRIANGULATING CAMPUS SELLERS IN PROXIMITY...";
         if (bannerAccuracy) bannerAccuracy.textContent = `±${accuracy}m ACCURACY`;
 
-        // Adaptive Proximity Anchor:
-        // If items are too far away (>25km from user, e.g. seeded on default Delhi coordinates),
-        // realistically scatter them in walking distance (75m to 850m) around the user's real GPS!
-        if (state.rawItems && state.rawItems.length > 0) {
-          const firstDist = RadarAlgorithm.calculateDistanceMeters(lat, lng, state.rawItems[0].lat, state.rawItems[0].lng);
-          if (firstDist > 25000) {
-            console.log("[RadarMarket] Anchoring campus items around user's real GPS coordinates...");
-            const sampleLandmarks = [
-              "Campus Main Gate", "Central Library Lawn", "Hostel 3 Quad", "Student Activity Center",
-              "Engineering Faculty Wing", "Campus Cafe Lounge", "Hostel 7 Common Hall", "Reading Room 2",
-              "Science Block Courtyard", "Sports Complex Steps", "Design Studio Lobby", "Department Lab 101",
-              "Auditorium Steps", "Hostel 12 Gate", "North Quad Pavilion"
-            ];
-
-            const myDeviceId = window.MarketAPI ? MarketAPI.getDeviceId() : null;
-            state.rawItems = state.rawItems.map((item, idx) => {
-              // Preserve user's own listings if they have one
-              if (item.seller_id === myDeviceId) return item;
-
-              const angleRad = (idx * (360 / state.rawItems.length) * Math.PI) / 180;
-              // Distribute realistically between 75m and 850m
-              const distMeters = 75 + (idx * 58) % 780;
-              const deltaLat = (distMeters / 111000) * Math.cos(angleRad);
-              const deltaLng = (distMeters / (111000 * Math.cos((lat * Math.PI) / 180))) * Math.sin(angleRad);
-
-              return {
-                ...item,
-                lat: lat + deltaLat,
-                lng: lng + deltaLng,
-                landmark: `${sampleLandmarks[idx % sampleLandmarks.length]} (~${distMeters}m)`
-              };
-            });
-          }
-        }
-
         // Set sort order to distance (nearest sellers first)
         state.radarSortBy = "distance";
 
         // Recalculate all distances and render
         recalculateAndRender();
 
-        // Automatically spotlight the nearest seller
-        const nearestTarget = state.filteredItems[0];
-        if (nearestTarget) {
-          selectTarget(nearestTarget);
-        }
+        // Check if any active items exist
+        if (state.filteredItems.length === 0) {
+          if (bannerText) {
+            bannerText.textContent = "SCAN COMPLETE: NO ACTIVE BEACONS IN SECTOR";
+          }
+          if (sweepStatus) {
+            sweepStatus.textContent = "SCAN COMPLETE";
+            sweepStatus.className = "text-emerald-400 font-bold uppercase";
+          }
+          showToast(
+            "AREA SCAN COMPLETE",
+            "Radar calibrated to your live GPS! No items posted in this sector yet. Click '+ Sell' to broadcast the first beacon!"
+          );
+        } else {
+          // Automatically spotlight the nearest real seller
+          const nearestTarget = state.filteredItems[0];
+          if (nearestTarget) {
+            selectTarget(nearestTarget);
+          }
 
-        // Update banner to success
-        if (bannerText) {
-          bannerText.textContent = `RADAR LOCK: ${state.filteredItems.length} SELLERS DETECTED NEARBY`;
-        }
-        if (sweepStatus) {
-          sweepStatus.textContent = "SONAR LOCKED";
-          sweepStatus.className = "text-emerald-400 font-bold uppercase";
-        }
+          if (bannerText) {
+            bannerText.textContent = `RADAR LOCK: ${state.filteredItems.length} ACTIVE SELLERS IN RANGE`;
+          }
+          if (sweepStatus) {
+            sweepStatus.textContent = "SONAR LOCKED";
+            sweepStatus.className = "text-emerald-400 font-bold uppercase";
+          }
 
-        const closestDist = nearestTarget ? nearestTarget.distanceFormatted : "75m";
-        const closestWalk = nearestTarget ? nearestTarget.walkingTime : "1 min walk";
-        showToast(
-          "AREA SCAN COMPLETE",
-          `Triangulated ${state.filteredItems.length} nearby sellers around your position! Nearest: ${closestDist} (${closestWalk}).`
-        );
+          const closestDist = nearestTarget ? nearestTarget.distanceFormatted : "nearby";
+          const closestWalk = nearestTarget ? nearestTarget.walkingTime : "walking distance";
+          showToast(
+            "AREA SCAN COMPLETE",
+            `Found ${state.filteredItems.length} active sellers around your position! Nearest: ${closestDist} (${closestWalk}).`
+          );
+        }
 
         // Reset UI after 3 seconds
         setTimeout(() => {
@@ -2594,28 +2573,6 @@
       appendMessageBubble(msg);
     } else {
       appendMessageBubble({ sender: "me", text });
-    }
-
-    // If it's a seed seller, provide a realistic simulated reply
-    const isSeedSeller = item.seller_id && item.seller_id.startsWith("seller-system");
-    if (isSeedSeller) {
-      setTimeout(() => {
-        const replies = [
-          `Sounds great! I'm free between 3 PM and 6 PM today. Shall we meet at ${item.landmark}?`,
-          `Yes, absolutely available! Cash or UPI both work for me.`,
-          `I have it right with me in my bag. We can do a quick test / page inspection whenever you arrive.`,
-          `Deal! I'll hold it for you. See you soon at the campus library entrance!`
-        ];
-        const reply = replies[Math.floor(Math.random() * replies.length)];
-        appendMessageBubble({
-          sender_id: item.seller_id,
-          sender_name: item.seller?.name || "Seller",
-          text: reply
-        });
-        if (radarEngine && state.audioEnabled) {
-          radarEngine.playSonarPing(800, 0.05);
-        }
-      }, 1000);
     }
   }
 
