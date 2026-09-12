@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <rect width="512" height="512" fill="#070b12" rx="100"/>
+  <!-- Glowing background circle -->
+  <circle cx="256" cy="256" r="210" fill="none" stroke="#00e5ff" stroke-width="6" opacity="0.3"/>
+  <circle cx="256" cy="256" r="150" fill="none" stroke="#00e5ff" stroke-width="5" opacity="0.4"/>
+  <circle cx="256" cy="256" r="90" fill="none" stroke="#00e5ff" stroke-width="4" opacity="0.5"/>
+  <!-- Crosshairs -->
+  <line x1="46" y1="256" x2="466" y2="256" stroke="#00e5ff" stroke-width="3" opacity="0.35"/>
+  <line x1="256" y1="46" x2="256" y2="466" stroke="#00e5ff" stroke-width="3" opacity="0.35"/>
+  <!-- Sweep line -->
+  <line x1="256" y1="256" x2="410" y2="110" stroke="#00ff9d" stroke-width="6" stroke-linecap="round"/>
+  <!-- Radar Target Pings -->
+  <circle cx="160" cy="180" r="10" fill="#ffb700" filter="drop-shadow(0 0 8px #ffb700)"/>
+  <circle cx="360" cy="340" r="9" fill="#00ff9d" filter="drop-shadow(0 0 8px #00ff9d)"/>
+  <circle cx="200" cy="380" r="8" fill="#ff0077" filter="drop-shadow(0 0 8px #ff0077)"/>
+  <!-- Center Core -->
+  <circle cx="256" cy="256" r="28" fill="#00ff9d" stroke="#ffffff" stroke-width="4"/>
+  <!-- Book Icon Overlay -->
+  <path d="M238 244 L256 250 L274 244 L274 266 L256 272 L238 266 Z" fill="#070b12"/>
+</svg>

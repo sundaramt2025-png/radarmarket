@@ -1,0 +1,61 @@
+{
+  "name": "RadarMarket | Campus Trading Radar",
+  "short_name": "RadarMarket",
+  "start_url": "/?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#070b12",
+  "theme_color": "#070b12",
+  "description": "Hyper-local campus stationery and second-hand books marketplace with optical barcode scanning.",
+  "categories": ["education", "shopping", "lifestyle"],
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Scan ISBN Barcode",
+      "short_name": "Scan",
+      "description": "Scan textbook barcode with camera",
+      "url": "/?action=scan",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "New Listing",
+      "short_name": "Sell",
+      "description": "Post a book or stationery for sale",
+      "url": "/?action=new",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Proximity Radar",
+      "short_name": "Radar",
+      "description": "View live campus radar",
+      "url": "/?action=radar",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}

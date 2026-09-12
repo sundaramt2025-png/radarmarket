@@ -55,6 +55,9 @@
 
     // 2. Initial market load
     await refreshMarket();
+
+    // 3. Setup PWA & Service Worker
+    setupPWA();
   });
 
   /**
@@ -2512,5 +2515,100 @@
     toast.classList.remove("translate-y-0", "opacity-100");
     toast.classList.add("translate-y-2", "opacity-0");
     setTimeout(() => toast.classList.add("hidden"), 300);
+  }
+
+  /**
+   * Setup Progressive Web App (PWA) Service Worker & Install Prompt
+   */
+  let deferredPrompt = null;
+  function setupPWA() {
+    // 1. Register Service Worker
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker
+          .register("/sw.js")
+          .then((reg) => {
+            console.log("[PWA] Service Worker registered with scope:", reg.scope);
+          })
+          .catch((err) => {
+            console.warn("[PWA] Service Worker registration failed:", err);
+          });
+      });
+    }
+
+    const headerInstallBtn = document.getElementById("btn-pwa-install");
+    const mobileBanner = document.getElementById("pwa-install-banner");
+    const bannerInstallBtn = document.getElementById("btn-pwa-banner-install");
+    const bannerDismissBtn = document.getElementById("btn-pwa-banner-dismiss");
+
+    // Check if already running in standalone PWA mode
+    const isStandalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+    if (isStandalone) {
+      console.log("[PWA] Running in standalone mode");
+      if (headerInstallBtn) headerInstallBtn.classList.add("hidden");
+      if (mobileBanner) mobileBanner.classList.add("hidden");
+      return;
+    }
+
+    // Capture beforeinstallprompt event
+    window.addEventListener("beforeinstallprompt", (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+      console.log("[PWA] beforeinstallprompt event captured");
+
+      // Show header install button
+      if (headerInstallBtn) {
+        headerInstallBtn.classList.remove("hidden");
+      }
+
+      // Check if user dismissed banner recently
+      const dismissedAt = localStorage.getItem("pwa_dismissed_at");
+      const oneDay = 24 * 60 * 60 * 1000;
+      if (!dismissedAt || Date.now() - parseInt(dismissedAt, 10) > oneDay) {
+        setTimeout(() => {
+          if (mobileBanner && deferredPrompt) {
+            mobileBanner.classList.remove("hidden");
+            if (window.lucide) lucide.createIcons();
+          }
+        }, 2500);
+      }
+    });
+
+    // Install trigger helper
+    async function triggerInstall() {
+      if (!deferredPrompt) {
+        showToast("INSTALL PWA", "Tap your browser menu (⋮ or Share) and select 'Add to Home screen'.");
+        return;
+      }
+
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      console.log("[PWA] User install choice:", outcome);
+      if (outcome === "accepted") {
+        showToast("INSTALLING APP", "Adding RadarMarket to your home screen...");
+      }
+      deferredPrompt = null;
+      if (headerInstallBtn) headerInstallBtn.classList.add("hidden");
+      if (mobileBanner) mobileBanner.classList.add("hidden");
+    }
+
+    if (headerInstallBtn) headerInstallBtn.addEventListener("click", triggerInstall);
+    if (bannerInstallBtn) bannerInstallBtn.addEventListener("click", triggerInstall);
+
+    if (bannerDismissBtn) {
+      bannerDismissBtn.addEventListener("click", () => {
+        if (mobileBanner) mobileBanner.classList.add("hidden");
+        localStorage.setItem("pwa_dismissed_at", Date.now().toString());
+      });
+    }
+
+    // App installed event
+    window.addEventListener("appinstalled", () => {
+      console.log("[PWA] RadarMarket installed successfully!");
+      showToast("APP INSTALLED", "RadarMarket is now installed on your device!");
+      deferredPrompt = null;
+      if (headerInstallBtn) headerInstallBtn.classList.add("hidden");
+      if (mobileBanner) mobileBanner.classList.add("hidden");
+    });
   }
 })();
