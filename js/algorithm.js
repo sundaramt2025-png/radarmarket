@@ -137,7 +137,9 @@ function evaluateItemAlgorithm(item, userLocation, maxRadiusMeters, searchQuery 
   } else if (item.seller?.verified) {
     verifiedBonus = 20; // Verified Google Account Bonus
   }
-  const trustScore = Math.min(100, ratingNorm * 75 + verifiedBonus);
+  // Verified In-Person Handshake Trade Bonus (+5 per completed trade, up to +25)
+  const handshakeTradeBonus = Math.min(25, (item.seller?.completed_trades || item.seller?.trades_completed || 0) * 5);
+  const trustScore = Math.min(100, ratingNorm * 75 + verifiedBonus + handshakeTradeBonus);
 
   // 5. Freshness / Urgency Decay (S_fresh in [0, 100])
   // 7-day half life

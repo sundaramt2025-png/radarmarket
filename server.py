@@ -12,6 +12,7 @@ import socket
 import sqlite3
 import hashlib
 import re
+import random
 import urllib.request
 import urllib.error
 from flask import Flask, request, jsonify, send_from_directory, g
@@ -151,7 +152,11 @@ def init_db():
         "ALTER TABLE items ADD COLUMN seller_campus_verified INTEGER DEFAULT 0;",
         "ALTER TABLE items ADD COLUMN seller_google_id TEXT;",
         "ALTER TABLE messages ADD COLUMN sender_email TEXT;",
-        "ALTER TABLE messages ADD COLUMN sender_avatar TEXT;"
+        "ALTER TABLE messages ADD COLUMN sender_avatar TEXT;",
+        "ALTER TABLE items ADD COLUMN handshake_code TEXT;",
+        "ALTER TABLE items ADD COLUMN completed_by TEXT;",
+        "ALTER TABLE items ADD COLUMN completed_at REAL;",
+        "ALTER TABLE users ADD COLUMN trades_completed INTEGER DEFAULT 0;"
     ]
     for stmt in auth_migrations:
         try:
@@ -740,6 +745,7 @@ def create_item():
 
     beacon_type = data.get('beacon_type') or "sell"
     upi_id = data.get('upi_id') or ""
+    handshake_code = f"{random.randint(1000, 9999)}"
     
     item_id = "item-" + uuid.uuid4().hex[:10]
     now = time.time()
@@ -753,8 +759,8 @@ def create_item():
             title, category, sub_category, price, original_price, condition,
             condition_score, lat, lng, landmark, image, description, tags,
             is_available, reserved_by, created_at, beacon_type, status, upi_id,
-            seller_email, seller_campus_verified, seller_google_id
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NULL, ?, ?, 'active', ?, ?, ?, ?)
+            seller_email, seller_campus_verified, seller_google_id, handshake_code
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NULL, ?, ?, 'active', ?, ?, ?, ?, ?)
     """, (
         item_id, device_id, seller_name, 5.0, seller_verified, seller_avatar,
         data.get('title') or "Untitled Listing", data.get('category') or "stationery", data.get('sub_category') or "General",
@@ -762,7 +768,7 @@ def create_item():
         float(data.get('condition_score', 0.85) or 0.85), float(data.get('lat') or 28.6139), float(data.get('lng') or 77.2090),
         data.get('landmark') or "Campus Ground Zero", data.get('image'), data.get('description') or "",
         tags_json, now, beacon_type, upi_id,
-        seller_email, seller_campus_verified, seller_google_id
+        seller_email, seller_campus_verified, seller_google_id, handshake_code
     ))
 
     # Record sync event for real-time delta pushes
@@ -788,6 +794,7 @@ def create_item():
     created["tags"] = json.loads(created["tags"]) if created["tags"] else []
     created["beacon_type"] = beacon_type
     created["status"] = "active"
+    created["handshake_code"] = handshake_code
 
     return jsonify({"success": True, "item": created}), 201
 
@@ -856,6 +863,137 @@ def toggle_reserve(item_id):
         "item_id": item_id,
         "reserved_by": new_reserved,
         "is_reserved": new_reserved is not None
+    })
+
+@app.route('/api/handshake/<item_id>', methods=['GET'])
+def get_handshake_status(item_id):
+    """Retrieve handshake state for an item. PIN is only visible to the seller."""
+    db = get_db()
+    cur = db.cursor()
+    cur.execute("SELECT * FROM items WHERE id = ?", (item_id,))
+    row = cur.fetchone()
+    if not row:
+        return jsonify({"success": False, "error": "Item not found"}), 404
+
+    item = dict(row)
+    device_id = request.headers.get('X-Device-Id')
+    auth_user = get_authenticated_user(db)
+    user_email = auth_user.get("email") if auth_user else None
+
+    # Check if caller is seller
+    is_seller = (device_id and device_id == item.get("seller_id")) or (user_email and user_email == item.get("seller_email"))
+
+    # Ensure handshake_code exists lazily if created before migration
+    code = item.get("handshake_code")
+    if not code:
+        code = f"{random.randint(1000, 9999)}"
+        cur.execute("UPDATE items SET handshake_code = ? WHERE id = ?", (code, item_id))
+        db.commit()
+
+    is_completed = item.get("status") == "sold"
+
+    # Get seller's total verified trades count
+    cur.execute("SELECT trades_completed FROM users WHERE id = ? OR email = ?", (item.get("seller_id"), item.get("seller_email")))
+    u_row = cur.fetchone()
+    seller_trades = u_row[0] if u_row and u_row[0] else 0
+
+    return jsonify({
+        "success": True,
+        "item_id": item_id,
+        "role": "seller" if is_seller else "buyer",
+        "code": code if is_seller else None,  # Hidden from buyer until seller presents it!
+        "is_completed": is_completed,
+        "status": item.get("status"),
+        "completed_at": item.get("completed_at"),
+        "seller_trades": seller_trades
+    })
+
+@app.route('/api/handshake/<item_id>/verify', methods=['POST'])
+def verify_handshake(item_id):
+    """Buyer submits the 4-digit PIN to confirm receipt of item."""
+    db = get_db()
+    data = request.get_json() or {}
+    submitted_code = str(data.get("code", "")).strip()
+    rating = float(data.get("rating", 5.0))
+    feedback = str(data.get("feedback", "")).strip()
+
+    device_id = request.headers.get('X-Device-Id') or "guest-buyer"
+    auth_user = get_authenticated_user(db)
+    buyer_name = auth_user.get("nickname") if auth_user else (data.get("buyer_name") or "Campus Buyer")
+    now = time.time()
+
+    cur = db.cursor()
+    cur.execute("SELECT * FROM items WHERE id = ?", (item_id,))
+    row = cur.fetchone()
+    if not row:
+        return jsonify({"success": False, "error": "Item not found"}), 404
+
+    item = dict(row)
+
+    if item.get("status") == "sold":
+        return jsonify({
+            "success": True,
+            "already_completed": True,
+            "message": "Handshake already verified for this item!",
+            "completed_at": item.get("completed_at")
+        })
+
+    actual_code = str(item.get("handshake_code") or "").strip()
+    if not actual_code or submitted_code != actual_code:
+        return jsonify({
+            "success": False,
+            "error": "Invalid Handshake PIN. Please check the seller's screen and enter the 4 digits."
+        }), 400
+
+    # Mark item as sold
+    cur.execute("""
+        UPDATE items 
+        SET status = 'sold', is_available = 0, completed_by = ?, completed_at = ?
+        WHERE id = ?
+    """, (device_id, now, item_id))
+
+    # Increment trades_completed for seller
+    cur.execute("""
+        UPDATE users 
+        SET trades_completed = COALESCE(trades_completed, 0) + 1 
+        WHERE id = ? OR email = ?
+    """, (item.get("seller_id"), item.get("seller_email")))
+
+    # Increment trades_completed for buyer
+    if device_id:
+        cur.execute("""
+            UPDATE users 
+            SET trades_completed = COALESCE(trades_completed, 0) + 1 
+            WHERE id = ?
+        """, (device_id,))
+
+    # Post celebratory system message into chat
+    chat_text = f"[HANDSHAKE_VERIFIED:{actual_code}:{int(rating)}:{feedback or 'In-person trade verified!'}]"
+    cur.execute("""
+        INSERT INTO messages (item_id, sender_id, sender_name, text, created_at)
+        VALUES (?, 'system', '🤝 Secure Handshake', ?, ?)
+    """, (item_id, chat_text, now))
+
+    # Record sync event for real-time push to all devices
+    cur.execute("""
+        INSERT INTO sync_events (event_type, item_id, payload, created_at)
+        VALUES ('handshake_completed', ?, ?, ?)
+    """, (item_id, json.dumps({
+        "item_id": item_id,
+        "status": "sold",
+        "completed_by": device_id,
+        "completed_at": now
+    }), now))
+
+    db.commit()
+
+    return jsonify({
+        "success": True,
+        "verified": True,
+        "item_id": item_id,
+        "status": "sold",
+        "completed_at": now,
+        "message": "Secure Handshake completed! Trade verified and trust scores boosted."
     })
 
 @app.route('/api/chat/<item_id>', methods=['GET'])

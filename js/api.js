@@ -390,6 +390,43 @@
   }
 
   /**
+   * Get secure handshake status for an item (PIN visible only to seller)
+   */
+  async function getHandshakeStatus(itemId) {
+    try {
+      const data = await request(`/api/handshake/${itemId}`);
+      return data;
+    } catch (err) {
+      console.warn("Could not get handshake status:", err.message);
+      return { success: false, error: err.message };
+    }
+  }
+
+  /**
+   * Verify secure handshake meetup using 4-digit PIN
+   */
+  async function verifyHandshake(itemId, code, rating = 5, feedback = "") {
+    try {
+      const data = await request(`/api/handshake/${itemId}/verify`, {
+        method: "POST",
+        body: JSON.stringify({
+          code,
+          rating,
+          feedback,
+          buyer_name: state.currentUser?.nickname || "Campus Buyer"
+        })
+      });
+      if (data && data.success) {
+        pollSync();
+      }
+      return data;
+    } catch (err) {
+      console.warn("Handshake verification failed:", err.message);
+      return { success: false, error: err.message };
+    }
+  }
+
+  /**
    * Real-time Delta Sync Loop (every 1.5 seconds)
    */
   async function pollSync() {
@@ -418,6 +455,17 @@
         if (data.new_messages && data.new_messages.length > 0) {
           data.new_messages.forEach((msg) => {
             emit("newChatMessage", msg);
+          });
+        }
+
+        // If handshake verified event arrived
+        const handshakeEvents = (data.events || []).filter(
+          (e) => e.event_type === "handshake_completed"
+        );
+        if (handshakeEvents.length > 0) {
+          handshakeEvents.forEach((ev) => {
+            const payload = typeof ev.payload === "string" ? JSON.parse(ev.payload) : ev.payload;
+            emit("handshakeCompleted", payload);
           });
         }
       }
@@ -555,6 +603,8 @@
     updateItemStatus,
     getChatMessages,
     sendChatMessage,
+    getHandshakeStatus,
+    verifyHandshake,
     startSyncLoop,
     stopSyncLoop,
     lookupIsbn,

@@ -36,6 +36,7 @@
   let pinpointCurrentTileLayer = null;
   let pinpointActiveLayerType = "streets";
   let googleMapsModalInitialized = false;
+  let handshakeModal = null;
 
   // Google Maps Public Tile Configuration (Official Google Roadmaps & Satellite Imagery, No API Key Required)
   const GOOGLE_TILE_CONFIG = {
@@ -855,6 +856,7 @@
     setupPhotoLightbox();
     setupAlgorithmModal();
     setupChatModal();
+    handshakeModal = setupHandshakeModal();
     setupMobileModal();
     setupGoogleAuthModal();
     setupMyBeaconsModal();
@@ -3440,6 +3442,23 @@
       }
     }
 
+    // Secure Handshake button in Chat Toolbar
+    const handshakeBtn = document.getElementById("btn-chat-handshake");
+    if (handshakeBtn) {
+      handshakeBtn.addEventListener("click", () => {
+        if (!handshakeModal) handshakeModal = setupHandshakeModal();
+        let target = state.selectedTarget;
+        if (!target && state.activeChatId) {
+          target = state.evaluatedItems.find(t => t.item.id === state.activeChatId);
+        }
+        if (target && handshakeModal) {
+          handshakeModal.open(target);
+        } else {
+          showToast("NO ITEM SELECTED", "Please select an active item to verify handshake.");
+        }
+      });
+    }
+
     signalBtn.addEventListener("click", () => {
       if (state.selectedTarget) {
         openChatModal(state.selectedTarget);
@@ -3472,6 +3491,250 @@
       sendChatMessage(text);
       input.value = "";
     });
+  }
+
+  /**
+   * Secure Handshake Meetup Audio Chime (Dual-tone Harmonic Ascending Arpeggio)
+   */
+  function playHandshakeChime() {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const now = ctx.currentTime;
+      const notes = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6
+      notes.forEach((freq, idx) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(freq, now + idx * 0.08);
+
+        gain.gain.setValueAtTime(0, now + idx * 0.08);
+        gain.gain.linearRampToValueAtTime(0.22, now + idx * 0.08 + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.08 + 0.35);
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        osc.start(now + idx * 0.08);
+        osc.stop(now + idx * 0.08 + 0.35);
+      });
+    } catch (e) {}
+  }
+
+  /**
+   * Celebration Confetti Burst Effect
+   */
+  function triggerHandshakeConfetti() {
+    const colors = ["#00ff9d", "#00e5ff", "#ffd700", "#ff007f", "#ffffff"];
+    for (let i = 0; i < 40; i++) {
+      const p = document.createElement("div");
+      p.className = "fixed pointer-events-none z-[9999]";
+      const size = Math.random() * 8 + 4;
+      p.style.width = `${size}px`;
+      p.style.height = `${size}px`;
+      p.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+      p.style.borderRadius = Math.random() > 0.5 ? "50%" : "2px";
+
+      const startX = window.innerWidth / 2;
+      const startY = window.innerHeight / 2;
+      p.style.left = `${startX}px`;
+      p.style.top = `${startY}px`;
+
+      const angle = Math.random() * Math.PI * 2;
+      const velocity = Math.random() * 200 + 70;
+      const destX = Math.cos(angle) * velocity;
+      const destY = Math.sin(angle) * velocity - 60;
+
+      p.style.transition = "transform 0.9s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.9s ease-out";
+      p.style.transform = "translate(0, 0) scale(1)";
+      document.body.appendChild(p);
+
+      requestAnimationFrame(() => {
+        p.style.transform = `translate(${destX}px, ${destY}px) scale(0.4) rotate(${Math.random() * 360}deg)`;
+        p.style.opacity = "0";
+      });
+
+      setTimeout(() => p.remove(), 1000);
+    }
+  }
+
+  /**
+   * Setup Secure Handshake Meetup Verification Modal (P2P OTP Verification)
+   */
+  let activeHandshakeTarget = null;
+  let activeHandshakeCode = null;
+  let selectedFeedbackTag = "Smooth & fast!";
+
+  function setupHandshakeModal() {
+    const modal = document.getElementById("modal-handshake");
+    const closeBtn = document.getElementById("btn-close-handshake");
+    const doneBtn = document.getElementById("btn-close-handshake-success");
+    const submitBtn = document.getElementById("btn-submit-handshake");
+    const sellerView = document.getElementById("handshake-seller-view");
+    const buyerView = document.getElementById("handshake-buyer-view");
+    const successView = document.getElementById("handshake-success-view");
+    const titleElem = document.getElementById("handshake-item-title");
+    const qrImg = document.getElementById("handshake-qr-img");
+
+    if (!modal) return null;
+
+    const pinInputs = [
+      document.getElementById("input-pin-0"),
+      document.getElementById("input-pin-1"),
+      document.getElementById("input-pin-2"),
+      document.getElementById("input-pin-3")
+    ];
+
+    const tagBtns = modal.querySelectorAll(".btn-handshake-tag");
+    tagBtns.forEach((btn) => {
+      btn.addEventListener("click", () => {
+        tagBtns.forEach((b) => {
+          b.className = "btn-handshake-tag px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 transition cursor-pointer";
+        });
+        btn.className = "btn-handshake-tag px-2 py-0.5 rounded bg-emerald-500 text-slate-950 font-bold border border-emerald-400 transition cursor-pointer";
+        selectedFeedbackTag = btn.dataset.tag;
+      });
+    });
+
+    // 4-box PIN auto-advance and backspace logic
+    pinInputs.forEach((inp, idx) => {
+      if (!inp) return;
+      inp.addEventListener("input", (e) => {
+        const val = e.target.value.replace(/\D/g, "");
+        e.target.value = val ? val.slice(-1) : "";
+        if (val && idx < 3) {
+          pinInputs[idx + 1].focus();
+        }
+      });
+
+      inp.addEventListener("keydown", (e) => {
+        if (e.key === "Backspace" && !e.target.value && idx > 0) {
+          pinInputs[idx - 1].focus();
+        }
+        if (e.key === "Enter" && submitBtn) {
+          submitBtn.click();
+        }
+      });
+    });
+
+    function showHandshakeCelebration() {
+      if (sellerView) sellerView.classList.add("hidden");
+      if (buyerView) buyerView.classList.add("hidden");
+      if (successView) successView.classList.remove("hidden");
+      playHandshakeChime();
+      triggerHandshakeConfetti();
+      showToast("HANDSHAKE COMPLETE", "Item marked as SOLD. +50 Trust Boost earned!");
+      lucide.createIcons();
+    }
+
+    // Submit PIN verification handler
+    if (submitBtn) {
+      submitBtn.addEventListener("click", async () => {
+        if (!activeHandshakeTarget) return;
+        const code = pinInputs.map((i) => i.value).join("");
+        if (code.length < 4) {
+          showToast("INCOMPLETE PIN", "Please enter all 4 digits shown on the seller's phone.");
+          return;
+        }
+
+        submitBtn.disabled = true;
+        submitBtn.textContent = "VERIFYING HANDSHAKE...";
+
+        const result = await MarketAPI.verifyHandshake(
+          activeHandshakeTarget.item.id,
+          code,
+          5,
+          selectedFeedbackTag
+        );
+
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = `<i data-lucide="check-circle" class="w-4 h-4 stroke-[2.5]"></i><span>Confirm Handover & Complete Trade</span>`;
+        lucide.createIcons();
+
+        if (result && result.success) {
+          showHandshakeCelebration();
+          refreshMarket();
+        } else {
+          showToast("INVALID PIN", result.error || "The entered PIN does not match the seller's code.");
+          pinInputs.forEach((i) => {
+            i.classList.add("border-rose-500", "animate-pulse");
+            setTimeout(() => i.classList.remove("border-rose-500", "animate-pulse"), 1500);
+          });
+        }
+      });
+    }
+
+    // Listen for real-time handshake completed event across devices
+    if (window.MarketAPI && MarketAPI.on) {
+      MarketAPI.on("handshakeCompleted", (payload) => {
+        if (activeHandshakeTarget && payload.item_id === activeHandshakeTarget.item.id) {
+          showHandshakeCelebration();
+          refreshMarket();
+        }
+      });
+    }
+
+    const closeAll = () => {
+      modal.classList.add("hidden");
+      activeHandshakeTarget = null;
+      pinInputs.forEach((i) => {
+        if (i) i.value = "";
+      });
+    };
+
+    if (closeBtn) closeBtn.addEventListener("click", closeAll);
+    if (doneBtn) doneBtn.addEventListener("click", closeAll);
+    modal.addEventListener("click", (e) => {
+      if (e.target === modal) closeAll();
+    });
+
+    return {
+      open: async (target) => {
+        activeHandshakeTarget = target;
+        const item = target.item;
+        if (titleElem) titleElem.textContent = item.title;
+
+        // Reset views
+        if (sellerView) sellerView.classList.add("hidden");
+        if (buyerView) buyerView.classList.add("hidden");
+        if (successView) successView.classList.add("hidden");
+        pinInputs.forEach((i) => {
+          if (i) i.value = "";
+        });
+
+        modal.classList.remove("hidden");
+        lucide.createIcons();
+
+        const status = await MarketAPI.getHandshakeStatus(item.id);
+        if (status.is_completed) {
+          showHandshakeCelebration();
+          return;
+        }
+
+        if (status.role === "seller" && status.code) {
+          // Seller View: show the 4 digits and QR
+          activeHandshakeCode = status.code;
+          const digits = String(status.code).split("");
+          digits.forEach((d, idx) => {
+            const el = document.getElementById(`pin-digit-${idx}`);
+            if (el) el.textContent = d;
+          });
+
+          if (qrImg) {
+            qrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(status.code)}&bgcolor=020617&color=00ff9d`;
+          }
+
+          if (sellerView) sellerView.classList.remove("hidden");
+        } else {
+          // Buyer View: enter the 4 digits
+          if (buyerView) buyerView.classList.remove("hidden");
+          setTimeout(() => {
+            if (pinInputs[0]) pinInputs[0].focus();
+          }, 200);
+        }
+      }
+    };
   }
 
   /**
@@ -3663,6 +3926,40 @@
       if (navBtn) {
         navBtn.onclick = () => openGoogleMapsDirections(mLat, mLng, mName);
       }
+      container.appendChild(bubble);
+      lucide.createIcons();
+      container.scrollTop = container.scrollHeight;
+      return;
+    }
+
+    // Check for Secure Handshake celebration card
+    const handshakeMatch = msg.text && msg.text.match(/^\[HANDSHAKE_VERIFIED:(\d+):(\d+):(.*?)]$/);
+    if (handshakeMatch) {
+      const code = handshakeMatch[1];
+      const rating = parseInt(handshakeMatch[2], 10) || 5;
+      const feedback = handshakeMatch[3] || "In-person trade completed!";
+      const stars = "★".repeat(rating) + "☆".repeat(Math.max(0, 5 - rating));
+
+      const bubble = document.createElement("div");
+      bubble.className = "w-full flex flex-col items-center my-2";
+      bubble.innerHTML = `
+        <div class="chat-handshake-card w-full max-w-[95%] text-slate-100 font-mono">
+          <div class="flex items-center justify-between gap-2 mb-1.5 pb-1 border-b border-emerald-500/30">
+            <div class="flex items-center gap-1.5 text-emerald-300 font-bold text-xs">
+              <i data-lucide="award" class="w-4 h-4 text-emerald-400"></i>
+              <span>HANDSHAKE VERIFIED</span>
+            </div>
+            <span class="text-[9px] px-1.5 py-0.2 rounded bg-emerald-950 text-emerald-400 border border-emerald-500/40">PIN ${code}</span>
+          </div>
+          <div class="text-[11px] text-slate-200 mb-1">
+            🤝 In-person item handover confirmed on campus!
+          </div>
+          <div class="flex items-center justify-between text-[10px] text-slate-400">
+            <span class="text-amber-300 font-bold">${stars} (${feedback})</span>
+            <span class="text-emerald-400 font-bold">+50 Trust Boost</span>
+          </div>
+        </div>
+      `;
       container.appendChild(bubble);
       lucide.createIcons();
       container.scrollTop = container.scrollHeight;
