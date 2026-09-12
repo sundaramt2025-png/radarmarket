@@ -6,10 +6,11 @@
   // Application State
   const state = {
     userLocation: { ...MarketData.DEFAULT_USER_LOCATION },
+    selectedPickupCoords: { lat: 28.5451, lng: 77.1926, landmark: "Central Library" },
     maxRadiusMeters: 1500,
     selectedCategory: "all",
     searchQuery: "",
-    currentView: "radar", // "radar" | "grid"
+    currentView: "radar", // "radar" | "map" | "grid"
     gridSortBy: "algo",
     rawItems: [],
     evaluatedItems: [],
@@ -21,6 +22,15 @@
   };
 
   let radarEngine = null;
+
+  // Interactive Campus Street Map & Pinpoint Reticle State (Leaflet)
+  let campusMap = null;
+  let campusUserMarker = null;
+  let campusMapMarkers = [];
+  let campusPathLine = null;
+  let pinpointMap = null;
+  let pinpointMarker = null;
+  let pinpointPicker = null;
 
   // Preset fallback photos for quick posting
   const PRESET_PHOTOS = {
@@ -265,7 +275,9 @@
 
     // 8. Render UI Views
     renderNearbyFeed();
-    if (state.currentView === "grid") {
+    if (state.currentView === "map") {
+      renderCampusMapPins();
+    } else if (state.currentView === "grid") {
       renderCatalogGrid();
     }
   }
@@ -365,7 +377,15 @@
     }
 
     document.getElementById("target-bearing").textContent = `${target.bearingFormatted} (Azimuth)`;
-    document.getElementById("target-landmark").textContent = item.landmark;
+    document.getElementById("target-landmark").textContent = item.landmark || "Campus";
+
+    const gmapsBtn = document.getElementById("btn-target-google-maps");
+    if (gmapsBtn) {
+      gmapsBtn.onclick = (e) => {
+        e.stopPropagation();
+        openGoogleMapsDirections(item.lat, item.lng, item.landmark);
+      };
+    }
 
     document.getElementById("target-price").textContent = `₹${item.price}`;
     const origPriceElem = document.getElementById("target-orig-price");
@@ -741,10 +761,12 @@
 
     // 4. View Mode Switcher
     const radarBtn = document.getElementById("view-radar-btn");
+    const mapBtn = document.getElementById("view-map-btn");
     const gridBtn = document.getElementById("view-grid-btn");
 
-    radarBtn.addEventListener("click", () => switchView("radar"));
-    gridBtn.addEventListener("click", () => switchView("grid"));
+    if (radarBtn) radarBtn.addEventListener("click", () => switchView("radar"));
+    if (mapBtn) mapBtn.addEventListener("click", () => switchView("map"));
+    if (gridBtn) gridBtn.addEventListener("click", () => switchView("grid"));
 
     // 5. Grid Sort Selector
     const gridSort = document.getElementById("grid-sort-select");
@@ -835,24 +857,240 @@
     state.currentView = mode;
     const radarContainer = document.getElementById("radar-mode-container");
     const gridContainer = document.getElementById("grid-mode-container");
+    const radarScopeCard = document.getElementById("radar-scope-card");
+    const mapScopeCard = document.getElementById("map-scope-card");
     const radarBtn = document.getElementById("view-radar-btn");
+    const mapBtn = document.getElementById("view-map-btn");
     const gridBtn = document.getElementById("view-grid-btn");
 
+    const activeBtnClass = "px-3 py-1.5 rounded-md bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 flex items-center gap-1.5 transition";
+    const inactiveBtnClass = "px-3 py-1.5 rounded-md text-slate-400 hover:text-slate-200 flex items-center gap-1.5 transition";
+
     if (mode === "radar") {
-      radarContainer.classList.remove("hidden");
-      gridContainer.classList.add("hidden");
-      radarBtn.className = "px-3 py-1.5 rounded-md bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 flex items-center gap-1.5 transition";
-      gridBtn.className = "px-3 py-1.5 rounded-md text-slate-400 hover:text-slate-200 flex items-center gap-1.5 transition";
+      if (radarContainer) radarContainer.classList.remove("hidden");
+      if (gridContainer) gridContainer.classList.add("hidden");
+      if (radarScopeCard) radarScopeCard.classList.remove("hidden");
+      if (mapScopeCard) mapScopeCard.classList.add("hidden");
+      if (radarBtn) radarBtn.className = activeBtnClass;
+      if (mapBtn) mapBtn.className = inactiveBtnClass;
+      if (gridBtn) gridBtn.className = inactiveBtnClass;
       if (radarEngine) {
         radarEngine.initCanvas();
       }
-    } else {
-      radarContainer.classList.add("hidden");
-      gridContainer.classList.remove("hidden");
-      gridBtn.className = "px-3 py-1.5 rounded-md bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 flex items-center gap-1.5 transition";
-      radarBtn.className = "px-3 py-1.5 rounded-md text-slate-400 hover:text-slate-200 flex items-center gap-1.5 transition";
+    } else if (mode === "map") {
+      if (radarContainer) radarContainer.classList.remove("hidden");
+      if (gridContainer) gridContainer.classList.add("hidden");
+      if (radarScopeCard) radarScopeCard.classList.add("hidden");
+      if (mapScopeCard) mapScopeCard.classList.remove("hidden");
+      if (radarBtn) radarBtn.className = inactiveBtnClass;
+      if (mapBtn) mapBtn.className = activeBtnClass;
+      if (gridBtn) gridBtn.className = inactiveBtnClass;
+      initCampusMap();
+      renderCampusMapPins();
+    } else { // "grid"
+      if (radarContainer) radarContainer.classList.add("hidden");
+      if (gridContainer) gridContainer.classList.remove("hidden");
+      if (radarBtn) radarBtn.className = inactiveBtnClass;
+      if (mapBtn) mapBtn.className = inactiveBtnClass;
+      if (gridBtn) gridBtn.className = activeBtnClass;
       renderCatalogGrid();
     }
+  }
+
+  /**
+   * Universal Google Maps Walking Directions launcher
+   * Opens official Google Maps app intent or web browser walking directions
+   */
+  function openGoogleMapsDirections(destLat, destLng, landmarkName) {
+    if (!destLat || !destLng) {
+      showToast("LOCATION MISSING", "Coordinates not available for this item.");
+      return;
+    }
+    let url = `https://www.google.com/maps/dir/?api=1&destination=${destLat},${destLng}&travelmode=walking`;
+    if (state.userLocation && state.userLocation.lat && state.userLocation.lng) {
+      url += `&origin=${state.userLocation.lat},${state.userLocation.lng}`;
+    }
+    window.open(url, "_blank");
+    showToast("GOOGLE MAPS", `Launching walking navigation to ${landmarkName || "pickup spot"}...`);
+  }
+
+  /**
+   * Initialize Leaflet Interactive Campus Street Map
+   */
+  function initCampusMap() {
+    if (typeof L === "undefined") return;
+    if (campusMap) {
+      setTimeout(() => campusMap.invalidateSize(), 100);
+      return;
+    }
+
+    const mapElem = document.getElementById("campus-leaflet-map");
+    if (!mapElem) return;
+
+    const lat = state.userLocation.lat || 28.5451;
+    const lng = state.userLocation.lng || 77.1926;
+
+    campusMap = L.map("campus-leaflet-map", {
+      zoomControl: true,
+      attributionControl: false
+    }).setView([lat, lng], 16);
+
+    // CartoDB Dark Matter Cyberpunk Tiles
+    L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+      maxZoom: 19,
+      subdomains: "abcd"
+    }).addTo(campusMap);
+
+    // Add User pulsing beacon marker
+    const userIcon = L.divIcon({
+      className: "user-map-beacon",
+      html: `<div class="user-map-beacon-ring"></div><div class="user-map-beacon-dot"></div>`,
+      iconSize: [24, 24],
+      iconAnchor: [12, 12]
+    });
+    campusUserMarker = L.marker([lat, lng], { icon: userIcon }).addTo(campusMap);
+    campusUserMarker.bindPopup(`<strong class="text-cyan-400 font-mono text-xs">📍 YOU ARE HERE</strong><br><span class="text-[11px] text-slate-400 font-mono">Pulsing Radar Ground Zero</span>`);
+
+    // Center me button
+    const centerBtn = document.getElementById("btn-map-center-me");
+    if (centerBtn) {
+      centerBtn.addEventListener("click", () => {
+        if (state.userLocation && campusMap) {
+          campusMap.flyTo([state.userLocation.lat, state.userLocation.lng], 16, { animate: true, duration: 0.8 });
+        }
+      });
+    }
+
+    // Fit all button
+    const fitBtn = document.getElementById("btn-map-fit-all");
+    if (fitBtn) {
+      fitBtn.addEventListener("click", () => {
+        fitCampusMapBounds();
+      });
+    }
+
+    setTimeout(() => campusMap.invalidateSize(), 150);
+  }
+
+  function fitCampusMapBounds() {
+    if (!campusMap) return;
+    const points = [[state.userLocation.lat, state.userLocation.lng]];
+    for (const t of state.evaluatedItems) {
+      if (t.item && t.item.lat && t.item.lng) {
+        points.push([t.item.lat, t.item.lng]);
+      }
+    }
+    if (points.length > 1) {
+      campusMap.fitBounds(points, { padding: [30, 30], maxZoom: 17 });
+    }
+  }
+
+  function renderCampusMapPins() {
+    if (!campusMap || typeof L === "undefined") return;
+
+    if (campusUserMarker && state.userLocation) {
+      campusUserMarker.setLatLng([state.userLocation.lat, state.userLocation.lng]);
+    }
+
+    for (const m of campusMapMarkers) {
+      campusMap.removeLayer(m);
+    }
+    campusMapMarkers = [];
+
+    const badgeElem = document.getElementById("map-pin-count-badge");
+    if (badgeElem) {
+      badgeElem.textContent = `${state.evaluatedItems.length} SELLERS`;
+    }
+
+    state.evaluatedItems.forEach((target) => {
+      const item = target.item;
+      if (!item.lat || !item.lng) return;
+
+      const isWanted = item.beacon_type === "wanted";
+      const isBook = item.category === "books";
+      const pinClass = isWanted ? "pin-wanted" : isBook ? "pin-books" : "pin-stationery";
+      const pinEmoji = isWanted ? "🚨" : isBook ? "📖" : "✏️";
+
+      const pinIcon = L.divIcon({
+        className: "item-map-pin",
+        html: `
+          <div class="item-map-pin-inner ${pinClass}" title="${item.title}">
+            <span>${pinEmoji}</span>
+          </div>
+        `,
+        iconSize: [34, 34],
+        iconAnchor: [17, 17]
+      });
+
+      const marker = L.marker([item.lat, item.lng], { icon: pinIcon }).addTo(campusMap);
+
+      const popupHtml = `
+        <div class="font-mono text-xs">
+          <div class="flex items-center justify-between gap-2 mb-1">
+            <span class="text-[10px] font-bold uppercase text-cyan-400">${item.category}</span>
+            <span class="text-emerald-400 font-bold">₹${item.price}</span>
+          </div>
+          <h4 class="font-bold text-white text-xs mb-1 line-clamp-1">${item.title}</h4>
+          <div class="text-slate-400 text-[10px] mb-2">📍 ${item.landmark || "Campus"} • ${target.distanceFormatted}</div>
+          <div class="flex items-center gap-1.5">
+            <button class="map-popup-select-btn px-2 py-1 rounded bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-[10px] uppercase transition cursor-pointer" data-id="${item.id}">
+              Lock Target
+            </button>
+            <button class="map-popup-nav-btn px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 border border-cyan-400/40 text-cyan-300 text-[10px] flex items-center gap-1 transition cursor-pointer" data-lat="${item.lat}" data-lng="${item.lng}" data-landmark="${item.landmark}">
+              🗺️ Directions
+            </button>
+          </div>
+        </div>
+      `;
+      marker.bindPopup(popupHtml);
+
+      marker.on("click", () => {
+        selectTarget(target);
+        drawWalkingRouteToTarget(target);
+      });
+
+      marker.on("popupopen", (e) => {
+        const popupNode = e.popup.getElement();
+        if (!popupNode) return;
+        const selectBtn = popupNode.querySelector(".map-popup-select-btn");
+        const navBtn = popupNode.querySelector(".map-popup-nav-btn");
+        if (selectBtn) {
+          selectBtn.onclick = () => selectTarget(target);
+        }
+        if (navBtn) {
+          navBtn.onclick = () => openGoogleMapsDirections(item.lat, item.lng, item.landmark);
+        }
+      });
+
+      campusMapMarkers.push(marker);
+    });
+
+    if (state.selectedTarget) {
+      drawWalkingRouteToTarget(state.selectedTarget);
+    }
+  }
+
+  function drawWalkingRouteToTarget(target) {
+    if (!campusMap || !target || !target.item) return;
+    const item = target.item;
+    if (!item.lat || !item.lng) return;
+
+    if (campusPathLine) {
+      campusMap.removeLayer(campusPathLine);
+      campusPathLine = null;
+    }
+
+    const latlngs = [
+      [state.userLocation.lat, state.userLocation.lng],
+      [item.lat, item.lng]
+    ];
+
+    campusPathLine = L.polyline(latlngs, {
+      color: "#00e5ff",
+      weight: 3,
+      dashArray: "6, 8",
+      opacity: 0.85
+    }).addTo(campusMap);
   }
 
   /**
@@ -2041,6 +2279,157 @@
   }
 
   /**
+   * Setup Interactive Campus Map Pinpoint Picker Modal (Reticle & Pin Drop)
+   */
+  let pinpointCallback = null;
+  let currentPinCoords = { lat: 28.5451, lng: 77.1926, landmark: "Central Library" };
+
+  function setupPinpointPickerModal() {
+    const modal = document.getElementById("modal-pinpoint-picker");
+    const closeBtn = document.getElementById("btn-close-pinpoint-picker");
+    const confirmBtn = document.getElementById("btn-pinpoint-confirm");
+    const centerMeBtn = document.getElementById("btn-pinpoint-center-me");
+    const gmapsBtn = document.getElementById("btn-pinpoint-view-google-maps");
+    const landmarkInput = document.getElementById("pinpoint-landmark-input");
+    const coordsText = document.getElementById("pinpoint-coords-text");
+    const distText = document.getElementById("pinpoint-distance-text");
+
+    if (!modal) return null;
+
+    function updatePinpointUI() {
+      if (coordsText) {
+        coordsText.textContent = `${currentPinCoords.lat.toFixed(5)}, ${currentPinCoords.lng.toFixed(5)}`;
+      }
+      const distM = calculateDistanceMeters(
+        state.userLocation.lat,
+        state.userLocation.lng,
+        currentPinCoords.lat,
+        currentPinCoords.lng
+      );
+      const walk = estimateWalkingTime(distM);
+      if (distText) {
+        distText.textContent = `${formatDistance(distM)} • ${walk}`;
+      }
+    }
+
+    function initPinpointMap() {
+      if (pinpointMap) {
+        setTimeout(() => pinpointMap.invalidateSize(), 150);
+        return;
+      }
+      if (typeof L === "undefined") return;
+
+      const mapElem = document.getElementById("pinpoint-map-viewport");
+      if (!mapElem) return;
+
+      pinpointMap = L.map("pinpoint-map-viewport", {
+        zoomControl: true,
+        attributionControl: false
+      }).setView([currentPinCoords.lat, currentPinCoords.lng], 16);
+
+      L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+        maxZoom: 19,
+        subdomains: "abcd"
+      }).addTo(pinpointMap);
+
+      const reticleIcon = L.divIcon({
+        className: "reticle-map-marker",
+        html: ``,
+        iconSize: [36, 36],
+        iconAnchor: [18, 18]
+      });
+
+      pinpointMarker = L.marker([currentPinCoords.lat, currentPinCoords.lng], {
+        icon: reticleIcon,
+        draggable: true
+      }).addTo(pinpointMap);
+
+      pinpointMarker.on("drag", (e) => {
+        const pos = e.target.getLatLng();
+        currentPinCoords.lat = pos.lat;
+        currentPinCoords.lng = pos.lng;
+        updatePinpointUI();
+      });
+
+      pinpointMap.on("click", (e) => {
+        pinpointMarker.setLatLng(e.latlng);
+        currentPinCoords.lat = e.latlng.lat;
+        currentPinCoords.lng = e.latlng.lng;
+        updatePinpointUI();
+      });
+
+      setTimeout(() => pinpointMap.invalidateSize(), 200);
+    }
+
+    if (closeBtn) {
+      closeBtn.addEventListener("click", () => {
+        modal.classList.add("hidden");
+      });
+    }
+
+    modal.addEventListener("click", (e) => {
+      if (e.target === modal) modal.classList.add("hidden");
+    });
+
+    if (centerMeBtn) {
+      centerMeBtn.addEventListener("click", () => {
+        if (state.userLocation && pinpointMap && pinpointMarker) {
+          currentPinCoords.lat = state.userLocation.lat;
+          currentPinCoords.lng = state.userLocation.lng;
+          pinpointMarker.setLatLng([currentPinCoords.lat, currentPinCoords.lng]);
+          pinpointMap.panTo([currentPinCoords.lat, currentPinCoords.lng]);
+          updatePinpointUI();
+        }
+      });
+    }
+
+    if (gmapsBtn) {
+      gmapsBtn.addEventListener("click", () => {
+        window.open(`https://www.google.com/maps/search/?api=1&query=${currentPinCoords.lat},${currentPinCoords.lng}`, "_blank");
+      });
+    }
+
+    if (confirmBtn) {
+      confirmBtn.addEventListener("click", () => {
+        if (landmarkInput && landmarkInput.value.trim()) {
+          currentPinCoords.landmark = landmarkInput.value.trim();
+        }
+        state.selectedPickupCoords = { ...currentPinCoords };
+        if (pinpointCallback) {
+          pinpointCallback(currentPinCoords);
+        }
+        modal.classList.add("hidden");
+        showToast("PICKUP POINT LOCKED", `Coordinates: ${currentPinCoords.lat.toFixed(4)}, ${currentPinCoords.lng.toFixed(4)}`);
+      });
+    }
+
+    return {
+      open: (initialCoords, onConfirm) => {
+        pinpointCallback = onConfirm;
+        currentPinCoords = {
+          lat: initialCoords?.lat || state.userLocation.lat || 28.5451,
+          lng: initialCoords?.lng || state.userLocation.lng || 77.1926,
+          landmark: initialCoords?.landmark || ""
+        };
+
+        if (landmarkInput) {
+          landmarkInput.value = currentPinCoords.landmark;
+        }
+
+        modal.classList.remove("hidden");
+        initPinpointMap();
+
+        if (pinpointMarker && pinpointMap) {
+          pinpointMarker.setLatLng([currentPinCoords.lat, currentPinCoords.lng]);
+          pinpointMap.setView([currentPinCoords.lat, currentPinCoords.lng], 16);
+        }
+        updatePinpointUI();
+        lucide.createIcons();
+      }
+    };
+  }
+
+  /**
    * Setup Broadcast Beacon (Sell Modal with Camera Upload & Wanted Request support)
    */
   function setupSellModal() {
@@ -2053,6 +2442,9 @@
 
     // Initialize ISBN Scanner Subsystem
     const isbnScanner = setupIsbnScanner();
+
+    // Initialize Interactive Pinpoint Picker Subsystem
+    if (!pinpointPicker) pinpointPicker = setupPinpointPickerModal();
 
     // Camera & Gallery File Input Hooks
     const cameraInput = document.getElementById("sell-camera-input");
@@ -2180,8 +2572,112 @@
       });
     });
 
+    // Exact GPS & Pinpoint Location Controls
+    const gpsExactBtn = document.getElementById("btn-sell-gps-exact");
+    const pickPinBtn = document.getElementById("btn-sell-pick-pin");
+    const previewMapsBtn = document.getElementById("btn-sell-preview-maps");
+    const coordsDisplay = document.getElementById("sell-coords-display");
+    const gpsAccuracyBadge = document.getElementById("sell-gps-accuracy-badge");
+    const landmarkInput = document.getElementById("sell-landmark");
+
+    if (coordsDisplay && state.userLocation) {
+      coordsDisplay.textContent = `${state.userLocation.lat.toFixed(5)}, ${state.userLocation.lng.toFixed(5)}`;
+    }
+
+    if (gpsExactBtn) {
+      gpsExactBtn.addEventListener("click", () => {
+        if (!("geolocation" in navigator)) {
+          showToast("GPS ERROR", "Geolocation is not supported by your device.");
+          return;
+        }
+
+        const spanText = gpsExactBtn.querySelector("span");
+        if (spanText) spanText.textContent = "ACQUIRING GPS...";
+        gpsExactBtn.classList.add("animate-pulse");
+
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            gpsExactBtn.classList.remove("animate-pulse");
+            if (spanText) spanText.textContent = "📍 USE EXACT GPS";
+            const lat = pos.coords.latitude;
+            const lng = pos.coords.longitude;
+            const acc = Math.round(pos.coords.accuracy);
+
+            state.selectedPickupCoords = {
+              lat,
+              lng,
+              landmark: (landmarkInput ? landmarkInput.value.trim() : "") || `Campus Spot (GPS ±${acc}m)`
+            };
+
+            if (landmarkInput && !landmarkInput.value.trim()) {
+              landmarkInput.value = `Campus Spot (GPS ±${acc}m)`;
+            }
+            if (coordsDisplay) {
+              coordsDisplay.textContent = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+            }
+            if (gpsAccuracyBadge) {
+              gpsAccuracyBadge.textContent = `±${acc}m GPS Fix`;
+              gpsAccuracyBadge.classList.remove("hidden");
+            }
+            showToast("GPS FIX ACQUIRED", `Pinned exact location: ${lat.toFixed(5)}, ${lng.toFixed(5)} (±${acc}m accuracy).`);
+          },
+          (err) => {
+            gpsExactBtn.classList.remove("animate-pulse");
+            if (spanText) spanText.textContent = "📍 USE EXACT GPS";
+            showToast("GPS TIMEOUT", "Unable to acquire high-accuracy GPS. Please tap 'MARK ON MAP'.");
+          },
+          { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+        );
+      });
+    }
+
+    if (pickPinBtn && pinpointPicker) {
+      pickPinBtn.addEventListener("click", () => {
+        pinpointPicker.open(
+          {
+            lat: state.selectedPickupCoords?.lat || state.userLocation.lat,
+            lng: state.selectedPickupCoords?.lng || state.userLocation.lng,
+            landmark: landmarkInput ? landmarkInput.value.trim() : ""
+          },
+          (selected) => {
+            state.selectedPickupCoords = { ...selected };
+            if (landmarkInput && selected.landmark) {
+              landmarkInput.value = selected.landmark;
+            }
+            if (coordsDisplay) {
+              coordsDisplay.textContent = `${selected.lat.toFixed(5)}, ${selected.lng.toFixed(5)}`;
+            }
+          }
+        );
+      });
+    }
+
+    if (previewMapsBtn) {
+      previewMapsBtn.addEventListener("click", () => {
+        const lat = state.selectedPickupCoords?.lat || state.userLocation.lat;
+        const lng = state.selectedPickupCoords?.lng || state.userLocation.lng;
+        window.open(`https://www.google.com/maps/search/?api=1&query=${lat},${lng}`, "_blank");
+      });
+    }
+
+    const presetChips = modal.querySelectorAll(".btn-landmark-preset");
+    presetChips.forEach((chip) => {
+      chip.addEventListener("click", () => {
+        const lat = parseFloat(chip.dataset.lat);
+        const lng = parseFloat(chip.dataset.lng);
+        const landmark = chip.dataset.landmark;
+        state.selectedPickupCoords = { lat, lng, landmark };
+        if (landmarkInput) landmarkInput.value = landmark;
+        if (coordsDisplay) coordsDisplay.textContent = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+        showToast("PRESET SELECTED", `Pickup set to ${landmark}`);
+      });
+    });
+
     openBtn.addEventListener("click", () => {
       modal.classList.remove("hidden");
+      if (coordsDisplay && state.selectedPickupCoords) {
+        coordsDisplay.textContent = `${state.selectedPickupCoords.lat.toFixed(5)}, ${state.selectedPickupCoords.lng.toFixed(5)}`;
+      }
     });
     closeBtn.addEventListener("click", () => {
       modal.classList.add("hidden");
@@ -2220,11 +2716,9 @@
         image = presets[Math.floor(Math.random() * presets.length)];
       }
 
-      // Generate localized GPS coordinates ~150m to 500m from user
-      const randomDistKm = (0.15 + Math.random() * 0.45);
-      const randomBearingRad = Math.random() * Math.PI * 2;
-      const deltaLat = (randomDistKm / 111) * Math.cos(randomBearingRad);
-      const deltaLng = (randomDistKm / (111 * Math.cos((state.userLocation.lat * Math.PI) / 180))) * Math.sin(randomBearingRad);
+      // Use exact coordinates chosen by the seller, without random jitter
+      const finalLat = (state.selectedPickupCoords && state.selectedPickupCoords.lat) || state.userLocation.lat;
+      const finalLng = (state.selectedPickupCoords && state.selectedPickupCoords.lng) || state.userLocation.lng;
 
       const itemPayload = {
         title,
@@ -2237,8 +2731,8 @@
         condition,
         condition_score: condition === "Like New" ? 0.95 : condition === "Good" ? 0.85 : 0.7,
         conditionScore: condition === "Like New" ? 0.95 : condition === "Good" ? 0.85 : 0.7,
-        lat: state.userLocation.lat + deltaLat,
-        lng: state.userLocation.lng + deltaLng,
+        lat: finalLat,
+        lng: finalLng,
         landmark,
         description,
         image,
@@ -2716,6 +3210,26 @@
       });
     }
 
+    // Share Exact Meetup Point button
+    const sharePinBtn = document.getElementById("btn-chat-share-pin");
+    if (sharePinBtn) {
+      sharePinBtn.addEventListener("click", () => {
+        if (!pinpointPicker) pinpointPicker = setupPinpointPickerModal();
+        if (!pinpointPicker) return;
+        pinpointPicker.open(
+          {
+            lat: state.userLocation.lat,
+            lng: state.userLocation.lng,
+            landmark: "Proposed Campus Meetup Spot"
+          },
+          (spot) => {
+            const spotName = spot.landmark || "Custom Meetup Point";
+            sendChatMessage(`[MEETUP_POINT:${spot.lat.toFixed(5)},${spot.lng.toFixed(5)},${spotName}]`);
+          }
+        );
+      });
+    }
+
     // UPI Payment QR sheet
     const upiPayBtn = document.getElementById("btn-open-upi-pay");
     const upiSheet = document.getElementById("chat-upi-sheet");
@@ -2897,6 +3411,18 @@
     document.getElementById("chat-item-title").textContent = item.title;
     document.getElementById("chat-item-price").textContent = `₹${item.price}`;
 
+    const landmarkElem = document.getElementById("chat-item-landmark");
+    if (landmarkElem) {
+      landmarkElem.textContent = item.landmark || "Campus Central";
+    }
+
+    const gmapsBtn = document.getElementById("btn-chat-google-maps");
+    if (gmapsBtn) {
+      gmapsBtn.onclick = () => {
+        openGoogleMapsDirections(item.lat, item.lng, item.landmark);
+      };
+    }
+
     const container = document.getElementById("chat-messages-container");
     container.innerHTML = `<div class="text-center text-slate-500 text-xs py-4">Connecting to secure signal...</div>`;
     modal.classList.remove("hidden");
@@ -2926,6 +3452,44 @@
 
     const currentDeviceId = window.MarketAPI ? MarketAPI.getDeviceId() : null;
     const isMe = msg.sender_id === currentDeviceId || msg.sender === "me";
+
+    // Check for interactive Meetup Location Pinpoint Card
+    const meetupMatch = msg.text && msg.text.match(/^\[MEETUP_POINT:([0-9.-]+),([0-9.-]+),(.*?)\]$/);
+    if (meetupMatch) {
+      const mLat = parseFloat(meetupMatch[1]);
+      const mLng = parseFloat(meetupMatch[2]);
+      const mName = meetupMatch[3];
+      const distM = calculateDistanceMeters(state.userLocation.lat, state.userLocation.lng, mLat, mLng);
+      const walk = estimateWalkingTime(distM);
+
+      const bubble = document.createElement("div");
+      bubble.className = `flex flex-col ${isMe ? "items-end" : "items-start"}`;
+      bubble.innerHTML = `
+        <span class="text-[10px] text-slate-500 font-mono mb-0.5 px-1">${isMe ? 'You' : (msg.sender_name || 'Seller')}</span>
+        <div class="chat-meetup-card max-w-[85%] text-slate-100">
+          <div class="flex items-center gap-1.5 mb-1 text-cyan-300 font-bold font-mono text-[11px]">
+            <i data-lucide="map-pin" class="w-3.5 h-3.5 text-emerald-400 animate-pulse"></i>
+            <span>PROPOSED MEETUP SPOT</span>
+          </div>
+          <p class="font-bold text-xs text-white mb-0.5">${mName}</p>
+          <div class="text-[10px] text-slate-400 font-mono mb-2">
+            <span>${formatDistance(distM)} from you</span> • <span class="text-cyan-300 font-bold">${walk}</span>
+          </div>
+          <button type="button" class="btn-meetup-nav w-full py-1.5 px-2.5 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold font-mono text-[10px] flex items-center justify-center gap-1.5 transition shadow cursor-pointer">
+            <i data-lucide="map" class="w-3.5 h-3.5"></i>
+            <span>OPEN IN GOOGLE MAPS</span>
+          </button>
+        </div>
+      `;
+      const navBtn = bubble.querySelector(".btn-meetup-nav");
+      if (navBtn) {
+        navBtn.onclick = () => openGoogleMapsDirections(mLat, mLng, mName);
+      }
+      container.appendChild(bubble);
+      lucide.createIcons();
+      container.scrollTop = container.scrollHeight;
+      return;
+    }
 
     const bubble = document.createElement("div");
     bubble.className = `flex flex-col ${isMe ? "items-end" : "items-start"}`;

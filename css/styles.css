@@ -330,3 +330,147 @@ input[type=range]::-webkit-slider-thumb {
   animation: lockPulse 0.6s ease-out;
 }
 
+/* ==========================================================================
+   LEAFLET MAP & CYBERPUNK THEME INTEGRATION
+   ========================================================================== */
+
+/* Dark Mode Leaflet Container */
+.leaflet-container {
+  background: #070b12 !important;
+  font-family: var(--font-mono) !important;
+}
+
+/* Custom Glass Popup */
+.leaflet-popup-content-wrapper {
+  background: rgba(13, 21, 34, 0.95) !important;
+  color: #e2e8f0 !important;
+  border: 1px solid rgba(0, 229, 255, 0.4) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 0 25px rgba(0, 229, 255, 0.25) !important;
+  backdrop-filter: blur(8px);
+}
+
+.leaflet-popup-tip {
+  background: rgba(13, 21, 34, 0.95) !important;
+  border: 1px solid rgba(0, 229, 255, 0.4) !important;
+}
+
+.leaflet-popup-content {
+  margin: 10px 12px !important;
+  line-height: 1.4 !important;
+}
+
+/* Dark Custom Leaflet Zoom Controls */
+.leaflet-bar a {
+  background-color: rgba(15, 23, 42, 0.9) !important;
+  border-color: rgba(51, 65, 85, 0.8) !important;
+  color: #00e5ff !important;
+}
+.leaflet-bar a:hover {
+  background-color: rgba(30, 41, 59, 1) !important;
+  color: #00ff9d !important;
+}
+
+/* User Live Location Pulsing Map Beacon */
+.user-map-beacon {
+  position: relative;
+  width: 24px;
+  height: 24px;
+}
+.user-map-beacon-dot {
+  width: 14px;
+  height: 14px;
+  background: #00e5ff;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  position: absolute;
+  top: 5px;
+  left: 5px;
+  box-shadow: 0 0 10px #00e5ff;
+}
+.user-map-beacon-ring {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid #00e5ff;
+  position: absolute;
+  top: 0;
+  left: 0;
+  animation: beaconPulse 2s cubic-bezier(0.2, 0.8, 0.2, 1) infinite;
+}
+
+@keyframes beaconPulse {
+  0% { transform: scale(0.6); opacity: 1; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
+
+/* Custom Item Map Marker */
+.item-map-pin {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.2s ease, filter 0.2s ease;
+}
+.item-map-pin:hover {
+  transform: scale(1.15) translateY(-4px);
+  filter: drop-shadow(0 0 10px rgba(0, 229, 255, 0.8));
+}
+.item-map-pin-inner {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.6);
+  border: 2px solid;
+}
+.pin-books {
+  background: rgba(12, 74, 110, 0.95);
+  border-color: #00e5ff;
+  color: #00e5ff;
+}
+.pin-stationery {
+  background: rgba(6, 78, 59, 0.95);
+  border-color: #00ff9d;
+  color: #00ff9d;
+}
+.pin-wanted {
+  background: rgba(136, 19, 55, 0.95);
+  border-color: #ff0077;
+  color: #ff0077;
+}
+
+/* Reticle Marker for Pinpoint Picker */
+.reticle-map-marker {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 2px solid #00ff9d;
+  background: rgba(0, 255, 157, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 20px rgba(0, 255, 157, 0.6);
+  cursor: move;
+}
+.reticle-map-marker::after {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #00ff9d;
+  box-shadow: 0 0 8px #00ff9d;
+}
+
+/* Chat Interactive Meetup Card */
+.chat-meetup-card {
+  border-radius: 10px;
+  border: 1px solid rgba(0, 229, 255, 0.35);
+  background: rgba(13, 21, 34, 0.9);
+  box-shadow: 0 0 15px rgba(0, 229, 255, 0.15);
+  padding: 10px 12px;
+  margin-top: 4px;
+}
