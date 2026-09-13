@@ -51,6 +51,11 @@ def get_db():
         db.row_factory = sqlite3.Row
         # Enable Write-Ahead Logging for high-concurrency multi-device reads/writes
         db.execute("PRAGMA journal_mode=WAL;")
+        # Auto-heal: verify database schema exists
+        try:
+            db.execute("SELECT 1 FROM items LIMIT 1;")
+        except sqlite3.OperationalError:
+            init_db()
     return db
 
 @app.teardown_appcontext
@@ -223,16 +228,16 @@ def restore_data_backup():
         items = backup.get("items", [])
         users = backup.get("users", [])
         messages = backup.get("messages", [])
-        if not items and not users:
+        if not items and not users and not messages:
             return
 
         conn = sqlite3.connect(DB_PATH)
         cur = conn.cursor()
 
         cur.execute("SELECT COUNT(*) FROM items")
-        count = cur.fetchone()[0]
-        if count == 0 and items:
-            print(f"[backup] Restoring {len(items)} items and {len(users)} users from durable backup...")
+        item_count = cur.fetchone()[0]
+        if item_count == 0 and items:
+            print(f"[backup] Restoring {len(items)} items from durable backup...")
             for it in items:
                 keys = list(it.keys())
                 placeholders = ", ".join(["?"] * len(keys))
@@ -240,6 +245,10 @@ def restore_data_backup():
                 sql = f"INSERT OR REPLACE INTO items ({cols}) VALUES ({placeholders})"
                 cur.execute(sql, [it[k] for k in keys])
 
+        cur.execute("SELECT COUNT(*) FROM users")
+        user_count = cur.fetchone()[0]
+        if user_count == 0 and users:
+            print(f"[backup] Restoring {len(users)} users from durable backup...")
             for u in users:
                 keys = list(u.keys())
                 placeholders = ", ".join(["?"] * len(keys))
@@ -247,6 +256,10 @@ def restore_data_backup():
                 sql = f"INSERT OR REPLACE INTO users ({cols}) VALUES ({placeholders})"
                 cur.execute(sql, [u[k] for k in keys])
 
+        cur.execute("SELECT COUNT(*) FROM messages")
+        msg_count = cur.fetchone()[0]
+        if msg_count == 0 and messages:
+            print(f"[backup] Restoring {len(messages)} messages from durable backup...")
             for m in messages:
                 keys = list(m.keys())
                 placeholders = ", ".join(["?"] * len(keys))
@@ -254,11 +267,18 @@ def restore_data_backup():
                 sql = f"INSERT OR REPLACE INTO messages ({cols}) VALUES ({placeholders})"
                 cur.execute(sql, [m[k] for k in keys])
 
-            conn.commit()
-            print("[backup] Restoration completed successfully!")
+        conn.commit()
         conn.close()
+        print("[backup] Restoration check completed.")
     except Exception as e:
         print("[backup] Restore error:", e)
+
+# Unconditionally initialize database tables on WSGI/Gunicorn import & direct run
+try:
+    init_db()
+except Exception as _init_err:
+    print("[startup] Database initialization warning:", _init_err)
+
 
 # --- STATIC ASSET ROUTES ---
 
@@ -601,6 +621,7 @@ def auth_google():
         """, (google_id, email, is_campus, name, picture, device_id, google_id))
 
     db.commit()
+    save_data_backup()
 
     cur.execute("SELECT * FROM users WHERE id = ?", (user_id,))
     updated_user = dict(cur.fetchone())
@@ -719,6 +740,7 @@ def manage_me():
             VALUES (?, ?, ?, ?, ?)
         """, (user_lookup_id, default_name, None, now, now))
         db.commit()
+        save_data_backup()
         cur.execute("SELECT * FROM users WHERE id = ?", (user_lookup_id,))
         row = cur.fetchone()
     else:
@@ -930,6 +952,7 @@ def update_item_status(item_id):
         VALUES ('item_status_changed', ?, ?, ?)
     """, (item_id, json.dumps({"item_id": item_id, "status": new_status}), now))
     db.commit()
+    save_data_backup()
 
     return jsonify({"success": True, "item_id": item_id, "status": new_status})
 
@@ -968,6 +991,7 @@ def toggle_reserve(item_id):
         VALUES ('reserve_toggle', ?, ?, ?)
     """, (item_id, json.dumps({"item_id": item_id, "reserved_by": new_reserved}), now))
     db.commit()
+    save_data_backup()
 
     return jsonify({
         "success": True,
@@ -1097,6 +1121,7 @@ def verify_handshake(item_id):
     }), now))
 
     db.commit()
+    save_data_backup()
 
     return jsonify({
         "success": True,
@@ -1451,6 +1476,7 @@ def send_chat(item_id):
     """, (item_id, json.dumps(msg_payload), now))
 
     db.commit()
+    save_data_backup()
 
     return jsonify({
         "success": True,
