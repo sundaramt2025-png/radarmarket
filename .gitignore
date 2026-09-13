@@ -6,3 +6,6 @@ bin/
 scratch/
 check_libs.html
 test_*.html
+database.db
+database.db-wal
+database.db-shm

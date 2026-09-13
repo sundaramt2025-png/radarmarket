@@ -183,21 +183,82 @@ def init_db():
     """)
 
     conn.commit()
-
-    # One-time cleanup to permanently remove all fake seed items & test broadcasts
-    try:
-        cur.execute("CREATE TABLE IF NOT EXISTS _cleanup_v1 (done INTEGER);")
-        cur.execute("SELECT COUNT(*) FROM _cleanup_v1")
-        if cur.fetchone()[0] == 0:
-            cur.execute("DELETE FROM items;")
-            cur.execute("DELETE FROM messages;")
-            cur.execute("DELETE FROM sync_events;")
-            cur.execute("INSERT INTO _cleanup_v1 (done) VALUES (1);")
-            conn.commit()
-    except Exception as e:
-        print("[init_db] Cleanup notice:", e)
-
     conn.close()
+    
+    # Restore previous user broadcasts and sessions if database is fresh
+    restore_data_backup()
+
+BACKUP_PATH = os.path.join(BASE_DIR, "data_backup.json")
+
+def save_data_backup():
+    """Mirror SQLite state to durable JSON backup file so data survives redeploys."""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        items = [dict(r) for r in cur.execute("SELECT * FROM items").fetchall()]
+        users = [dict(r) for r in cur.execute("SELECT * FROM users").fetchall()]
+        messages = [dict(r) for r in cur.execute("SELECT * FROM messages").fetchall()]
+        conn.close()
+
+        backup = {
+            "version": 1,
+            "timestamp": time.time(),
+            "items": items,
+            "users": users,
+            "messages": messages
+        }
+        with open(BACKUP_PATH, "w", encoding="utf-8") as f:
+            json.dump(backup, f, indent=2)
+    except Exception as e:
+        print("[backup] Save error:", e)
+
+def restore_data_backup():
+    """Restore state from data_backup.json if database was newly initialized or empty."""
+    if not os.path.exists(BACKUP_PATH):
+        return
+    try:
+        with open(BACKUP_PATH, "r", encoding="utf-8") as f:
+            backup = json.load(f)
+        items = backup.get("items", [])
+        users = backup.get("users", [])
+        messages = backup.get("messages", [])
+        if not items and not users:
+            return
+
+        conn = sqlite3.connect(DB_PATH)
+        cur = conn.cursor()
+
+        cur.execute("SELECT COUNT(*) FROM items")
+        count = cur.fetchone()[0]
+        if count == 0 and items:
+            print(f"[backup] Restoring {len(items)} items and {len(users)} users from durable backup...")
+            for it in items:
+                keys = list(it.keys())
+                placeholders = ", ".join(["?"] * len(keys))
+                cols = ", ".join(keys)
+                sql = f"INSERT OR REPLACE INTO items ({cols}) VALUES ({placeholders})"
+                cur.execute(sql, [it[k] for k in keys])
+
+            for u in users:
+                keys = list(u.keys())
+                placeholders = ", ".join(["?"] * len(keys))
+                cols = ", ".join(keys)
+                sql = f"INSERT OR REPLACE INTO users ({cols}) VALUES ({placeholders})"
+                cur.execute(sql, [u[k] for k in keys])
+
+            for m in messages:
+                keys = list(m.keys())
+                placeholders = ", ".join(["?"] * len(keys))
+                cols = ", ".join(keys)
+                sql = f"INSERT OR REPLACE INTO messages ({cols}) VALUES ({placeholders})"
+                cur.execute(sql, [m[k] for k in keys])
+
+            conn.commit()
+            print("[backup] Restoration completed successfully!")
+        conn.close()
+    except Exception as e:
+        print("[backup] Restore error:", e)
 
 # --- STATIC ASSET ROUTES ---
 
@@ -828,7 +889,25 @@ def create_item():
     created["status"] = "active"
     created["handshake_code"] = handshake_code
 
+    save_data_backup()
     return jsonify({"success": True, "item": created}), 201
+
+@app.route('/api/items/<item_id>/location', methods=['POST'])
+def update_item_location(item_id):
+    """Update seller item coordinates with live GPS fix."""
+    db = get_db()
+    data = request.get_json() or {}
+    lat = data.get('lat')
+    lng = data.get('lng')
+    if lat is None or lng is None:
+        return jsonify({"error": "Latitude and longitude required"}), 400
+
+    cur = db.cursor()
+    cur.execute("UPDATE items SET lat = ?, lng = ? WHERE id = ?", (float(lat), float(lng), item_id))
+    db.commit()
+
+    save_data_backup()
+    return jsonify({"success": True, "item_id": item_id, "lat": float(lat), "lng": float(lng)})
 
 @app.route('/api/items/<item_id>/status', methods=['POST'])
 def update_item_status(item_id):

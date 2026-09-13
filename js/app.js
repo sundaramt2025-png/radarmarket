@@ -434,6 +434,77 @@
   }
 
   /**
+   * Re-measure real-time GPS distance to current target on demand
+   */
+  function remeasureDistanceToTarget() {
+    const remeasureBtn = document.getElementById("btn-remeasure-distance");
+    if (remeasureBtn) {
+      remeasureBtn.innerHTML = `<i data-lucide="refresh-cw" class="w-3 h-3 text-cyan-400 animate-spin"></i><span>PINGING SATELLITES...</span>`;
+      if (window.lucide) lucide.createIcons();
+    }
+    if (radarEngine && state.audioEnabled) {
+      radarEngine.playSonarPing(1350, 0.12);
+    }
+    if (!("geolocation" in navigator)) {
+      showToast("GPS ERROR", "Geolocation is not supported by your browser.");
+      if (remeasureBtn) {
+        remeasureBtn.innerHTML = `<i data-lucide="refresh-cw" class="w-3 h-3 text-cyan-400"></i><span>PING LIVE DISTANCE</span>`;
+        if (window.lucide) lucide.createIcons();
+      }
+      return;
+    }
+
+    const onFixSuccess = (pos) => {
+      const lat = pos.coords.latitude;
+      const lng = pos.coords.longitude;
+      const accuracy = Math.round(pos.coords.accuracy || 8);
+      state.userLocation = {
+        lat,
+        lng,
+        accuracy,
+        name: `📍 Live GPS (±${accuracy}m)`,
+        isLiveGPS: true
+      };
+      try {
+        localStorage.setItem("radarmarket_last_known_gps", JSON.stringify({ lat, lng, accuracy, timestamp: Date.now() }));
+      } catch (e) {}
+
+      recalculateAndRender();
+      if (state.selectedTarget) {
+        renderTargetSpotlight(state.selectedTarget);
+        showToast("GPS RE-CALIBRATED", `Distance to ${state.selectedTarget.item.title}: ${state.selectedTarget.distanceFormatted} (±${accuracy}m fix)`);
+      }
+      if (remeasureBtn) {
+        remeasureBtn.innerHTML = `<i data-lucide="check" class="w-3 h-3 text-emerald-400"></i><span>DISTANCE VERIFIED</span>`;
+        if (window.lucide) lucide.createIcons();
+        setTimeout(() => {
+          remeasureBtn.innerHTML = `<i data-lucide="refresh-cw" class="w-3 h-3 text-cyan-400"></i><span>PING LIVE DISTANCE</span>`;
+          if (window.lucide) lucide.createIcons();
+        }, 2200);
+      }
+    };
+
+    navigator.geolocation.getCurrentPosition(
+      onFixSuccess,
+      (err) => {
+        console.warn("High-accuracy re-measure failed, trying network fallback:", err.message);
+        navigator.geolocation.getCurrentPosition(
+          onFixSuccess,
+          (err2) => {
+            showToast("GPS DENIED", "Please tap the lock or location icon in your browser URL bar to allow GPS.");
+            if (remeasureBtn) {
+              remeasureBtn.innerHTML = `<i data-lucide="refresh-cw" class="w-3 h-3 text-cyan-400"></i><span>PING LIVE DISTANCE</span>`;
+              if (window.lucide) lucide.createIcons();
+            }
+          },
+          { enableHighAccuracy: false, timeout: 8000 }
+        );
+      },
+      { enableHighAccuracy: true, timeout: 8000 }
+    );
+  }
+
+  /**
    * Render Spotlight Target Card in Radar View
    */
   function renderTargetSpotlight(target) {
@@ -492,6 +563,29 @@
         ? "px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-500/40"
         : "px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-950 text-amber-300 border border-amber-500/40";
       proximityZone.textContent = in500 ? "🟢 < 500M ZONE" : "🟠 BEYOND 500M";
+    }
+
+    // Live Dual GPS Coordinates Readout (Buyer vs Seller)
+    const buyerCoordsElem = document.getElementById("target-buyer-coords");
+    if (buyerCoordsElem) {
+      if (state.userLocation.isLiveGPS) {
+        buyerCoordsElem.innerHTML = `<span class="text-emerald-400 font-bold">${state.userLocation.lat.toFixed(5)}, ${state.userLocation.lng.toFixed(5)}</span> <span class="text-[9px] text-slate-400 font-normal">(±${state.userLocation.accuracy || 8}m)</span>`;
+      } else {
+        buyerCoordsElem.innerHTML = `<span class="text-amber-400 font-bold">Acquiring GPS... (Tap Ping)</span>`;
+      }
+    }
+
+    const sellerCoordsElem = document.getElementById("target-seller-coords");
+    if (sellerCoordsElem) {
+      sellerCoordsElem.innerHTML = `<span class="text-cyan-300 font-bold">${item.lat.toFixed(5)}, ${item.lng.toFixed(5)}</span> <span class="text-[9px] text-slate-400 font-normal">(${item.landmark || "Campus Spot"})</span>`;
+    }
+
+    const remeasureBtn = document.getElementById("btn-remeasure-distance");
+    if (remeasureBtn) {
+      remeasureBtn.onclick = (e) => {
+        e.stopPropagation();
+        remeasureDistanceToTarget();
+      };
     }
 
     document.getElementById("target-bearing").textContent = `${target.bearingFormatted} (Azimuth)`;
@@ -3331,6 +3425,8 @@
     const coordsDisplay = document.getElementById("sell-coords-display");
     const gpsAccuracyBadge = document.getElementById("sell-gps-accuracy-badge");
     const landmarkInput = document.getElementById("sell-landmark");
+    const sellPingGpsBtn = document.getElementById("btn-sell-ping-gps");
+    const sellLiveGpsTelemetry = document.getElementById("sell-live-gps-telemetry");
 
     function updateSellCoordsUI() {
       const lat = (state.selectedPickupCoords && state.selectedPickupCoords.lat) || state.userLocation.lat;
@@ -3353,9 +3449,27 @@
           gpsAccuracyBadge.classList.remove("hidden");
         }
       }
+      if (sellLiveGpsTelemetry) {
+        if (state.selectedPickupCoords?.isCustom) {
+          sellLiveGpsTelemetry.textContent = `📍 Custom Map Pin: ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+          sellLiveGpsTelemetry.className = "text-cyan-300 font-bold";
+        } else if (state.userLocation.isLiveGPS) {
+          sellLiveGpsTelemetry.textContent = `📍 Locked to Live GPS: ${lat.toFixed(5)}, ${lng.toFixed(5)} (±${state.userLocation.accuracy || 8}m fix)`;
+          sellLiveGpsTelemetry.className = "text-emerald-300 font-bold";
+        } else {
+          sellLiveGpsTelemetry.textContent = "⚠️ Acquiring Satellites... (Tap REFRESH GPS)";
+          sellLiveGpsTelemetry.className = "text-amber-400 font-bold animate-pulse";
+        }
+      }
     }
 
     updateSellCoordsUI();
+
+    if (sellPingGpsBtn) {
+      sellPingGpsBtn.addEventListener("click", () => {
+        if (gpsExactBtn) gpsExactBtn.click();
+      });
+    }
 
     if (gpsExactBtn) {
       gpsExactBtn.addEventListener("click", () => {
@@ -3538,6 +3652,40 @@
       if (!image) {
         const presets = PRESET_PHOTOS[category];
         image = presets[Math.floor(Math.random() * presets.length)];
+      }
+
+      // Ensure we acquire live GPS coordinates before broadcasting if not yet locked
+      if (!state.userLocation.isLiveGPS && (!state.selectedPickupCoords || !state.selectedPickupCoords.isCustom) && ("geolocation" in navigator)) {
+        await new Promise((resolve) => {
+          navigator.geolocation.getCurrentPosition(
+            (pos) => {
+              const lat = pos.coords.latitude;
+              const lng = pos.coords.longitude;
+              const acc = Math.round(pos.coords.accuracy || 8);
+              state.userLocation = {
+                lat,
+                lng,
+                accuracy: acc,
+                name: `📍 Live GPS (±${acc}m)`,
+                isLiveGPS: true
+              };
+              try {
+                localStorage.setItem("radarmarket_last_known_gps", JSON.stringify({ lat, lng, accuracy: acc, timestamp: Date.now() }));
+              } catch (e) {}
+              state.selectedPickupCoords = {
+                lat,
+                lng,
+                accuracy: acc,
+                landmark: state.selectedPickupCoords?.landmark || "Live Location",
+                isCustom: false,
+                isLiveGPS: true
+              };
+              resolve();
+            },
+            () => resolve(),
+            { enableHighAccuracy: true, timeout: 2500 }
+          );
+        });
       }
 
       // Determine final coordinates:

@@ -9,6 +9,37 @@
   const GOOGLE_USER_KEY = "radarmarket_google_user_v2";
   const GOOGLE_CLIENT_ID_KEY = "radarmarket_google_client_id_v2";
   const DEFAULT_GOOGLE_CLIENT_ID = "920180307647-smeph38kbik69njoghdmst0pnalvvv68.apps.googleusercontent.com";
+  const VAULT_KEY = "radarmarket_vault_broadcasts_v2";
+
+  function getVaultBroadcasts() {
+    try {
+      const saved = localStorage.getItem(VAULT_KEY);
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function saveToVault(item) {
+    if (!item || !item.id) return;
+    try {
+      const vault = getVaultBroadcasts();
+      const existingIdx = vault.findIndex(it => it.id === item.id);
+      if (existingIdx >= 0) {
+        vault[existingIdx] = item;
+      } else {
+        vault.push(item);
+      }
+      localStorage.setItem(VAULT_KEY, JSON.stringify(vault));
+    } catch (e) {}
+  }
+
+  function removeFromVault(itemId) {
+    try {
+      const vault = getVaultBroadcasts().filter(it => it.id !== itemId);
+      localStorage.setItem(VAULT_KEY, JSON.stringify(vault));
+    } catch (e) {}
+  }
 
   // Generate or retrieve persistent device ID
   function getOrCreateDeviceId() {
@@ -129,6 +160,25 @@
         };
       }
     }
+
+    // Auto-reconcile broadcasts from local device vault (survives container redeployments!)
+    setTimeout(async () => {
+      try {
+        const vault = getVaultBroadcasts();
+        if (vault.length > 0) {
+          const serverItems = await getItems();
+          for (const myItem of vault) {
+            const exists = serverItems.some(it => it.id === myItem.id && it.status !== "deleted");
+            if (!exists && myItem.status !== "deleted" && myItem.status !== "sold") {
+              console.log("[Vault] Auto-restoring broadcast to server:", myItem.title);
+              await createItem(myItem);
+            }
+          }
+        }
+      } catch (e) {
+        console.warn("[Vault] Reconciliation error:", e);
+      }
+    }, 1500);
 
     emit("authStateChanged", { authenticated: !!state.googleUser, user: state.currentUser });
     return state.currentUser;
@@ -290,6 +340,7 @@
       });
 
       if (data && data.item) {
+        saveToVault(data.item);
         pollSync();
         return data.item;
       }
@@ -297,7 +348,9 @@
       console.warn("Posting to backend failed, saving locally:", err.message);
     }
     // Local fallback
-    return MarketData.addNewListing(itemData);
+    const localItem = MarketData.addNewListing(itemData);
+    saveToVault(localItem);
+    return localItem;
   }
 
   /**
@@ -703,6 +756,16 @@
     getNetworkInfo,
     getItems,
     createItem,
+    updateItemLocation: async (itemId, lat, lng) => {
+      try {
+        return await request(`/api/items/${itemId}/location`, {
+          method: "POST",
+          body: JSON.stringify({ lat, lng })
+        });
+      } catch (e) {
+        return null;
+      }
+    },
     toggleReserve,
     getMyItems,
     updateItemStatus,
