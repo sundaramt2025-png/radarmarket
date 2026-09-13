@@ -10,13 +10,19 @@
     const cachedGps = localStorage.getItem("radarmarket_last_known_gps");
     if (cachedGps) {
       const parsedGps = JSON.parse(cachedGps);
-      if (parsedGps && typeof parsedGps.lat === "number" && typeof parsedGps.lng === "number") {
+      // Cleanse stale Goa ISP gateway coordinates or inaccurate IP estimates (> 1500m)
+      const isGoaRange = (parsedGps && parsedGps.lat >= 14.8 && parsedGps.lat <= 16.0 && parsedGps.lng >= 73.4 && parsedGps.lng <= 74.6 && !parsedGps.isManual);
+      const isCoarse = (parsedGps && parsedGps.accuracy && parsedGps.accuracy > 1500 && !parsedGps.isManual);
+      if (isGoaRange || isCoarse) {
+        localStorage.removeItem("radarmarket_last_known_gps");
+      } else if (parsedGps && typeof parsedGps.lat === "number" && typeof parsedGps.lng === "number") {
         initialLocation = {
           lat: parsedGps.lat,
           lng: parsedGps.lng,
           accuracy: parsedGps.accuracy || 10,
-          name: `📍 Live Location (±${parsedGps.accuracy || 10}m)`,
-          isLiveGPS: true
+          name: parsedGps.isManual ? `📍 ${parsedGps.landmark || "Custom Location"}` : `📍 Live GPS (±${parsedGps.accuracy || 10}m)`,
+          isLiveGPS: !parsedGps.isManual,
+          isManual: !!parsedGps.isManual
         };
         hasStoredGps = true;
       }
@@ -1043,22 +1049,24 @@
 
     // 8. Location Preset / Real GPS Selector
     const locSelect = document.getElementById("location-select");
-    locSelect.addEventListener("change", (e) => {
-      const val = e.target.value;
-      if (val === "gps_real") {
-        activateLiveAreaScan();
-      } else {
-        const preset = MarketData.LOCATION_PRESETS.find((p) => p.id === val);
-        if (preset) {
-          state.userLocation = {
-            lat: preset.lat,
-            lng: preset.lng,
-            name: preset.name
-          };
-          recalculateAndRender();
+    if (locSelect) {
+      locSelect.addEventListener("change", (e) => {
+        const val = e.target.value;
+        if (val === "gps_real") {
+          activateLiveAreaScan();
+        } else if (val === "set_pin_location") {
+          openCampusLocationPicker();
+          locSelect.value = "gps_real";
         }
-      }
-    });
+      });
+    }
+
+    const hudClick = document.getElementById("btn-hud-location-click");
+    if (hudClick) {
+      hudClick.addEventListener("click", () => {
+        openCampusLocationPicker();
+      });
+    }
 
     // 8. Modals
     setupSellModal();
@@ -1490,21 +1498,43 @@
       const lng = pos.coords.longitude;
       const accuracy = Math.round(pos.coords.accuracy || 8);
 
+      // Check if browser returned an ISP Gateway estimate (accuracy > 1500m or known Goa gateway range with coarse accuracy)
+      const isGoaRange = (lat >= 14.8 && lat <= 16.0 && lng >= 73.4 && lng <= 74.6);
+      const isCoarseNetwork = accuracy > 1500 || (isGoaRange && accuracy > 100);
+
+      // If user previously set a manual campus pin, preserve it against coarse network overrides
+      if (state.userLocation && state.userLocation.isManual && isCoarseNetwork) {
+        console.log("[GPS] Preserving custom campus pin against coarse ISP geolocation.");
+        return;
+      }
+
+      if (isCoarseNetwork) {
+        console.warn(`[GPS] Detected coarse ISP network location (${lat.toFixed(4)}, ${lng.toFixed(4)} ±${accuracy}m). Not using Goa.`);
+        const hudLoc = document.getElementById("hud-location-text");
+        if (hudLoc && !state.userLocation.isManual) {
+          hudLoc.innerHTML = `<span class="text-amber-400 font-bold cursor-pointer animate-pulse">⚠️ Coarse ISP (${isGoaRange ? "Goa" : "Network"} ±${Math.round(accuracy/1000)}km) • Tap to Pin Campus</span>`;
+          hudLoc.onclick = () => openCampusLocationPicker();
+        }
+        return;
+      }
+
       state.userLocation = {
         lat,
         lng,
         accuracy,
         name: `📍 Live GPS (±${accuracy}m)`,
-        isLiveGPS: true
+        isLiveGPS: true,
+        isManual: false
       };
 
-      // Cache real physical coordinates so page reloads or new tabs never start in Delhi
+      // Cache verified real physical coordinates
       try {
         localStorage.setItem("radarmarket_last_known_gps", JSON.stringify({
           lat,
           lng,
           accuracy,
-          timestamp: Date.now()
+          timestamp: Date.now(),
+          isManual: false
         }));
       } catch (e) {}
 
@@ -1534,8 +1564,8 @@
       const hudLoc = document.getElementById("hud-location-text");
       if (hudLoc) {
         hudLoc.innerHTML = `<span class="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-ping mr-1"></span>Live GPS (±${accuracy}m)`;
-        hudLoc.className = "text-emerald-300 font-mono text-[11px] font-bold";
-        hudLoc.onclick = null;
+        hudLoc.className = "text-emerald-300 font-mono text-[11px] font-bold cursor-pointer";
+        hudLoc.onclick = () => openCampusLocationPicker();
       }
 
       // Update location dropdown option if visible
@@ -1556,27 +1586,19 @@
     };
 
     const handleGpsError = (err) => {
-      console.warn("High-accuracy GPS failed or timed out:", err.message, "Retrying with standard network/WiFi triangulation...");
-      // Fallback: retry with enableHighAccuracy: false (fast WiFi / cell triangulation)
-      navigator.geolocation.getCurrentPosition(
-        handleGpsSuccess,
-        (err2) => {
-          console.warn("Network geolocation also failed:", err2.message);
-          const hudLoc = document.getElementById("hud-location-text");
-          if (hudLoc && !state.userLocation.isLiveGPS) {
-            hudLoc.innerHTML = `<span class="text-amber-400 cursor-pointer font-bold animate-pulse">⚠️ Tap to Enable GPS</span>`;
-            hudLoc.onclick = () => activateLiveAreaScan();
-          }
-        },
-        { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 }
-      );
+      console.warn("GPS satellite fix pending or unavailable:", err.message);
+      const hudLoc = document.getElementById("hud-location-text");
+      if (hudLoc && !state.userLocation.isLiveGPS && !state.userLocation.isManual) {
+        hudLoc.innerHTML = `<span class="text-amber-400 cursor-pointer font-bold animate-pulse">📍 Tap to Set Campus on Map</span>`;
+        hudLoc.onclick = () => openCampusLocationPicker();
+      }
     };
 
-    // 1. Immediate high-accuracy GPS fix with fast fallback
+    // 1. Immediate high-accuracy GPS fix with fresh satellite request (maximumAge: 0)
     navigator.geolocation.getCurrentPosition(handleGpsSuccess, handleGpsError, {
       enableHighAccuracy: true,
-      timeout: 8000,
-      maximumAge: 10000
+      timeout: 12000,
+      maximumAge: 0
     });
 
     // 2. Continuous real-time position tracking as the buyer walks
@@ -1587,7 +1609,7 @@
       state.liveGpsWatchId = navigator.geolocation.watchPosition(
         handleGpsSuccess,
         () => {},
-        { enableHighAccuracy: true, timeout: 12000, maximumAge: 10000 }
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
       );
     } catch (e) {}
   }
@@ -3240,17 +3262,63 @@
       });
     }
 
+    const searchInput = document.getElementById("pinpoint-search-input");
+    const searchBtn = document.getElementById("btn-pinpoint-search");
+
+    async function executeSearch() {
+      const q = searchInput ? searchInput.value.trim() : "";
+      if (!q) return;
+      if (searchBtn) searchBtn.textContent = "...";
+      try {
+        const resp = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=1`, {
+          headers: { "Accept-Language": "en" }
+        });
+        const results = await resp.json();
+        if (results && results.length > 0) {
+          const resLat = parseFloat(results[0].lat);
+          const resLng = parseFloat(results[0].lon);
+          const displayName = results[0].display_name.split(",")[0];
+          currentPinCoords.lat = resLat;
+          currentPinCoords.lng = resLng;
+          currentPinCoords.landmark = displayName;
+          if (landmarkInput) landmarkInput.value = displayName;
+          if (pinpointMarker && pinpointMap) {
+            pinpointMarker.setLatLng([resLat, resLng]);
+            pinpointMap.setView([resLat, resLng], 16);
+          }
+          updatePinpointUI();
+          showToast("CAMPUS LOCATED", `Moved map to: ${displayName}`);
+        } else {
+          showToast("NOT FOUND", "Location not found. Try entering your city or college name.");
+        }
+      } catch (err) {
+        showToast("SEARCH ERROR", "Could not connect to geocoding search.");
+      } finally {
+        if (searchBtn) searchBtn.textContent = "Search";
+      }
+    }
+
+    if (searchBtn) searchBtn.addEventListener("click", executeSearch);
+    if (searchInput) {
+      searchInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          executeSearch();
+        }
+      });
+    }
+
     if (confirmBtn) {
       confirmBtn.addEventListener("click", () => {
         if (landmarkInput && landmarkInput.value.trim()) {
           currentPinCoords.landmark = landmarkInput.value.trim();
         }
-        state.selectedPickupCoords = { ...currentPinCoords };
+        state.selectedPickupCoords = { ...currentPinCoords, isCustom: true };
         if (pinpointCallback) {
           pinpointCallback(currentPinCoords);
         }
         modal.classList.add("hidden");
-        showToast("PICKUP POINT LOCKED", `Coordinates: ${currentPinCoords.lat.toFixed(4)}, ${currentPinCoords.lng.toFixed(4)}`);
+        showToast("LOCATION LOCKED", `Coordinates: ${currentPinCoords.lat.toFixed(4)}, ${currentPinCoords.lng.toFixed(4)}`);
       });
     }
 
@@ -3280,6 +3348,58 @@
         lucide.createIcons();
       }
     };
+  }
+
+  function openCampusLocationPicker() {
+    if (!pinpointPicker) pinpointPicker = setupPinpointPickerModal();
+    if (!pinpointPicker) return;
+    pinpointPicker.open(
+      {
+        lat: state.userLocation.lat,
+        lng: state.userLocation.lng,
+        landmark: state.userLocation.name ? state.userLocation.name.replace(/^📍\s*/, "") : "My Campus"
+      },
+      (selected) => {
+        state.userLocation = {
+          lat: selected.lat,
+          lng: selected.lng,
+          accuracy: 5,
+          name: `📍 ${selected.landmark || "Custom Campus Spot"}`,
+          isLiveGPS: true,
+          isManual: true
+        };
+        state.selectedPickupCoords = {
+          lat: selected.lat,
+          lng: selected.lng,
+          accuracy: 5,
+          landmark: selected.landmark || "Campus Spot",
+          isCustom: true,
+          isLiveGPS: true
+        };
+        try {
+          localStorage.setItem("radarmarket_last_known_gps", JSON.stringify({
+            lat: selected.lat,
+            lng: selected.lng,
+            accuracy: 5,
+            landmark: selected.landmark,
+            timestamp: Date.now(),
+            isManual: true
+          }));
+        } catch (e) {}
+
+        const hudLoc = document.getElementById("hud-location-text");
+        if (hudLoc) {
+          hudLoc.textContent = state.userLocation.name;
+          hudLoc.className = "text-cyan-300 font-mono text-[11px] font-bold cursor-pointer";
+        }
+        if (campusMap && campusUserMarker) {
+          campusUserMarker.setLatLng([selected.lat, selected.lng]);
+          campusMap.flyTo([selected.lat, selected.lng], 16);
+        }
+        recalculateAndRender();
+        showToast("CAMPUS LOCATION LOCKED", `Set to: ${selected.landmark || "Custom Point"}`);
+      }
+    );
   }
 
   /**
