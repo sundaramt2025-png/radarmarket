@@ -3,10 +3,37 @@
  */
 
 (function () {
+  // 0. Restore last known real GPS fix across sessions if available
+  let initialLocation = { ...MarketData.DEFAULT_USER_LOCATION };
+  let hasStoredGps = false;
+  try {
+    const cachedGps = localStorage.getItem("radarmarket_last_known_gps");
+    if (cachedGps) {
+      const parsedGps = JSON.parse(cachedGps);
+      if (parsedGps && typeof parsedGps.lat === "number" && typeof parsedGps.lng === "number") {
+        initialLocation = {
+          lat: parsedGps.lat,
+          lng: parsedGps.lng,
+          accuracy: parsedGps.accuracy || 10,
+          name: `📍 Live Location (±${parsedGps.accuracy || 10}m)`,
+          isLiveGPS: true
+        };
+        hasStoredGps = true;
+      }
+    }
+  } catch (e) {}
+
   // Application State
   const state = {
-    userLocation: { ...MarketData.DEFAULT_USER_LOCATION },
-    selectedPickupCoords: { lat: 28.5451, lng: 77.1926, landmark: "Central Library" },
+    userLocation: initialLocation,
+    selectedPickupCoords: {
+      lat: initialLocation.lat,
+      lng: initialLocation.lng,
+      accuracy: initialLocation.accuracy || 10,
+      landmark: hasStoredGps ? "Current Live Location" : "Campus Central",
+      isCustom: false,
+      isLiveGPS: hasStoredGps
+    },
     maxRadiusMeters: 500,
     liveGpsWatchId: null,
     selectedCategory: "all",
@@ -1358,13 +1385,10 @@
    * Continuously tracks buyer position across campus and recalculates geodesic distance to sellers
    */
   function initLiveLocationTracking() {
-    if (!("geolocation" in navigator)) return;
-
-    const geoOptions = {
-      enableHighAccuracy: true,
-      timeout: 12000,
-      maximumAge: 10000
-    };
+    if (!("geolocation" in navigator)) {
+      console.warn("Geolocation API not supported by this browser.");
+      return;
+    }
 
     const handleGpsSuccess = (pos) => {
       const lat = pos.coords.latitude;
@@ -1379,10 +1403,44 @@
         isLiveGPS: true
       };
 
+      // Cache real physical coordinates so page reloads or new tabs never start in Delhi
+      try {
+        localStorage.setItem("radarmarket_last_known_gps", JSON.stringify({
+          lat,
+          lng,
+          accuracy,
+          timestamp: Date.now()
+        }));
+      } catch (e) {}
+
+      // Keep seller coordinates automatically synced to live GPS unless they explicitly picked a custom pin
+      if (!state.selectedPickupCoords || !state.selectedPickupCoords.isCustom) {
+        state.selectedPickupCoords = {
+          lat,
+          lng,
+          accuracy,
+          landmark: state.selectedPickupCoords?.landmark || "Current Live Location",
+          isCustom: false,
+          isLiveGPS: true
+        };
+        const coordsDisplay = document.getElementById("sell-coords-display");
+        if (coordsDisplay) {
+          coordsDisplay.textContent = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+        }
+        const gpsAccuracyBadge = document.getElementById("sell-gps-accuracy-badge");
+        if (gpsAccuracyBadge) {
+          gpsAccuracyBadge.textContent = `±${accuracy}m Live GPS`;
+          gpsAccuracyBadge.className = "text-[10px] font-mono font-bold text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-500/40";
+          gpsAccuracyBadge.classList.remove("hidden");
+        }
+      }
+
       // Update HUD location text with blinking green radar beacon
       const hudLoc = document.getElementById("hud-location-text");
       if (hudLoc) {
         hudLoc.innerHTML = `<span class="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-ping mr-1"></span>Live GPS (±${accuracy}m)`;
+        hudLoc.className = "text-emerald-300 font-mono text-[11px] font-bold";
+        hudLoc.onclick = null;
       }
 
       // Update location dropdown option if visible
@@ -1402,17 +1460,40 @@
       recalculateAndRender();
     };
 
-    // 1. Immediate high-accuracy GPS fix
-    navigator.geolocation.getCurrentPosition(handleGpsSuccess, (err) => {
-      console.info("Live GPS prompt notice (defaulting to campus quad until permitted):", err.message);
-    }, geoOptions);
+    const handleGpsError = (err) => {
+      console.warn("High-accuracy GPS failed or timed out:", err.message, "Retrying with standard network/WiFi triangulation...");
+      // Fallback: retry with enableHighAccuracy: false (fast WiFi / cell triangulation)
+      navigator.geolocation.getCurrentPosition(
+        handleGpsSuccess,
+        (err2) => {
+          console.warn("Network geolocation also failed:", err2.message);
+          const hudLoc = document.getElementById("hud-location-text");
+          if (hudLoc && !state.userLocation.isLiveGPS) {
+            hudLoc.innerHTML = `<span class="text-amber-400 cursor-pointer font-bold animate-pulse">⚠️ Tap to Enable GPS</span>`;
+            hudLoc.onclick = () => activateLiveAreaScan();
+          }
+        },
+        { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 }
+      );
+    };
+
+    // 1. Immediate high-accuracy GPS fix with fast fallback
+    navigator.geolocation.getCurrentPosition(handleGpsSuccess, handleGpsError, {
+      enableHighAccuracy: true,
+      timeout: 8000,
+      maximumAge: 10000
+    });
 
     // 2. Continuous real-time position tracking as the buyer walks
     if (state.liveGpsWatchId) {
       navigator.geolocation.clearWatch(state.liveGpsWatchId);
     }
     try {
-      state.liveGpsWatchId = navigator.geolocation.watchPosition(handleGpsSuccess, () => {}, geoOptions);
+      state.liveGpsWatchId = navigator.geolocation.watchPosition(
+        handleGpsSuccess,
+        () => {},
+        { enableHighAccuracy: true, timeout: 12000, maximumAge: 10000 }
+      );
     } catch (e) {}
   }
 
@@ -3251,9 +3332,30 @@
     const gpsAccuracyBadge = document.getElementById("sell-gps-accuracy-badge");
     const landmarkInput = document.getElementById("sell-landmark");
 
-    if (coordsDisplay && state.userLocation) {
-      coordsDisplay.textContent = `${state.userLocation.lat.toFixed(5)}, ${state.userLocation.lng.toFixed(5)}`;
+    function updateSellCoordsUI() {
+      const lat = (state.selectedPickupCoords && state.selectedPickupCoords.lat) || state.userLocation.lat;
+      const lng = (state.selectedPickupCoords && state.selectedPickupCoords.lng) || state.userLocation.lng;
+      if (coordsDisplay) {
+        coordsDisplay.textContent = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+      }
+      if (gpsAccuracyBadge) {
+        if (state.selectedPickupCoords?.isCustom) {
+          gpsAccuracyBadge.textContent = "📍 Custom Pin Picked";
+          gpsAccuracyBadge.className = "text-[10px] font-mono font-bold text-cyan-400 bg-cyan-950/80 px-2 py-0.5 rounded border border-cyan-500/40";
+          gpsAccuracyBadge.classList.remove("hidden");
+        } else if (state.userLocation.isLiveGPS) {
+          gpsAccuracyBadge.textContent = `±${state.userLocation.accuracy || 10}m Live GPS`;
+          gpsAccuracyBadge.className = "text-[10px] font-mono font-bold text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-500/40";
+          gpsAccuracyBadge.classList.remove("hidden");
+        } else {
+          gpsAccuracyBadge.textContent = "Acquiring Live GPS...";
+          gpsAccuracyBadge.className = "text-[10px] font-mono font-bold text-amber-400 bg-amber-950/80 px-2 py-0.5 rounded border border-amber-500/40 animate-pulse";
+          gpsAccuracyBadge.classList.remove("hidden");
+        }
+      }
     }
+
+    updateSellCoordsUI();
 
     if (gpsExactBtn) {
       gpsExactBtn.addEventListener("click", () => {
@@ -3272,24 +3374,33 @@
             if (spanText) spanText.textContent = "📍 USE EXACT GPS";
             const lat = pos.coords.latitude;
             const lng = pos.coords.longitude;
-            const acc = Math.round(pos.coords.accuracy);
+            const acc = Math.round(pos.coords.accuracy || 8);
 
             state.selectedPickupCoords = {
               lat,
               lng,
-              landmark: (landmarkInput ? landmarkInput.value.trim() : "") || `Campus Spot (GPS ±${acc}m)`
+              accuracy: acc,
+              landmark: (landmarkInput ? landmarkInput.value.trim() : "") || `Live Spot (GPS ±${acc}m)`,
+              isCustom: false,
+              isLiveGPS: true
             };
 
+            state.userLocation = {
+              lat,
+              lng,
+              accuracy: acc,
+              name: `📍 Live GPS (±${acc}m)`,
+              isLiveGPS: true
+            };
+
+            try {
+              localStorage.setItem("radarmarket_last_known_gps", JSON.stringify({ lat, lng, accuracy: acc, timestamp: Date.now() }));
+            } catch (e) {}
+
             if (landmarkInput && !landmarkInput.value.trim()) {
-              landmarkInput.value = `Campus Spot (GPS ±${acc}m)`;
+              landmarkInput.value = `Live Spot (GPS ±${acc}m)`;
             }
-            if (coordsDisplay) {
-              coordsDisplay.textContent = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-            }
-            if (gpsAccuracyBadge) {
-              gpsAccuracyBadge.textContent = `±${acc}m GPS Fix`;
-              gpsAccuracyBadge.classList.remove("hidden");
-            }
+            updateSellCoordsUI();
             showToast("GPS FIX ACQUIRED", `Pinned exact location: ${lat.toFixed(5)}, ${lng.toFixed(5)} (±${acc}m accuracy).`);
           },
           (err) => {
@@ -3311,13 +3422,11 @@
             landmark: landmarkInput ? landmarkInput.value.trim() : ""
           },
           (selected) => {
-            state.selectedPickupCoords = { ...selected };
+            state.selectedPickupCoords = { ...selected, isCustom: true };
             if (landmarkInput && selected.landmark) {
               landmarkInput.value = selected.landmark;
             }
-            if (coordsDisplay) {
-              coordsDisplay.textContent = `${selected.lat.toFixed(5)}, ${selected.lng.toFixed(5)}`;
-            }
+            updateSellCoordsUI();
           }
         );
       });
@@ -3338,17 +3447,60 @@
         const lat = parseFloat(chip.dataset.lat);
         const lng = parseFloat(chip.dataset.lng);
         const landmark = chip.dataset.landmark;
-        state.selectedPickupCoords = { lat, lng, landmark };
+        state.selectedPickupCoords = { lat, lng, landmark, isCustom: true };
         if (landmarkInput) landmarkInput.value = landmark;
-        if (coordsDisplay) coordsDisplay.textContent = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+        updateSellCoordsUI();
         showToast("PRESET SELECTED", `Pickup set to ${landmark}`);
       });
     });
 
     openBtn.addEventListener("click", () => {
       modal.classList.remove("hidden");
-      if (coordsDisplay && state.selectedPickupCoords) {
-        coordsDisplay.textContent = `${state.selectedPickupCoords.lat.toFixed(5)}, ${state.selectedPickupCoords.lng.toFixed(5)}`;
+      // If user hasn't explicitly picked a custom pin on the map, sync to current user location
+      if (!state.selectedPickupCoords || !state.selectedPickupCoords.isCustom) {
+        state.selectedPickupCoords = {
+          lat: state.userLocation.lat,
+          lng: state.userLocation.lng,
+          accuracy: state.userLocation.accuracy || 10,
+          landmark: state.selectedPickupCoords?.landmark || (state.userLocation.isLiveGPS ? "Live GPS Location" : "Campus Location"),
+          isCustom: false,
+          isLiveGPS: !!state.userLocation.isLiveGPS
+        };
+      }
+      updateSellCoordsUI();
+
+      // Proactively acquire live GPS immediately if not yet locked
+      if (!state.userLocation.isLiveGPS && ("geolocation" in navigator)) {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            const lat = pos.coords.latitude;
+            const lng = pos.coords.longitude;
+            const accuracy = Math.round(pos.coords.accuracy || 8);
+            state.userLocation = {
+              lat,
+              lng,
+              accuracy,
+              name: `📍 Live GPS (±${accuracy}m)`,
+              isLiveGPS: true
+            };
+            try {
+              localStorage.setItem("radarmarket_last_known_gps", JSON.stringify({ lat, lng, accuracy, timestamp: Date.now() }));
+            } catch (e) {}
+            if (!state.selectedPickupCoords || !state.selectedPickupCoords.isCustom) {
+              state.selectedPickupCoords = {
+                lat,
+                lng,
+                accuracy,
+                landmark: "Live GPS Location",
+                isCustom: false,
+                isLiveGPS: true
+              };
+            }
+            updateSellCoordsUI();
+          },
+          () => {},
+          { enableHighAccuracy: true, timeout: 8000 }
+        );
       }
     });
     closeBtn.addEventListener("click", () => {
@@ -3388,9 +3540,24 @@
         image = presets[Math.floor(Math.random() * presets.length)];
       }
 
-      // Use exact coordinates chosen by the seller, without random jitter
-      const finalLat = (state.selectedPickupCoords && state.selectedPickupCoords.lat) || state.userLocation.lat;
-      const finalLng = (state.selectedPickupCoords && state.selectedPickupCoords.lng) || state.userLocation.lng;
+      // Determine final coordinates:
+      // 1. If user explicitly clicked "MARK ON MAP" or a preset chip -> use custom coordinates
+      // 2. If user device has live GPS active -> ALWAYS use live GPS coordinates!
+      // 3. Otherwise use selectedPickupCoords or userLocation
+      let finalLat, finalLng;
+      if (state.selectedPickupCoords && state.selectedPickupCoords.isCustom) {
+        finalLat = state.selectedPickupCoords.lat;
+        finalLng = state.selectedPickupCoords.lng;
+      } else if (state.userLocation && state.userLocation.isLiveGPS) {
+        finalLat = state.userLocation.lat;
+        finalLng = state.userLocation.lng;
+      } else if (state.selectedPickupCoords && typeof state.selectedPickupCoords.lat === "number") {
+        finalLat = state.selectedPickupCoords.lat;
+        finalLng = state.selectedPickupCoords.lng;
+      } else {
+        finalLat = state.userLocation.lat;
+        finalLng = state.userLocation.lng;
+      }
 
       const itemPayload = {
         title,

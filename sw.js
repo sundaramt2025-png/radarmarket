@@ -3,7 +3,7 @@
  * Provides instant app launching, asset caching, and offline support.
  */
 
-const CACHE_NAME = 'radarmarket-cache-v3.3.1';
+const CACHE_NAME = 'radarmarket-cache-v3.3.2';
 const PRECACHE_ASSETS = [
   '/',
   '/index.html',
