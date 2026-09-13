@@ -7,7 +7,8 @@
   const state = {
     userLocation: { ...MarketData.DEFAULT_USER_LOCATION },
     selectedPickupCoords: { lat: 28.5451, lng: 77.1926, landmark: "Central Library" },
-    maxRadiusMeters: 1500,
+    maxRadiusMeters: 500,
+    liveGpsWatchId: null,
     selectedCategory: "all",
     searchQuery: "",
     currentView: "radar", // "radar" | "map" | "grid"
@@ -92,7 +93,10 @@
       MarketAPI.startSyncLoop(1500);
     }
 
-    // 2. Initial market load
+    // 2. Auto-acquire live user GPS position
+    initLiveLocationTracking();
+
+    // 3. Initial market load
     await refreshMarket();
 
     // 3. Setup PWA & Service Worker
@@ -444,6 +448,15 @@
       walkingElem.textContent = target.walkingTime || "walking dist";
     }
 
+    const proximityZone = document.getElementById("target-proximity-zone");
+    if (proximityZone) {
+      const in500 = target.distance <= 500;
+      proximityZone.className = in500
+        ? "px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-500/40"
+        : "px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-950 text-amber-300 border border-amber-500/40";
+      proximityZone.textContent = in500 ? "🟢 < 500M ZONE" : "🟠 BEYOND 500M";
+    }
+
     document.getElementById("target-bearing").textContent = `${target.bearingFormatted} (Azimuth)`;
     document.getElementById("target-landmark").textContent = item.landmark || "Campus";
 
@@ -557,9 +570,10 @@
           </div>
           <div class="min-w-0 flex-1">
             <h4 class="text-xs font-bold text-slate-200 truncate ${isSelected ? 'text-cyan-300' : ''}">${item.title}</h4>
-            <div class="flex items-center gap-1.5 text-[10px] font-mono text-slate-400 mt-0.5">
-              <span class="px-1.5 py-0.2 rounded font-bold ${target.proximityTier?.bgClass || 'bg-cyan-950 text-cyan-300'}">${target.distanceFormatted}</span>
-              <span class="text-emerald-400 font-semibold">• ${target.walkingTime}</span>
+            <div class="flex items-center gap-1.5 text-[10px] font-mono text-slate-400 mt-0.5 flex-wrap">
+              <span class="px-1.5 py-0.2 rounded font-bold ${target.distance <= 500 ? 'bg-emerald-950 text-emerald-300 border border-emerald-500/40' : (target.proximityTier?.bgClass || 'bg-cyan-950 text-cyan-300')}">📍 ${target.distanceFormatted}</span>
+              ${target.distance <= 500 ? '<span class="text-[9px] font-bold text-emerald-400">🟢 &lt;500m</span>' : ''}
+              <span class="text-slate-300 font-semibold">• ${target.walkingTime}</span>
               <span class="text-slate-500 hidden sm:inline">• ${item.landmark || 'Campus'}</span>
             </div>
             <div class="text-[10px] text-slate-400 truncate mt-0.5 font-mono">
@@ -755,7 +769,7 @@
 
     document.getElementById("tip-title").textContent = item.title;
     document.getElementById("tip-price").textContent = `₹${item.price}`;
-    document.getElementById("tip-distance").textContent = target.distanceFormatted;
+    document.getElementById("tip-distance").textContent = `📍 ${target.distanceFormatted} from your live GPS (${target.walkingTime || 'walk'})`;
     document.getElementById("tip-score-badge").textContent = `⚡ ${target.algorithmScore}`;
 
     const catBadge = document.getElementById("tip-category-badge");
@@ -779,9 +793,24 @@
    * Setup UI Event Listeners
    */
   function setupEventListeners() {
-    // 1. Radar Range Slider
+    // 1. Radar Range Slider & 500m Zone Quick Filter
     const rangeSlider = document.getElementById("range-slider");
     const rangeDisplay = document.getElementById("range-value-display");
+    const quick500Btn = document.getElementById("btn-quick-500m");
+
+    if (quick500Btn) {
+      quick500Btn.addEventListener("click", () => {
+        state.maxRadiusMeters = 500;
+        if (rangeSlider) rangeSlider.value = 500;
+        if (rangeDisplay) {
+          rangeDisplay.textContent = "500 m";
+          rangeDisplay.className = "text-emerald-400 font-bold min-w-[46px] text-right";
+        }
+        if (radarEngine) radarEngine.setMaxRadius(500);
+        recalculateAndRender();
+        showToast("500M ZONE LOCKED", "Radar locked to 500m campus walking perimeter.");
+      });
+    }
 
     rangeSlider.addEventListener("input", (e) => {
       const val = parseInt(e.target.value, 10);
@@ -1302,6 +1331,75 @@
       dashArray: "6, 8",
       opacity: 0.85
     }).addTo(campusMap);
+
+    campusPathLine.bindTooltip(`📍 Buyer ➔ Seller: ${target.distanceFormatted} (${target.walkingTime})`, {
+      permanent: true,
+      direction: "center",
+      className: "bg-slate-950 text-cyan-300 font-mono text-[10px] border border-cyan-500/50 rounded px-1.5 py-0.5"
+    });
+  }
+
+  /**
+   * Automatic Real-Time Live GPS Location Tracking
+   * Continuously tracks buyer position across campus and recalculates geodesic distance to sellers
+   */
+  function initLiveLocationTracking() {
+    if (!("geolocation" in navigator)) return;
+
+    const geoOptions = {
+      enableHighAccuracy: true,
+      timeout: 12000,
+      maximumAge: 10000
+    };
+
+    const handleGpsSuccess = (pos) => {
+      const lat = pos.coords.latitude;
+      const lng = pos.coords.longitude;
+      const accuracy = Math.round(pos.coords.accuracy || 8);
+
+      state.userLocation = {
+        lat,
+        lng,
+        accuracy,
+        name: `📍 Live GPS (±${accuracy}m)`,
+        isLiveGPS: true
+      };
+
+      // Update HUD location text with blinking green radar beacon
+      const hudLoc = document.getElementById("hud-location-text");
+      if (hudLoc) {
+        hudLoc.innerHTML = `<span class="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-ping mr-1"></span>Live GPS (±${accuracy}m)`;
+      }
+
+      // Update location dropdown option if visible
+      const locSelect = document.getElementById("location-select");
+      if (locSelect) {
+        const opt = locSelect.querySelector("option[value='gps_real']");
+        if (opt) opt.textContent = `📍 Live GPS Fix (±${accuracy}m)`;
+        locSelect.value = "gps_real";
+      }
+
+      // If user marker exists on Leaflet map, update its coordinates
+      if (campusUserMarker && campusMap) {
+        campusUserMarker.setLatLng([lat, lng]);
+      }
+
+      // Recalculate DSP-VI algorithms and distances to all items
+      recalculateAndRender();
+    };
+
+    // 1. Immediate high-accuracy GPS fix
+    navigator.geolocation.getCurrentPosition(handleGpsSuccess, (err) => {
+      console.info("Live GPS prompt notice (defaulting to campus quad until permitted):", err.message);
+    }, geoOptions);
+
+    // 2. Continuous real-time position tracking as the buyer walks
+    if (state.liveGpsWatchId) {
+      navigator.geolocation.clearWatch(state.liveGpsWatchId);
+    }
+    try {
+      state.liveGpsWatchId = navigator.geolocation.watchPosition(handleGpsSuccess, () => {}, geoOptions);
+    } catch (e) {}
   }
 
   /**
@@ -4444,6 +4542,24 @@
     const landmarkElem = document.getElementById("chat-item-landmark");
     if (landmarkElem) {
       landmarkElem.textContent = item.landmark || "Campus Central";
+    }
+
+    // Real-time Geodesic Distance from Buyer (You) to Seller
+    const distM = calculateDistanceMeters(
+      state.userLocation.lat,
+      state.userLocation.lng,
+      item.lat,
+      item.lng
+    );
+    const distFormatted = formatDistance(distM);
+    const walkTime = estimateWalkingTime(distM);
+    const distBadge = document.getElementById("chat-item-distance-badge");
+    if (distBadge) {
+      const inZone = distM <= 500;
+      distBadge.className = inZone
+        ? "px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-500/40 text-[10px] font-mono font-bold flex items-center gap-1"
+        : "px-2 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-500/40 text-[10px] font-mono font-bold flex items-center gap-1";
+      distBadge.innerHTML = `<i data-lucide="navigation" class="w-3 h-3"></i> ${distFormatted} (${walkTime}) ${inZone ? '• &lt;500m' : ''}`;
     }
 
     const gmapsBtn = document.getElementById("btn-chat-google-maps");

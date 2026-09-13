@@ -38,7 +38,7 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 
   <!-- Custom Radar HUD Styles -->
-  <link rel="stylesheet" href="css/styles.css?v=3.2">
+  <link rel="stylesheet" href="css/styles.css?v=3.3">
 
   <script>
     tailwind.config = {
@@ -216,19 +216,23 @@
           <span id="bounty-board-badge" class="hidden px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-pink-500/30 text-pink-200 border border-pink-400/50"></span>
         </button>
 
-        <!-- Radar Range Slider -->
+        <!-- Radar Range Slider & 500m Quick Filter -->
         <div class="flex items-center gap-2 bg-slate-900/90 border border-slate-800 px-3 py-1.5 rounded-lg text-xs font-mono">
-          <span class="text-slate-400 text-[11px] uppercase">RADAR RANGE:</span>
+          <button id="btn-quick-500m" type="button" class="px-2 py-0.5 rounded bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/50 text-[10px] font-bold flex items-center gap-1 transition shadow-[0_0_8px_rgba(0,255,157,0.2)] cursor-pointer" title="Quick lock radar to 500m walking sector">
+            <i data-lucide="crosshair" class="w-3 h-3 text-emerald-400"></i>
+            <span>500M ZONE</span>
+          </button>
+          <span class="text-slate-400 text-[11px] uppercase hidden sm:inline">RANGE:</span>
           <input 
             type="range" 
             id="range-slider" 
-            min="300" 
-            max="3000" 
-            step="100" 
-            value="1500" 
-            class="w-24 sm:w-28 cursor-pointer"
+            min="100" 
+            max="2000" 
+            step="50" 
+            value="500" 
+            class="w-20 sm:w-28 cursor-pointer"
           />
-          <span id="range-value-display" class="text-cyan-300 font-bold min-w-[50px] text-right">1.5 km</span>
+          <span id="range-value-display" class="text-emerald-400 font-bold min-w-[46px] text-right">500 m</span>
         </div>
 
         <!-- View Mode Switcher -->
@@ -446,18 +450,23 @@
               </span>
             </div>
             <div class="flex-1 flex flex-col justify-between text-xs font-mono">
-              <div class="space-y-1">
-                <div class="flex items-center justify-between text-slate-400">
-                  <span>DISTANCE:</span>
-                  <div class="flex items-center gap-1.5">
-                    <strong id="target-distance" class="text-cyan-300 font-bold">--</strong>
-                    <span id="target-walking-time" class="text-[10px] px-1.5 py-0.2 rounded bg-cyan-950 text-cyan-300 border border-cyan-500/30">--</span>
+              <div class="space-y-1.5">
+                <!-- Buyer to Seller Geodesic Distance Card -->
+                <div class="p-2 rounded-lg bg-slate-950/80 border border-cyan-500/30">
+                  <div class="flex items-center justify-between text-[11px] font-mono mb-1">
+                    <span class="text-cyan-300 font-bold flex items-center gap-1">
+                      <i data-lucide="navigation" class="w-3 h-3 text-emerald-400 animate-pulse"></i>
+                      <span>BUYER ➔ SELLER:</span>
+                    </span>
+                    <span id="target-proximity-zone" class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-500/40">🟢 &lt; 500M ZONE</span>
+                  </div>
+                  <div class="flex items-baseline justify-between font-mono">
+                    <strong id="target-distance" class="text-lg font-black text-emerald-400">--</strong>
+                    <span id="target-walking-time" class="text-[10px] px-1.5 py-0.2 rounded bg-slate-900 text-slate-300 border border-slate-700">-- min walk</span>
+                    <span id="target-bearing" class="text-[11px] text-cyan-300">--°</span>
                   </div>
                 </div>
-                <div class="flex items-center justify-between text-slate-400">
-                  <span>BEARING:</span>
-                  <strong id="target-bearing" class="text-cyan-300">--</strong>
-                </div>
+
                 <div class="flex items-center justify-between text-slate-400">
                   <span>LOCATION:</span>
                   <div class="flex items-center gap-1.5 min-w-0">
@@ -1207,15 +1216,21 @@
           <span class="text-slate-500 shrink-0">PICKUP:</span>
           <span id="chat-item-landmark" class="text-cyan-300 truncate font-bold">Campus Central</span>
         </div>
-        <button 
-          id="btn-chat-google-maps" 
-          type="button" 
-          class="px-2 py-0.5 rounded bg-cyan-950 hover:bg-cyan-900 border border-cyan-400/50 text-cyan-300 text-[10px] font-bold flex items-center gap-1 shrink-0 transition shadow-[0_0_8px_rgba(0,229,255,0.2)] cursor-pointer"
-          title="Open walking directions in Google Maps"
-        >
-          <i data-lucide="map" class="w-3 h-3 text-cyan-400"></i>
-          <span>Directions</span>
-        </button>
+        <div class="flex items-center gap-1.5 shrink-0">
+          <span id="chat-item-distance-badge" class="px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-500/40 text-[10px] font-mono font-bold flex items-center gap-1" title="Geodesic distance from your live GPS to this seller">
+            <i data-lucide="navigation" class="w-3 h-3"></i>
+            <span>-- away</span>
+          </span>
+          <button 
+            id="btn-chat-google-maps" 
+            type="button" 
+            class="px-2 py-0.5 rounded bg-cyan-950 hover:bg-cyan-900 border border-cyan-400/50 text-cyan-300 text-[10px] font-bold flex items-center gap-1 shrink-0 transition shadow-[0_0_8px_rgba(0,229,255,0.2)] cursor-pointer"
+            title="Open walking directions in Google Maps"
+          >
+            <i data-lucide="map" class="w-3 h-3 text-cyan-400"></i>
+            <span>Directions</span>
+          </button>
+        </div>
       </div>
 
       <!-- Messages Thread -->
@@ -2258,11 +2273,11 @@
   </div>
 
   <!-- SCRIPTS -->
-  <script src="js/data.js?v=3.2"></script>
-  <script src="js/algorithm.js?v=3.2"></script>
-  <script src="js/radar.js?v=3.2"></script>
-  <script src="js/api.js?v=3.2"></script>
-  <script src="js/app.js?v=3.2"></script>
+  <script src="js/data.js?v=3.3"></script>
+  <script src="js/algorithm.js?v=3.3"></script>
+  <script src="js/radar.js?v=3.3"></script>
+  <script src="js/api.js?v=3.3"></script>
+  <script src="js/app.js?v=3.3"></script>
 
   <script>
     // Initialize Lucide icons on page load
