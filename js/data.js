@@ -3,17 +3,14 @@
  */
 
 const DEFAULT_USER_LOCATION = {
-  lat: 28.6139,
-  lng: 77.2090,
-  name: "University Campus Central (Ground Zero)"
+  lat: null,
+  lng: null,
+  name: "Detecting Live GPS...",
+  isLiveGPS: false
 };
 
 const LOCATION_PRESETS = [
-  { id: "campus_central", name: "University Campus Central", lat: 28.6139, lng: 77.2090 },
-  { id: "library_quad", name: "Central Academic Library", lat: 28.6162, lng: 77.2115 },
-  { id: "engineering_block", name: "Engineering & Tech Complex", lat: 28.6110, lng: 77.2065 },
-  { id: "student_hostels", name: "North Dorms & Hostels", lat: 28.6185, lng: 77.2045 },
-  { id: "city_quarter", name: "Old Book Market Square", lat: 28.6220, lng: 77.2150 }
+  { id: "gps_real", name: "🛰️ Live Device GPS (Real-Time)", lat: null, lng: null }
 ];
 
 /// Zero fake listings - authentic community marketplace only

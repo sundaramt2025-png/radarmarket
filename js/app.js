@@ -1295,13 +1295,14 @@
     const mapElem = document.getElementById("campus-leaflet-map");
     if (!mapElem) return;
 
-    const lat = state.userLocation.lat || 28.5451;
-    const lng = state.userLocation.lng || 77.1926;
+    const lat = state.userLocation.lat || state.selectedPickupCoords?.lat || 20.5937;
+    const lng = state.userLocation.lng || state.selectedPickupCoords?.lng || 78.9629;
+    const initialZoom = (state.userLocation.lat && state.userLocation.lng) ? 16 : 5;
 
     campusMap = L.map("campus-leaflet-map", {
       zoomControl: true,
       attributionControl: false
-    }).setView([lat, lng], 16);
+    }).setView([lat, lng], initialZoom);
 
     // Initial Google Map Tile Layer (Streets)
     setCampusMapLayer(campusActiveLayerType || "streets");
@@ -3094,7 +3095,11 @@
    * Setup Interactive Campus Map Pinpoint Picker Modal (Reticle & Pin Drop)
    */
   let pinpointCallback = null;
-  let currentPinCoords = { lat: 28.5451, lng: 77.1926, landmark: "Central Library" };
+  let currentPinCoords = {
+    lat: state.userLocation.lat || null,
+    lng: state.userLocation.lng || null,
+    landmark: "Current Spot"
+  };
 
   function setupPinpointPickerModal() {
     const modal = document.getElementById("modal-pinpoint-picker");
@@ -3252,9 +3257,11 @@
     return {
       open: (initialCoords, onConfirm) => {
         pinpointCallback = onConfirm;
+        const activeLat = (typeof initialCoords?.lat === "number") ? initialCoords.lat : (typeof state.userLocation.lat === "number" ? state.userLocation.lat : 20.5937);
+        const activeLng = (typeof initialCoords?.lng === "number") ? initialCoords.lng : (typeof state.userLocation.lng === "number" ? state.userLocation.lng : 78.9629);
         currentPinCoords = {
-          lat: initialCoords?.lat || state.userLocation.lat || 28.5451,
-          lng: initialCoords?.lng || state.userLocation.lng || 77.1926,
+          lat: activeLat,
+          lng: activeLng,
           landmark: initialCoords?.landmark || ""
         };
 
@@ -3558,13 +3565,14 @@
     const presetChips = modal.querySelectorAll(".btn-landmark-preset");
     presetChips.forEach((chip) => {
       chip.addEventListener("click", () => {
-        const lat = parseFloat(chip.dataset.lat);
-        const lng = parseFloat(chip.dataset.lng);
         const landmark = chip.dataset.landmark;
-        state.selectedPickupCoords = { lat, lng, landmark, isCustom: true };
         if (landmarkInput) landmarkInput.value = landmark;
+        // Preserve actual device live GPS coordinates! Only update the meeting spot name
+        if (state.selectedPickupCoords) {
+          state.selectedPickupCoords.landmark = landmark;
+        }
         updateSellCoordsUI();
-        showToast("PRESET SELECTED", `Pickup set to ${landmark}`);
+        showToast("LANDMARK SET", `Meeting spot set to: ${landmark}`);
       });
     });
 
@@ -3689,22 +3697,20 @@
       }
 
       // Determine final coordinates:
-      // 1. If user explicitly clicked "MARK ON MAP" or a preset chip -> use custom coordinates
-      // 2. If user device has live GPS active -> ALWAYS use live GPS coordinates!
-      // 3. Otherwise use selectedPickupCoords or userLocation
+      // ALWAYS prioritize verified device live GPS coordinates!
       let finalLat, finalLng;
-      if (state.selectedPickupCoords && state.selectedPickupCoords.isCustom) {
-        finalLat = state.selectedPickupCoords.lat;
-        finalLng = state.selectedPickupCoords.lng;
-      } else if (state.userLocation && state.userLocation.isLiveGPS) {
+      if (state.userLocation && state.userLocation.isLiveGPS && typeof state.userLocation.lat === "number") {
         finalLat = state.userLocation.lat;
         finalLng = state.userLocation.lng;
       } else if (state.selectedPickupCoords && typeof state.selectedPickupCoords.lat === "number") {
         finalLat = state.selectedPickupCoords.lat;
         finalLng = state.selectedPickupCoords.lng;
-      } else {
+      } else if (state.userLocation && typeof state.userLocation.lat === "number") {
         finalLat = state.userLocation.lat;
         finalLng = state.userLocation.lng;
+      } else {
+        showToast("GPS REQUIRED", "Acquiring satellites... Please tap 'USE EXACT GPS' or allow location.");
+        return;
       }
 
       const itemPayload = {

@@ -605,7 +605,7 @@ def auth_google():
                     id, nickname, avatar, lat, lng, created_at, last_active_at,
                     google_id, email, picture, is_verified, is_campus_verified, auth_provider, session_token
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, 'google', ?)
-            """, (user_id, name, picture, 28.6139, 77.2090, now, now, google_id, email, picture, is_campus, session_token))
+            """, (user_id, name, picture, None, None, now, now, google_id, email, picture, is_campus, session_token))
 
     # Link existing items broadcasted on this device or session to this google account
     if device_id:
@@ -848,6 +848,16 @@ def create_item():
     upi_id = data.get('upi_id') or ""
     handshake_code = f"{random.randint(1000, 9999)}"
     
+    item_lat = data.get('lat')
+    item_lng = data.get('lng')
+    if item_lat is None or item_lng is None:
+        return jsonify({"success": False, "error": "Live GPS coordinates (lat, lng) are required to broadcast an item."}), 400
+    try:
+        final_lat = float(item_lat)
+        final_lng = float(item_lng)
+    except (ValueError, TypeError):
+        return jsonify({"success": False, "error": "Invalid GPS coordinates format."}), 400
+
     item_id = "item-" + uuid.uuid4().hex[:10]
     now = time.time()
 
@@ -866,8 +876,8 @@ def create_item():
         item_id, device_id, seller_name, 5.0, seller_verified, seller_avatar,
         data.get('title') or "Untitled Listing", data.get('category') or "stationery", data.get('sub_category') or "General",
         float(data.get('price') or 0), float(data.get('original_price') or data.get('price') or 0), data.get('condition') or "Good",
-        float(data.get('condition_score', 0.85) or 0.85), float(data.get('lat') or 28.6139), float(data.get('lng') or 77.2090),
-        data.get('landmark') or "Campus Ground Zero", data.get('image'), data.get('description') or "",
+        float(data.get('condition_score', 0.85) or 0.85), final_lat, final_lng,
+        data.get('landmark') or "Live Location", data.get('image'), data.get('description') or "",
         tags_json, now, beacon_type, upi_id,
         seller_email, seller_campus_verified, seller_google_id, handshake_code
     ))

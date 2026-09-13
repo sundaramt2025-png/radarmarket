@@ -145,12 +145,7 @@
         <!-- Location Preset Selector -->
         <div class="relative">
           <select id="location-select" class="appearance-none bg-slate-900 border border-slate-700 hover:border-cyan-500/50 rounded-lg px-3 py-2 pr-8 text-xs font-mono text-slate-200 focus:outline-none focus:ring-1 focus:ring-cyan-400 transition cursor-pointer">
-            <option value="campus_central">📍 Campus Central</option>
-            <option value="library_quad">📚 Central Library</option>
-            <option value="engineering_block">⚙️ Engineering Complex</option>
-            <option value="student_hostels">🏢 Student Dorms</option>
-            <option value="city_quarter">🏛️ Old Book Market</option>
-            <option value="gps_real">🛰️ Real Browser GPS</option>
+            <option value="gps_real" selected>🛰️ Live Device GPS (Real-Time)</option>
           </select>
           <i data-lucide="chevron-down" class="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none"></i>
         </div>
@@ -1005,11 +1000,11 @@
           <div class="pt-1">
             <div class="text-[10px] text-slate-500 font-mono mb-1">Campus Presets:</div>
             <div class="flex items-center gap-1.5 flex-wrap text-[10px]">
-              <button type="button" class="btn-landmark-preset px-2 py-0.5 rounded bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-cyan-500/40 text-slate-300 transition" data-landmark="Central Library Reception Desk" data-lat="28.5454" data-lng="77.1928">🏛️ Central Library</button>
-              <button type="button" class="btn-landmark-preset px-2 py-0.5 rounded bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-cyan-500/40 text-slate-300 transition" data-landmark="Campus Cafe Lounge / Nescafe" data-lat="28.5447" data-lng="77.1932">☕ Campus Cafe</button>
-              <button type="button" class="btn-landmark-preset px-2 py-0.5 rounded bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-cyan-500/40 text-slate-300 transition" data-landmark="Student Activity Center (SAC)" data-lat="28.5460" data-lng="77.1915">🏟️ SAC Ground</button>
-              <button type="button" class="btn-landmark-preset px-2 py-0.5 rounded bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-cyan-500/40 text-slate-300 transition" data-landmark="Main Gate Security Post" data-lat="28.5435" data-lng="77.1908">🛡️ Main Gate</button>
-              <button type="button" class="btn-landmark-preset px-2 py-0.5 rounded bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-cyan-500/40 text-slate-300 transition" data-landmark="Hostel Quad Courtyard" data-lat="28.5468" data-lng="77.1942">🏢 Hostel Quad</button>
+              <button type="button" class="btn-landmark-preset px-2 py-0.5 rounded bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-cyan-500/40 text-slate-300 transition" data-landmark="Central Library Reception Desk">🏛️ Central Library</button>
+              <button type="button" class="btn-landmark-preset px-2 py-0.5 rounded bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-cyan-500/40 text-slate-300 transition" data-landmark="Campus Cafe Lounge / Nescafe">☕ Campus Cafe</button>
+              <button type="button" class="btn-landmark-preset px-2 py-0.5 rounded bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-cyan-500/40 text-slate-300 transition" data-landmark="Student Activity Center (SAC)">🏟️ SAC Ground</button>
+              <button type="button" class="btn-landmark-preset px-2 py-0.5 rounded bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-cyan-500/40 text-slate-300 transition" data-landmark="Main Gate Security Post">🛡️ Main Gate</button>
+              <button type="button" class="btn-landmark-preset px-2 py-0.5 rounded bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-cyan-500/40 text-slate-300 transition" data-landmark="Hostel Quad Courtyard">🏢 Hostel Quad</button>
             </div>
           </div>
         </div>
@@ -2020,7 +2015,7 @@
           <div class="flex items-center gap-3">
             <div>
               <span class="text-slate-500 text-[10px] uppercase block">Selected Coordinates:</span>
-              <span id="pinpoint-coords-text" class="text-emerald-400 font-bold text-sm">28.54510, 77.19260</span>
+              <span id="pinpoint-coords-text" class="text-emerald-400 font-bold text-sm">Detecting Live GPS...</span>
             </div>
             <div class="border-l border-slate-700 pl-3">
               <span class="text-slate-500 text-[10px] uppercase block">Distance from You:</span>
@@ -2099,7 +2094,7 @@
         <div class="flex items-center gap-3">
           <div>
             <span class="text-slate-500 text-[10px] uppercase block">Coordinates:</span>
-            <span id="gmaps-modal-coords" class="text-emerald-400 font-bold text-xs">28.54510, 77.19260</span>
+            <span id="gmaps-modal-coords" class="text-emerald-400 font-bold text-xs">Live Device GPS</span>
           </div>
           <div class="border-l border-slate-800 pl-3">
             <span class="text-slate-500 text-[10px] uppercase block">Landmark Name:</span>

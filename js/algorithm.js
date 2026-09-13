@@ -25,6 +25,8 @@ function toDeg(radians) {
  * Haversine Formula: calculates great-circle distance between two GPS coordinates in meters
  */
 function calculateDistanceMeters(lat1, lon1, lat2, lon2) {
+  if (lat1 == null || lon1 == null || lat2 == null || lon2 == null) return 0;
+  if (isNaN(lat1) || isNaN(lon1) || isNaN(lat2) || isNaN(lon2)) return 0;
   const dLat = toRad(lat2 - lat1);
   const dLon = toRad(lon2 - lon1);
   const phi1 = toRad(lat1);
@@ -42,6 +44,8 @@ function calculateDistanceMeters(lat1, lon1, lat2, lon2) {
  * Calculate forward azimuth / bearing in degrees (0 = North, 90 = East, 180 = South, 270 = West)
  */
 function calculateBearingDegrees(lat1, lon1, lat2, lon2) {
+  if (lat1 == null || lon1 == null || lat2 == null || lon2 == null) return 0;
+  if (isNaN(lat1) || isNaN(lon1) || isNaN(lat2) || isNaN(lon2)) return 0;
   const phi1 = toRad(lat1);
   const phi2 = toRad(lat2);
   const deltaLambda = toRad(lon2 - lon1);
