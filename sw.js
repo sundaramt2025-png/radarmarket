@@ -1,9 +1,9 @@
-/**
+﻿/**
  * RadarMarket Service Worker (PWA Offline Engine)
  * Provides instant app launching, asset caching, and offline support.
  */
 
-const CACHE_NAME = 'radarmarket-cache-v3.3';
+const CACHE_NAME = 'radarmarket-cache-v3.3.1';
 const PRECACHE_ASSETS = [
   '/',
   '/index.html',

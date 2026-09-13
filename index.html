@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -38,7 +38,7 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 
   <!-- Custom Radar HUD Styles -->
-  <link rel="stylesheet" href="css/styles.css?v=3.3">
+  <link rel="stylesheet" href="css/styles.css?v=3.3.1">
 
   <script>
     tailwind.config = {
@@ -145,12 +145,12 @@
         <!-- Location Preset Selector -->
         <div class="relative">
           <select id="location-select" class="appearance-none bg-slate-900 border border-slate-700 hover:border-cyan-500/50 rounded-lg px-3 py-2 pr-8 text-xs font-mono text-slate-200 focus:outline-none focus:ring-1 focus:ring-cyan-400 transition cursor-pointer">
-            <option value="campus_central">📍 Campus Central</option>
-            <option value="library_quad">📚 Central Library</option>
-            <option value="engineering_block">⚙️ Engineering Complex</option>
-            <option value="student_hostels">🏢 Student Dorms</option>
-            <option value="city_quarter">🏛️ Old Book Market</option>
-            <option value="gps_real">🛰️ Real Browser GPS</option>
+            <option value="campus_central">ðŸ“ Campus Central</option>
+            <option value="library_quad">ðŸ“š Central Library</option>
+            <option value="engineering_block">âš™ï¸ Engineering Complex</option>
+            <option value="student_hostels">ðŸ¢ Student Dorms</option>
+            <option value="city_quarter">ðŸ›ï¸ Old Book Market</option>
+            <option value="gps_real">ðŸ›°ï¸ Real Browser GPS</option>
           </select>
           <i data-lucide="chevron-down" class="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none"></i>
         </div>
@@ -199,13 +199,13 @@
             ALL
           </button>
           <button class="filter-category-btn px-3 py-1.5 rounded-md text-slate-400 hover:text-emerald-300 transition" data-category="stationery">
-            ✏️ STATIONERY
+            âœï¸ STATIONERY
           </button>
           <button class="filter-category-btn px-3 py-1.5 rounded-md text-slate-400 hover:text-cyan-300 transition" data-category="books">
-            📖 BOOKS
+            ðŸ“– BOOKS
           </button>
           <button class="filter-category-btn px-3 py-1.5 rounded-md text-slate-400 hover:text-pink-300 transition" data-category="wanted">
-            🎯 BOUNTIES
+            ðŸŽ¯ BOUNTIES
           </button>
         </div>
 
@@ -278,7 +278,7 @@
               <!-- Live GPS Scan Surroundings Button -->
               <button id="btn-scan-live-gps" class="px-3 py-1.5 rounded-lg bg-cyan-950/90 hover:bg-cyan-900/80 border border-cyan-400 text-cyan-300 font-bold flex items-center gap-1.5 shadow-[0_0_15px_rgba(0,229,255,0.25)] transition hover:scale-105 active:scale-95 cursor-pointer" title="Acquire phone GPS and scan surrounding campus sellers">
                 <i data-lucide="crosshair" id="icon-scan-gps" class="w-3.5 h-3.5 text-cyan-400"></i>
-                <span id="text-scan-gps">🛰️ SCAN SURROUNDINGS</span>
+                <span id="text-scan-gps">ðŸ›°ï¸ SCAN SURROUNDINGS</span>
               </button>
 
               <button id="btn-explain-algorithm-quick" class="text-cyan-400 hover:underline hover:text-cyan-300 flex items-center gap-1">
@@ -296,7 +296,7 @@
                 <i data-lucide="radio" class="w-4 h-4 text-cyan-400 animate-pulse"></i>
                 <span id="sonar-scan-banner-text">ACQUIRING GPS FIX & TRIANGULATING SELLERS...</span>
               </div>
-              <span id="sonar-scan-accuracy" class="text-emerald-400 font-bold">±4m GPS FIX</span>
+              <span id="sonar-scan-accuracy" class="text-emerald-400 font-bold">Â±4m GPS FIX</span>
             </div>
             <canvas 
               id="radar-canvas" 
@@ -456,14 +456,14 @@
                   <div class="flex items-center justify-between text-[11px] font-mono mb-1">
                     <span class="text-cyan-300 font-bold flex items-center gap-1">
                       <i data-lucide="navigation" class="w-3 h-3 text-emerald-400 animate-pulse"></i>
-                      <span>BUYER ➔ SELLER:</span>
+                      <span>BUYER âž” SELLER:</span>
                     </span>
-                    <span id="target-proximity-zone" class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-500/40">🟢 &lt; 500M ZONE</span>
+                    <span id="target-proximity-zone" class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-500/40">ðŸŸ¢ &lt; 500M ZONE</span>
                   </div>
                   <div class="flex items-baseline justify-between font-mono">
                     <strong id="target-distance" class="text-lg font-black text-emerald-400">--</strong>
                     <span id="target-walking-time" class="text-[10px] px-1.5 py-0.2 rounded bg-slate-900 text-slate-300 border border-slate-700">-- min walk</span>
-                    <span id="target-bearing" class="text-[11px] text-cyan-300">--°</span>
+                    <span id="target-bearing" class="text-[11px] text-cyan-300">--Â°</span>
                   </div>
                 </div>
 
@@ -486,8 +486,8 @@
 
               <!-- Price & Discount -->
               <div class="flex items-baseline gap-2 pt-1 border-t border-slate-800">
-                <span id="target-price" class="text-xl font-bold text-emerald-400">₹0</span>
-                <span id="target-orig-price" class="text-xs text-slate-500 line-through">₹0</span>
+                <span id="target-price" class="text-xl font-bold text-emerald-400">â‚¹0</span>
+                <span id="target-orig-price" class="text-xs text-slate-500 line-through">â‚¹0</span>
                 <span id="target-discount-pct" class="text-[10px] font-bold text-amber-400 bg-amber-950/60 px-1.5 py-0.2 rounded border border-amber-500/30">0% OFF</span>
               </div>
             </div>
@@ -533,7 +533,7 @@
           </div>
           <button id="btn-open-ar-compass" class="w-full py-2 px-3 rounded-lg bg-gradient-to-r from-emerald-950/80 to-cyan-950/80 hover:from-emerald-900/90 hover:to-cyan-900/90 border border-emerald-400/60 hover:border-emerald-300 text-emerald-300 font-bold font-mono text-xs tracking-wider uppercase transition shadow-[0_0_15px_rgba(0,255,157,0.2)] flex items-center justify-center gap-2 cursor-pointer" title="Open Augmented Reality Camera Compass to locate seller in real life">
             <i data-lucide="compass" class="w-4 h-4 text-emerald-400 animate-spin" style="animation-duration: 10s;"></i>
-            <span>🧭 AR Camera Compass & Live Finder</span>
+            <span>ðŸ§­ AR Camera Compass & Live Finder</span>
           </button>
 
         </div>
@@ -573,11 +573,11 @@
         <div class="flex items-center gap-3 text-xs font-mono">
           <label class="text-slate-400">SORT BY:</label>
           <select id="grid-sort-select" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-slate-200 focus:outline-none focus:ring-1 focus:ring-cyan-400">
-            <option value="algo">⚡ Algorithm Score (Best Match)</option>
-            <option value="distance">📍 Distance (Nearest First)</option>
-            <option value="price_asc">💰 Price (Low to High)</option>
-            <option value="price_desc">💎 Price (High to Low)</option>
-            <option value="discount">🏷️ Highest Discount %</option>
+            <option value="algo">âš¡ Algorithm Score (Best Match)</option>
+            <option value="distance">ðŸ“ Distance (Nearest First)</option>
+            <option value="price_asc">ðŸ’° Price (Low to High)</option>
+            <option value="price_desc">ðŸ’Ž Price (High to Low)</option>
+            <option value="discount">ðŸ·ï¸ Highest Discount %</option>
           </select>
         </div>
       </div>
@@ -621,7 +621,7 @@
             <div>
               <span class="text-slate-400">Broadcasting as:</span>
               <strong id="sell-poster-name" class="text-slate-200 ml-1">Guest Student</strong>
-              <span id="sell-poster-verified-badge" class="hidden ml-1 px-1.5 py-0.2 rounded text-[8px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold">✓ VERIFIED</span>
+              <span id="sell-poster-verified-badge" class="hidden ml-1 px-1.5 py-0.2 rounded text-[8px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold">âœ“ VERIFIED</span>
             </div>
           </div>
           <button type="button" id="btn-sell-switch-google" class="text-cyan-400 hover:text-cyan-300 text-[10px] underline">
@@ -635,11 +635,11 @@
           <div class="grid grid-cols-2 gap-3">
             <label class="flex items-center gap-2 p-2.5 rounded-lg bg-slate-900 border border-emerald-500/50 cursor-pointer hover:border-emerald-400 transition" id="label-type-sell">
               <input type="radio" name="sell-beacon-type" value="sell" checked class="text-emerald-400 focus:ring-0">
-              <span class="text-emerald-300 font-bold">🟢 Selling Item</span>
+              <span class="text-emerald-300 font-bold">ðŸŸ¢ Selling Item</span>
             </label>
             <label class="flex items-center gap-2 p-2.5 rounded-lg bg-slate-900 border border-slate-700 cursor-pointer hover:border-pink-400 transition" id="label-type-wanted">
               <input type="radio" name="sell-beacon-type" value="wanted" class="text-pink-400 focus:ring-0">
-              <span class="text-pink-400 font-bold">🚨 Wanted Request</span>
+              <span class="text-pink-400 font-bold">ðŸš¨ Wanted Request</span>
             </label>
           </div>
         </div>
@@ -650,11 +650,11 @@
           <div class="grid grid-cols-2 gap-3">
             <label class="flex items-center gap-2 p-2.5 rounded-lg bg-slate-900 border border-slate-700 cursor-pointer hover:border-emerald-400 transition">
               <input type="radio" name="sell-category" value="stationery" checked class="text-emerald-400 focus:ring-0">
-              <span class="text-slate-200">✏️ Stationery Equipment</span>
+              <span class="text-slate-200">âœï¸ Stationery Equipment</span>
             </label>
             <label class="flex items-center gap-2 p-2.5 rounded-lg bg-slate-900 border border-slate-700 cursor-pointer hover:border-cyan-400 transition">
               <input type="radio" name="sell-category" value="books" class="text-cyan-400 focus:ring-0">
-              <span class="text-slate-200">📖 Second-Hand Book</span>
+              <span class="text-slate-200">ðŸ“– Second-Hand Book</span>
             </label>
           </div>
         </div>
@@ -784,7 +784,7 @@
             <div class="flex items-center justify-between">
               <label class="text-[11px] font-bold text-slate-300 uppercase">Enter Textbook ISBN (10 or 13 digits)</label>
               <button type="button" id="btn-close-manual-isbn" class="text-slate-400 hover:text-white text-[10px]">
-                ✕ Close
+                âœ• Close
               </button>
             </div>
             <div class="flex gap-2">
@@ -809,7 +809,7 @@
               <span class="text-[10px]">On phone? Skip typing:</span>
               <button type="button" id="btn-snap-photo-from-manual" class="px-2.5 py-1 rounded bg-cyan-950/60 hover:bg-cyan-900/60 border border-cyan-500/40 text-cyan-300 text-[10px] font-bold flex items-center gap-1.5 transition">
                 <i data-lucide="camera" class="w-3 h-3 text-cyan-400"></i>
-                <span>📷 SNAP BARCODE PHOTO</span>
+                <span>ðŸ“· SNAP BARCODE PHOTO</span>
               </button>
             </div>
             
@@ -829,7 +829,7 @@
             <div class="flex-1 min-w-0 font-sans">
               <div class="flex items-center justify-between gap-1 mb-0.5">
                 <span class="px-1.5 py-0.2 rounded text-[8px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold font-mono">
-                  ✓ AUTO-FILLED FROM ISBN
+                  âœ“ AUTO-FILLED FROM ISBN
                 </span>
                 <button type="button" id="btn-rescan-book" class="text-cyan-400 hover:text-cyan-300 text-[10px] underline font-mono">
                   Scan Another
@@ -837,7 +837,7 @@
               </div>
               <h4 id="scanned-book-title" class="font-bold text-white text-xs truncate">Book Title</h4>
               <p id="scanned-book-author" class="text-[11px] text-slate-300 truncate">Author Name</p>
-              <p id="scanned-book-meta" class="text-[10px] text-slate-400 mt-0.5 truncate font-mono">Publisher • Year • ISBN</p>
+              <p id="scanned-book-meta" class="text-[10px] text-slate-400 mt-0.5 truncate font-mono">Publisher â€¢ Year â€¢ ISBN</p>
             </div>
           </div>
 
@@ -879,7 +879,7 @@
         <!-- Pricing: Asking & Original Price -->
         <div class="grid grid-cols-2 gap-3">
           <div>
-            <label class="block text-slate-300 font-bold mb-1 uppercase" id="price-label">Asking Price / Budget (₹) *</label>
+            <label class="block text-slate-300 font-bold mb-1 uppercase" id="price-label">Asking Price / Budget (â‚¹) *</label>
             <input 
               type="number" 
               id="sell-price" 
@@ -890,7 +890,7 @@
             />
           </div>
           <div>
-            <label class="block text-slate-300 font-bold mb-1 uppercase">Original Retail (₹)</label>
+            <label class="block text-slate-300 font-bold mb-1 uppercase">Original Retail (â‚¹)</label>
             <input 
               type="number" 
               id="sell-orig-price" 
@@ -920,7 +920,7 @@
               <span>Pickup Landmark & Exact Spot *</span>
             </label>
             <span id="sell-gps-accuracy-badge" class="hidden text-[10px] font-mono px-1.5 py-0.2 rounded bg-emerald-950 text-emerald-300 border border-emerald-500/40">
-              ±3m GPS Fix
+              Â±3m GPS Fix
             </span>
           </div>
 
@@ -941,7 +941,7 @@
               title="Acquire exact current GPS coordinates from phone satellite"
             >
               <i data-lucide="crosshair" class="w-3.5 h-3.5 text-cyan-400"></i>
-              <span>📍 USE EXACT GPS</span>
+              <span>ðŸ“ USE EXACT GPS</span>
             </button>
             <button 
               type="button" 
@@ -950,7 +950,7 @@
               title="Open campus map to drag or click exact pickup pin"
             >
               <i data-lucide="map" class="w-3.5 h-3.5 text-emerald-400"></i>
-              <span>🗺️ MARK ON MAP</span>
+              <span>ðŸ—ºï¸ MARK ON MAP</span>
             </button>
           </div>
 
@@ -975,11 +975,11 @@
           <div class="pt-1">
             <div class="text-[10px] text-slate-500 font-mono mb-1">Campus Presets:</div>
             <div class="flex items-center gap-1.5 flex-wrap text-[10px]">
-              <button type="button" class="btn-landmark-preset px-2 py-0.5 rounded bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-cyan-500/40 text-slate-300 transition" data-landmark="Central Library Reception Desk" data-lat="28.5454" data-lng="77.1928">🏛️ Central Library</button>
-              <button type="button" class="btn-landmark-preset px-2 py-0.5 rounded bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-cyan-500/40 text-slate-300 transition" data-landmark="Campus Cafe Lounge / Nescafe" data-lat="28.5447" data-lng="77.1932">☕ Campus Cafe</button>
-              <button type="button" class="btn-landmark-preset px-2 py-0.5 rounded bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-cyan-500/40 text-slate-300 transition" data-landmark="Student Activity Center (SAC)" data-lat="28.5460" data-lng="77.1915">🏟️ SAC Ground</button>
-              <button type="button" class="btn-landmark-preset px-2 py-0.5 rounded bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-cyan-500/40 text-slate-300 transition" data-landmark="Main Gate Security Post" data-lat="28.5435" data-lng="77.1908">🛡️ Main Gate</button>
-              <button type="button" class="btn-landmark-preset px-2 py-0.5 rounded bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-cyan-500/40 text-slate-300 transition" data-landmark="Hostel Quad Courtyard" data-lat="28.5468" data-lng="77.1942">🏢 Hostel Quad</button>
+              <button type="button" class="btn-landmark-preset px-2 py-0.5 rounded bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-cyan-500/40 text-slate-300 transition" data-landmark="Central Library Reception Desk" data-lat="28.5454" data-lng="77.1928">ðŸ›ï¸ Central Library</button>
+              <button type="button" class="btn-landmark-preset px-2 py-0.5 rounded bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-cyan-500/40 text-slate-300 transition" data-landmark="Campus Cafe Lounge / Nescafe" data-lat="28.5447" data-lng="77.1932">â˜• Campus Cafe</button>
+              <button type="button" class="btn-landmark-preset px-2 py-0.5 rounded bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-cyan-500/40 text-slate-300 transition" data-landmark="Student Activity Center (SAC)" data-lat="28.5460" data-lng="77.1915">ðŸŸï¸ SAC Ground</button>
+              <button type="button" class="btn-landmark-preset px-2 py-0.5 rounded bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-cyan-500/40 text-slate-300 transition" data-landmark="Main Gate Security Post" data-lat="28.5435" data-lng="77.1908">ðŸ›¡ï¸ Main Gate</button>
+              <button type="button" class="btn-landmark-preset px-2 py-0.5 rounded bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-cyan-500/40 text-slate-300 transition" data-landmark="Hostel Quad Courtyard" data-lat="28.5468" data-lng="77.1942">ðŸ¢ Hostel Quad</button>
             </div>
           </div>
         </div>
@@ -1027,7 +1027,7 @@
               class="px-3 py-2.5 rounded-lg bg-cyan-950/70 hover:bg-cyan-900/80 border border-cyan-400/50 text-cyan-300 flex items-center justify-center gap-2 text-xs font-mono font-bold transition shadow-[0_0_10px_rgba(0,229,255,0.15)]"
             >
               <i data-lucide="camera" class="w-4 h-4 text-cyan-400"></i>
-              <span>📷 SNAP CAMERA</span>
+              <span>ðŸ“· SNAP CAMERA</span>
             </button>
             <button 
               type="button" 
@@ -1035,7 +1035,7 @@
               class="px-3 py-2.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 hover:text-white flex items-center justify-center gap-2 text-xs font-mono transition"
             >
               <i data-lucide="image" class="w-4 h-4 text-slate-400"></i>
-              <span>🖼️ CHOOSE PHOTO</span>
+              <span>ðŸ–¼ï¸ CHOOSE PHOTO</span>
             </button>
           </div>
 
@@ -1052,7 +1052,7 @@
               <div class="min-w-0 font-mono">
                 <div class="text-xs font-bold text-slate-100 flex items-center gap-1.5 truncate">
                   <span>Authentic Item Photo</span>
-                  <span class="text-emerald-400 text-[10px]">✓ Ready</span>
+                  <span class="text-emerald-400 text-[10px]">âœ“ Ready</span>
                 </div>
                 <div class="flex items-center gap-1.5 mt-0.5">
                   <span id="image-compression-badge" class="text-[10px] px-1.5 py-0.2 rounded bg-emerald-950 text-emerald-300 border border-emerald-500/40">
@@ -1194,7 +1194,7 @@
             <h4 id="chat-seller-name" class="font-bold text-white text-xs font-mono">Seller</h4>
             <div class="flex items-center gap-1.5 text-[10px] text-emerald-400 font-mono">
               <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-              <span>Online • Signal Strong</span>
+              <span>Online â€¢ Signal Strong</span>
             </div>
           </div>
         </div>
@@ -1206,7 +1206,7 @@
       <!-- Item Context Strip -->
       <div class="px-4 py-2 bg-slate-900/80 border-b border-slate-800 flex items-center justify-between text-xs font-mono">
         <span id="chat-item-title" class="text-slate-200 truncate max-w-[200px]">Item Title</span>
-        <span id="chat-item-price" class="text-emerald-400 font-bold">₹0</span>
+        <span id="chat-item-price" class="text-emerald-400 font-bold">â‚¹0</span>
       </div>
 
       <!-- Exact Pickup Spot Strip with Google Maps Walking Directions -->
@@ -1243,11 +1243,11 @@
         <div class="flex items-center gap-1.5 flex-1 min-w-0">
           <i data-lucide="shield-check" class="w-3.5 h-3.5 text-emerald-400 shrink-0"></i>
           <select id="chat-safe-hub-select" class="bg-slate-900 border border-slate-700 text-slate-300 rounded px-2 py-1 text-[11px] w-full focus:outline-none focus:border-cyan-400 cursor-pointer">
-            <option value="">📍 Propose Safe Meetup Spot...</option>
-            <option value="Central Library Reception Desk">🏛️ Central Library Reception</option>
-            <option value="Campus Cafe Lounge / Nescafe">☕ Campus Cafe Lounge</option>
-            <option value="Student Activity Center (SAC)">🏟️ Student Activity Center</option>
-            <option value="Main Gate Security Guard Post">🛡️ Main Gate Guard Post</option>
+            <option value="">ðŸ“ Propose Safe Meetup Spot...</option>
+            <option value="Central Library Reception Desk">ðŸ›ï¸ Central Library Reception</option>
+            <option value="Campus Cafe Lounge / Nescafe">â˜• Campus Cafe Lounge</option>
+            <option value="Student Activity Center (SAC)">ðŸŸï¸ Student Activity Center</option>
+            <option value="Main Gate Security Guard Post">ðŸ›¡ï¸ Main Gate Guard Post</option>
           </select>
         </div>
 
@@ -1281,11 +1281,11 @@
       <div id="chat-upi-sheet" class="hidden p-3 bg-slate-950 border-t border-emerald-500/40 text-center flex flex-col items-center space-y-1.5">
         <div class="flex items-center justify-between w-full text-xs font-mono pb-1 border-b border-slate-800">
           <span class="text-emerald-400 font-bold flex items-center gap-1"><i data-lucide="qr-code" class="w-3.5 h-3.5"></i> INSTANT UPI SCAN</span>
-          <button type="button" id="btn-close-upi-sheet" class="text-slate-400 hover:text-white">✕</button>
+          <button type="button" id="btn-close-upi-sheet" class="text-slate-400 hover:text-white">âœ•</button>
         </div>
         <img id="chat-upi-qr-img" src="" class="w-32 h-32 rounded-lg border border-emerald-500/50 bg-slate-900 p-1" />
         <div class="text-[11px] font-mono text-slate-300">
-          Paying <strong id="chat-upi-amount" class="text-emerald-400">₹0</strong> to <span id="chat-upi-id-display" class="text-cyan-300">seller</span>
+          Paying <strong id="chat-upi-amount" class="text-emerald-400">â‚¹0</strong> to <span id="chat-upi-id-display" class="text-cyan-300">seller</span>
         </div>
         <div class="text-[10px] text-slate-500">Scan with Google Pay, PhonePe, or Paytm</div>
       </div>
@@ -1294,7 +1294,7 @@
       <div class="px-3 py-1.5 bg-slate-950/90 border-t border-slate-800 flex items-center gap-1.5 overflow-x-auto text-[11px] font-mono whitespace-nowrap">
         <button type="button" id="btn-chip-make-offer" class="px-2.5 py-1 rounded bg-amber-950/50 hover:bg-amber-900/70 text-amber-300 border border-amber-500/40 transition flex items-center gap-1 shrink-0 font-bold cursor-pointer">
           <i data-lucide="tag" class="w-3 h-3 text-amber-400"></i>
-          <span>🏷️ Make an Offer</span>
+          <span>ðŸ·ï¸ Make an Offer</span>
         </button>
         <button class="quick-chip px-2.5 py-1 rounded bg-slate-900 hover:bg-slate-800 text-cyan-300 border border-slate-800 transition">
           Is this still available?
@@ -1303,7 +1303,7 @@
           Can we meet at the Library?
         </button>
         <button class="quick-chip px-2.5 py-1 rounded bg-slate-900 hover:bg-slate-800 text-cyan-300 border border-slate-800 transition">
-          Can you do a ₹50 discount?
+          Can you do a â‚¹50 discount?
         </button>
       </div>
 
@@ -1395,9 +1395,9 @@
           <div class="w-full pt-1 border-t border-slate-800/80 space-y-1.5 text-left">
             <span class="text-[11px] font-mono text-slate-400">Trade Feedback:</span>
             <div class="flex items-center gap-1.5 flex-wrap text-[11px]">
-              <button type="button" class="btn-handshake-tag px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 transition cursor-pointer" data-tag="Smooth & fast!">⚡ Smooth & fast</button>
-              <button type="button" class="btn-handshake-tag px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 transition cursor-pointer" data-tag="Great condition!">📚 Great condition</button>
-              <button type="button" class="btn-handshake-tag px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 transition cursor-pointer" data-tag="Friendly seller!">⭐ Friendly seller</button>
+              <button type="button" class="btn-handshake-tag px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 transition cursor-pointer" data-tag="Smooth & fast!">âš¡ Smooth & fast</button>
+              <button type="button" class="btn-handshake-tag px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 transition cursor-pointer" data-tag="Great condition!">ðŸ“š Great condition</button>
+              <button type="button" class="btn-handshake-tag px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 transition cursor-pointer" data-tag="Friendly seller!">â­ Friendly seller</button>
             </div>
           </div>
 
@@ -1415,7 +1415,7 @@
         <div id="handshake-success-view" class="w-full hidden flex flex-col items-center space-y-4 py-2">
           <div class="relative w-20 h-20 rounded-full bg-emerald-500/20 border-2 border-emerald-400 flex items-center justify-center text-emerald-400 shadow-[0_0_30px_rgba(0,255,157,0.5)]">
             <i data-lucide="award" class="w-10 h-10 animate-bounce"></i>
-            <span class="absolute -top-1 -right-1 text-lg">🎉</span>
+            <span class="absolute -top-1 -right-1 text-lg">ðŸŽ‰</span>
           </div>
 
           <div class="space-y-1 text-center">
@@ -1468,7 +1468,7 @@
       <div class="p-5 space-y-4 font-mono">
         <div class="flex items-center justify-between p-3 rounded-xl bg-slate-900/90 border border-slate-800">
           <span class="text-slate-400 text-xs">Original Listed Price:</span>
-          <span id="offer-modal-original-price" class="text-slate-100 font-bold text-base">₹0</span>
+          <span id="offer-modal-original-price" class="text-slate-100 font-bold text-base">â‚¹0</span>
         </div>
 
         <!-- Quick Discount Chips -->
@@ -1484,9 +1484,9 @@
 
         <!-- Custom Amount Input -->
         <div>
-          <label class="block text-[11px] text-slate-400 mb-1.5 uppercase font-bold">Proposed Deal Amount (₹):</label>
+          <label class="block text-[11px] text-slate-400 mb-1.5 uppercase font-bold">Proposed Deal Amount (â‚¹):</label>
           <div class="relative">
-            <span class="absolute left-3.5 top-2.5 text-amber-400 font-bold text-base">₹</span>
+            <span class="absolute left-3.5 top-2.5 text-amber-400 font-bold text-base">â‚¹</span>
             <input type="number" id="input-offer-amount" placeholder="e.g. 240" min="1" step="1"
               class="w-full bg-slate-900 border border-slate-700 rounded-xl pl-8 pr-3 py-2.5 text-base text-slate-100 font-bold focus:outline-none focus:border-amber-400 placeholder:text-slate-600" />
           </div>
@@ -1495,7 +1495,7 @@
         <!-- Savings Indicator -->
         <div id="offer-savings-preview" class="hidden p-2.5 rounded-xl bg-emerald-950/50 border border-emerald-500/40 text-xs text-emerald-300 flex items-center justify-between">
           <span class="flex items-center gap-1"><i data-lucide="zap" class="w-3.5 h-3.5 text-emerald-400"></i> Potential Savings:</span>
-          <strong id="offer-savings-amount" class="text-emerald-400 font-bold">Save ₹0 (0%)</strong>
+          <strong id="offer-savings-amount" class="text-emerald-400 font-bold">Save â‚¹0 (0%)</strong>
         </div>
 
         <button type="button" id="btn-submit-offer" class="w-full py-3 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(245,158,11,0.35)] transition cursor-pointer">
@@ -1524,7 +1524,7 @@
       <div class="p-5 space-y-4 font-mono">
         <p class="text-xs text-slate-300">Enter an alternative counter price you would be willing to accept:</p>
         <div class="relative">
-          <span class="absolute left-3.5 top-2.5 text-cyan-400 font-bold text-base">₹</span>
+          <span class="absolute left-3.5 top-2.5 text-cyan-400 font-bold text-base">â‚¹</span>
           <input type="number" id="input-counter-amount" placeholder="e.g. 260" min="1" step="1"
             class="w-full bg-slate-900 border border-slate-700 rounded-xl pl-8 pr-3 py-2.5 text-base text-slate-100 font-bold focus:outline-none focus:border-cyan-400 placeholder:text-slate-600" />
         </div>
@@ -1711,7 +1711,7 @@
 
             <!-- Collapsible Google Client ID Config -->
             <details class="w-full text-[11px] text-slate-400">
-              <summary class="cursor-pointer hover:text-cyan-300 transition">⚙️ Set Custom Google Client ID (Google Cloud)</summary>
+              <summary class="cursor-pointer hover:text-cyan-300 transition">âš™ï¸ Set Custom Google Client ID (Google Cloud)</summary>
               <div class="mt-2 space-y-2 p-2 rounded bg-slate-950 border border-slate-800">
                 <input 
                   type="text" 
@@ -1844,11 +1844,11 @@
         <div class="truncate flex items-center gap-2">
           <i data-lucide="camera" class="w-4 h-4 text-cyan-400 shrink-0"></i>
           <span id="lightbox-title" class="font-bold text-white truncate">Item Title</span>
-          <span class="text-slate-500">•</span>
+          <span class="text-slate-500">â€¢</span>
           <span id="lightbox-condition" class="text-emerald-400 font-bold">Authentic Photo</span>
         </div>
         <div class="text-[11px] text-slate-400 shrink-0 flex items-center gap-2">
-          <span class="px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-500/30">🔍 Full View</span>
+          <span class="px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-500/30">ðŸ” Full View</span>
           <span class="hidden sm:inline text-slate-500">Press ESC to close</span>
         </div>
       </div>
@@ -1975,7 +1975,7 @@
             </div>
             <div class="border-l border-slate-700 pl-3">
               <span class="text-slate-500 text-[10px] uppercase block">Distance from You:</span>
-              <span id="pinpoint-distance-text" class="text-cyan-300 font-bold">~0 m • 0 min walk</span>
+              <span id="pinpoint-distance-text" class="text-cyan-300 font-bold">~0 m â€¢ 0 min walk</span>
             </div>
           </div>
 
@@ -2123,7 +2123,7 @@
           </div>
           <div>
             <h2 class="font-bold font-mono text-sm text-pink-200 uppercase tracking-wider">Campus Bounty Board</h2>
-            <p class="text-[10px] text-slate-400 font-mono">Students looking to BUY — tap "I HAVE THIS!" to respond</p>
+            <p class="text-[10px] text-slate-400 font-mono">Students looking to BUY â€” tap "I HAVE THIS!" to respond</p>
           </div>
         </div>
         <button id="btn-close-bounty-board" class="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition cursor-pointer">
@@ -2136,7 +2136,7 @@
         <span class="text-pink-300 font-bold">
           <span id="bounty-count-display">0</span> ACTIVE BOUNTIES ON CAMPUS
         </span>
-        <span class="text-slate-500">🎯 = magenta blip on radar</span>
+        <span class="text-slate-500">ðŸŽ¯ = magenta blip on radar</span>
       </div>
 
       <!-- Bounty List -->
@@ -2180,7 +2180,7 @@
             <span>Simulate / Drag</span>
           </button>
           <button id="btn-close-ar-compass" type="button" class="w-8 h-8 rounded-full bg-slate-950/80 border border-slate-700 hover:border-rose-500 text-slate-300 hover:text-rose-400 flex items-center justify-center font-bold text-sm backdrop-blur-md transition cursor-pointer">
-            ✕
+            âœ•
           </button>
         </div>
       </div>
@@ -2199,14 +2199,14 @@
         <i data-lucide="arrow-left" class="w-5 h-5 text-cyan-300"></i>
         <div>
           <div class="text-[10px] text-slate-400">TURN LEFT</div>
-          <div id="ar-arrow-left-deg" class="text-sm font-bold text-cyan-300">--°</div>
+          <div id="ar-arrow-left-deg" class="text-sm font-bold text-cyan-300">--Â°</div>
         </div>
       </div>
 
       <div id="ar-arrow-right" class="ar-guidance-arrow right hidden">
         <div class="text-right">
           <div class="text-[10px] text-slate-400">TURN RIGHT</div>
-          <div id="ar-arrow-right-deg" class="text-sm font-bold text-cyan-300">--°</div>
+          <div id="ar-arrow-right-deg" class="text-sm font-bold text-cyan-300">--Â°</div>
         </div>
         <i data-lucide="arrow-right" class="w-5 h-5 text-cyan-300"></i>
       </div>
@@ -2222,7 +2222,7 @@
           <div id="ar-reticle-title" class="font-bold text-xs text-white">Target Item</div>
           <div class="flex items-center justify-center gap-2 text-[10px] font-mono mt-0.5">
             <span id="ar-reticle-distance" class="text-emerald-400 font-bold">-- m</span>
-            <span class="text-slate-500">•</span>
+            <span class="text-slate-500">â€¢</span>
             <span id="ar-reticle-status" class="text-cyan-300 font-bold uppercase">LOCKING ON</span>
           </div>
         </div>
@@ -2241,8 +2241,8 @@
             </div>
           </div>
           <div class="text-right">
-            <div id="ar-hud-price" class="text-sm font-bold text-emerald-400 font-sans">₹--</div>
-            <div id="ar-hud-azimuth" class="text-[10px] text-cyan-400">BEARING: --°</div>
+            <div id="ar-hud-price" class="text-sm font-bold text-emerald-400 font-sans">â‚¹--</div>
+            <div id="ar-hud-azimuth" class="text-[10px] text-cyan-400">BEARING: --Â°</div>
           </div>
         </div>
 
@@ -2266,18 +2266,18 @@
         <div id="ar-manual-heading-container" class="hidden mt-3 pt-2 border-t border-slate-800 flex items-center gap-2 text-[10px] text-slate-400">
           <span>DRAG HEADING:</span>
           <input type="range" id="ar-manual-heading-slider" min="0" max="359" value="0" class="flex-1 cursor-pointer">
-          <span id="ar-manual-heading-val" class="text-cyan-300 w-8 text-right font-bold">0°</span>
+          <span id="ar-manual-heading-val" class="text-cyan-300 w-8 text-right font-bold">0Â°</span>
         </div>
       </div>
     </div>
   </div>
 
   <!-- SCRIPTS -->
-  <script src="js/data.js?v=3.3"></script>
-  <script src="js/algorithm.js?v=3.3"></script>
-  <script src="js/radar.js?v=3.3"></script>
-  <script src="js/api.js?v=3.3"></script>
-  <script src="js/app.js?v=3.3"></script>
+  <script src="js/data.js?v=3.3.1"></script>
+  <script src="js/algorithm.js?v=3.3.1"></script>
+  <script src="js/radar.js?v=3.3.1"></script>
+  <script src="js/api.js?v=3.3.1"></script>
+  <script src="js/app.js?v=3.3.1"></script>
 
   <script>
     // Initialize Lucide icons on page load

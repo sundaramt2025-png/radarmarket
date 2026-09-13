@@ -387,7 +387,11 @@
     const totalCount = state.filteredItems.length;
     document.getElementById("hud-target-count").textContent = inRangeCount > 0 ? inRangeCount : totalCount;
     document.getElementById("feed-count").textContent = totalCount;
-    document.getElementById("hud-location-text").textContent = state.userLocation.name;
+    // Only update via textContent when NOT in live GPS mode, to avoid destroying
+    // the pulsing green dot animation set by initLiveLocationTracking via innerHTML.
+    if (!state.userLocation.isLiveGPS) {
+      document.getElementById("hud-location-text").textContent = state.userLocation.name;
+    }
   }
 
   /**
@@ -412,6 +416,12 @@
       document.getElementById("target-title").textContent = "No target acquired in this sector";
       document.getElementById("target-algo-score").textContent = "--";
       document.getElementById("target-signal-tier").textContent = "SIGNAL: LOST";
+      // Reset proximity zone badge to avoid stale distance values
+      const proximityZoneReset = document.getElementById("target-proximity-zone");
+      if (proximityZoneReset) {
+        proximityZoneReset.textContent = "";
+        proximityZoneReset.className = "hidden";
+      }
       return;
     }
     panel.classList.remove("opacity-50");
@@ -816,6 +826,10 @@
       const val = parseInt(e.target.value, 10);
       state.maxRadiusMeters = val;
       rangeDisplay.textContent = val >= 1000 ? `${(val / 1000).toFixed(1)} km` : `${val} m`;
+      // Keep emerald color when locked to 500m zone, otherwise revert to normal cyan
+      rangeDisplay.className = val === 500
+        ? "text-emerald-400 font-bold min-w-[46px] text-right"
+        : "text-cyan-400 font-bold min-w-[46px] text-right";
       if (radarEngine) {
         radarEngine.setMaxRadius(val);
       }
@@ -4560,6 +4574,7 @@
         ? "px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-500/40 text-[10px] font-mono font-bold flex items-center gap-1"
         : "px-2 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-500/40 text-[10px] font-mono font-bold flex items-center gap-1";
       distBadge.innerHTML = `<i data-lucide="navigation" class="w-3 h-3"></i> ${distFormatted} (${walkTime}) ${inZone ? '• &lt;500m' : ''}`;
+      if (window.lucide) lucide.createIcons();
     }
 
     const gmapsBtn = document.getElementById("btn-chat-google-maps");
