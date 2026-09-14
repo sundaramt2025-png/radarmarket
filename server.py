@@ -11,6 +11,8 @@ import uuid
 import socket
 import sqlite3
 import hashlib
+import hmac
+import base64
 import re
 import random
 import urllib.request
@@ -496,6 +498,42 @@ def verify_google_token(id_token):
         print("Google token verification error:", e)
     return None
 
+# ==============================================================================
+# Cryptographically Signed Stateless Auth Tokens (Survives server redeploys & resets)
+# ==============================================================================
+SECRET_KEY = os.environ.get("SESSION_SECRET", "radarmarket-prod-secret-v3-campus-auth-key-2026")
+
+def generate_signed_token(user_payload):
+    """Generate tamper-proof HMAC-SHA256 signed session token that survives server redeploys."""
+    payload_str = json.dumps(user_payload, separators=(',', ':'), sort_keys=True)
+    b64_part = base64.urlsafe_b64encode(payload_str.encode('utf-8')).decode('utf-8').rstrip('=')
+    signature = hmac.new(SECRET_KEY.encode('utf-8'), b64_part.encode('utf-8'), hashlib.sha256).hexdigest()
+    return f"rmtk.{b64_part}.{signature}"
+
+def verify_signed_token(token):
+    """Verify and decode signed session token. Returns payload dict or None."""
+    if not token or not isinstance(token, str) or not token.startswith("rmtk."):
+        return None
+    parts = token.split(".")
+    if len(parts) != 3:
+        return None
+    _, b64_part, signature = parts
+    try:
+        expected_sig = hmac.new(SECRET_KEY.encode('utf-8'), b64_part.encode('utf-8'), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(signature, expected_sig):
+            return None
+        rem = len(b64_part) % 4
+        padded = b64_part + ("=" * (4 - rem) if rem else "")
+        payload_str = base64.urlsafe_b64decode(padded.encode('utf-8')).decode('utf-8')
+        payload = json.loads(payload_str)
+        # Check expiration (1 year default)
+        if payload.get("exp") and time.time() > payload["exp"]:
+            return None
+        return payload
+    except Exception as e:
+        print("[auth] Token verification exception:", e)
+        return None
+
 def get_authenticated_user(db):
     """Resolve currently authenticated user from Bearer session token or device ID."""
     auth_header = request.headers.get('Authorization', '')
@@ -505,6 +543,51 @@ def get_authenticated_user(db):
     
     cur = db.cursor()
     if session_token:
+        # 1. Stateless cryptographic token verification (survives database wipe or server redeploy)
+        token_payload = verify_signed_token(session_token)
+        if token_payload and token_payload.get("id"):
+            u_id = token_payload["id"]
+            u_email = token_payload.get("email")
+            if u_email:
+                cur.execute("SELECT * FROM users WHERE id = ? OR email = ?", (u_id, u_email))
+            else:
+                cur.execute("SELECT * FROM users WHERE id = ?", (u_id,))
+            row = cur.fetchone()
+            if row:
+                user = dict(row)
+                if user.get("session_token") != session_token:
+                    cur.execute("UPDATE users SET session_token = ?, last_active_at = ? WHERE id = ?", (session_token, time.time(), user["id"]))
+                    db.commit()
+                return user
+            else:
+                # AUTO-HEAL: Database was wiped on redeploy! Re-insert verified user immediately!
+                now = time.time()
+                cur.execute("""
+                    INSERT OR REPLACE INTO users (
+                        id, nickname, avatar, created_at, last_active_at,
+                        google_id, email, picture, is_verified, is_campus_verified, auth_provider, session_token
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
+                """, (
+                    u_id,
+                    token_payload.get("nickname", "Verified Student"),
+                    token_payload.get("picture") or token_payload.get("avatar"),
+                    now,
+                    now,
+                    token_payload.get("google_id"),
+                    u_email,
+                    token_payload.get("picture") or token_payload.get("avatar"),
+                    token_payload.get("is_campus_verified", 0),
+                    token_payload.get("auth_provider", "google"),
+                    session_token
+                ))
+                db.commit()
+                save_data_backup()
+                cur.execute("SELECT * FROM users WHERE id = ?", (u_id,))
+                new_row = cur.fetchone()
+                if new_row:
+                    return dict(new_row)
+
+        # 2. Legacy database token lookup fallback
         cur.execute("SELECT * FROM users WHERE session_token = ?", (session_token,))
         row = cur.fetchone()
         if row:
@@ -576,7 +659,6 @@ def auth_google():
         return jsonify({"success": False, "error": "Please provide a valid Email address or Google credential"}), 400
 
     is_campus = 1 if is_campus_email(email) else 0
-    session_token = "sess-" + uuid.uuid4().hex
 
     cur = db.cursor()
     cur.execute("SELECT * FROM users WHERE google_id = ? OR email = ?", (google_id, email))
@@ -585,6 +667,32 @@ def auth_google():
     user_id = None
     if existing_user:
         user_id = existing_user['id']
+    elif device_id:
+        cur.execute("SELECT * FROM users WHERE id = ?", (device_id,))
+        guest_row = cur.fetchone()
+        if guest_row and not guest_row['google_id']:
+            user_id = device_id
+
+    if not user_id:
+        user_id = "usr-" + uuid.uuid4().hex[:10]
+
+    # Generate persistent signed cryptographic token (valid for 1 year, survives server redeploys)
+    token_payload = {
+        "id": user_id,
+        "google_id": google_id,
+        "email": email,
+        "nickname": name,
+        "picture": picture,
+        "avatar": picture,
+        "is_campus_verified": is_campus,
+        "is_verified": 1,
+        "auth_provider": auth_provider,
+        "iat": now,
+        "exp": now + 365 * 24 * 3600
+    }
+    session_token = generate_signed_token(token_payload)
+
+    if existing_user or (device_id and user_id == device_id):
         cur.execute("""
             UPDATE users SET 
                 google_id = ?,
@@ -600,35 +708,12 @@ def auth_google():
             WHERE id = ?
         """, (google_id, name, email, picture, picture, is_campus, auth_provider, session_token, now, user_id))
     else:
-        # Check if device_id exists as guest
-        if device_id:
-            cur.execute("SELECT * FROM users WHERE id = ?", (device_id,))
-            guest_row = cur.fetchone()
-            if guest_row and not guest_row['google_id']:
-                user_id = device_id
-                cur.execute("""
-                    UPDATE users SET 
-                        google_id = ?,
-                        nickname = ?,
-                        email = ?,
-                        picture = ?,
-                        avatar = ?,
-                        is_verified = 1,
-                        is_campus_verified = ?,
-                        auth_provider = ?,
-                        session_token = ?,
-                        last_active_at = ?
-                    WHERE id = ?
-                """, (google_id, name, email, picture, picture, is_campus, auth_provider, session_token, now, user_id))
-
-        if not user_id:
-            user_id = "usr-" + uuid.uuid4().hex[:10]
-            cur.execute("""
-                INSERT INTO users (
-                    id, nickname, avatar, lat, lng, created_at, last_active_at,
-                    google_id, email, picture, is_verified, is_campus_verified, auth_provider, session_token
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
-            """, (user_id, name, picture, None, None, now, now, google_id, email, picture, is_campus, auth_provider, session_token))
+        cur.execute("""
+            INSERT INTO users (
+                id, nickname, avatar, lat, lng, created_at, last_active_at,
+                google_id, email, picture, is_verified, is_campus_verified, auth_provider, session_token
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
+        """, (user_id, name, picture, None, None, now, now, google_id, email, picture, is_campus, auth_provider, session_token))
 
     # Link existing items broadcasted on this device or session to this google account
     if device_id:
@@ -668,13 +753,67 @@ def auth_google():
 
 @app.route('/api/auth/session', methods=['GET'])
 def get_auth_session():
-    """Validate current session token and return user identity."""
+    """Validate current session token and return user identity (with auto-heal for server redeploys)."""
     db = get_db()
     auth_header = request.headers.get('Authorization', '')
     if not auth_header.startswith('Bearer '):
         return jsonify({"success": True, "authenticated": False, "user": None})
 
     session_token = auth_header[7:].strip()
+    
+    # 1. Stateless cryptographic verification
+    token_payload = verify_signed_token(session_token)
+    if token_payload and token_payload.get("id"):
+        cur = db.cursor()
+        u_id = token_payload["id"]
+        u_email = token_payload.get("email")
+        if u_email:
+            cur.execute("SELECT * FROM users WHERE id = ? OR email = ?", (u_id, u_email))
+        else:
+            cur.execute("SELECT * FROM users WHERE id = ?", (u_id,))
+        row = cur.fetchone()
+        if not row:
+            # Auto-heal user into database after redeploy
+            now = time.time()
+            cur.execute("""
+                INSERT OR REPLACE INTO users (
+                    id, nickname, avatar, created_at, last_active_at,
+                    google_id, email, picture, is_verified, is_campus_verified, auth_provider, session_token
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
+            """, (
+                u_id,
+                token_payload.get("nickname", "Verified Student"),
+                token_payload.get("picture") or token_payload.get("avatar"),
+                now,
+                now,
+                token_payload.get("google_id"),
+                u_email,
+                token_payload.get("picture") or token_payload.get("avatar"),
+                token_payload.get("is_campus_verified", 0),
+                token_payload.get("auth_provider", "google"),
+                session_token
+            ))
+            db.commit()
+            save_data_backup()
+            cur.execute("SELECT * FROM users WHERE id = ?", (u_id,))
+            row = cur.fetchone()
+
+        if row:
+            user = dict(row)
+            safe_user = {
+                "id": user["id"],
+                "google_id": user.get("google_id"),
+                "nickname": user["nickname"],
+                "email": user.get("email"),
+                "picture": user.get("picture") or user.get("avatar"),
+                "avatar": user.get("avatar") or user.get("picture"),
+                "is_verified": bool(user.get("is_verified", 1)),
+                "is_campus_verified": bool(user.get("is_campus_verified", 0)),
+                "auth_provider": user.get("auth_provider", "google")
+            }
+            return jsonify({"success": True, "authenticated": True, "user": safe_user})
+
+    # 2. Legacy database lookup fallback
     cur = db.cursor()
     cur.execute("SELECT * FROM users WHERE session_token = ?", (session_token,))
     row = cur.fetchone()
@@ -703,8 +842,13 @@ def auth_logout():
     if auth_header.startswith('Bearer '):
         session_token = auth_header[7:].strip()
         cur = db.cursor()
-        cur.execute("UPDATE users SET session_token = NULL WHERE session_token = ?", (session_token,))
+        token_payload = verify_signed_token(session_token)
+        if token_payload and token_payload.get("id"):
+            cur.execute("UPDATE users SET session_token = NULL WHERE id = ?", (token_payload["id"],))
+        else:
+            cur.execute("UPDATE users SET session_token = NULL WHERE session_token = ?", (session_token,))
         db.commit()
+        save_data_backup()
     return jsonify({"success": True, "message": "Logged out successfully"})
 
 @app.route('/api/me', methods=['GET', 'POST'])

@@ -38,7 +38,7 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 
   <!-- Custom Radar HUD Styles -->
-  <link rel="stylesheet" href="css/styles.css?v=3.8.5">
+  <link rel="stylesheet" href="css/styles.css?v=3.8.6">
 
   <script>
     tailwind.config = {
@@ -62,6 +62,31 @@
         }
       }
     }
+  </script>
+
+  <!-- Instant Zero-Flicker Identity Recovery -->
+  <script>
+    try {
+      const _cachedAuth = localStorage.getItem("radarmarket_google_user");
+      if (_cachedAuth) {
+        const _u = JSON.parse(_cachedAuth);
+        if (_u && (_u.nickname || _u.email)) {
+          window.addEventListener("DOMContentLoaded", () => {
+            const nameEl = document.getElementById("user-profile-name");
+            const avatarEl = document.getElementById("hud-user-avatar");
+            const dotEl = document.getElementById("hud-verified-dot");
+            const badgeEl = document.getElementById("hud-verified-badge");
+            if (nameEl) nameEl.textContent = _u.nickname || _u.name || "Verified User";
+            if (avatarEl && (_u.avatar || _u.picture)) avatarEl.src = _u.avatar || _u.picture;
+            if (dotEl) dotEl.className = "absolute -top-1 -right-1 w-2 h-2 rounded-full bg-emerald-400 animate-pulse";
+            if (badgeEl) {
+              badgeEl.classList.remove("hidden");
+              badgeEl.textContent = _u.is_campus_verified ? "CAMPUS" : "VERIFIED";
+            }
+          });
+        }
+      }
+    } catch(e) {}
   </script>
 </head>
 <body class="scanline-bg text-slate-100 flex flex-col min-h-screen selection:bg-cyan-500/30 selection:text-cyan-200">
@@ -2497,12 +2522,12 @@
   </div>
 
   <!-- SCRIPTS -->
-  <script src="js/data.js?v=3.8.5"></script>
-  <script src="js/campuses.js?v=3.8.5"></script>
-  <script src="js/algorithm.js?v=3.8.5"></script>
-  <script src="js/radar.js?v=3.8.5"></script>
-  <script src="js/api.js?v=3.8.5"></script>
-  <script src="js/app.js?v=3.8.5"></script>
+  <script src="js/data.js?v=3.8.6"></script>
+  <script src="js/campuses.js?v=3.8.6"></script>
+  <script src="js/algorithm.js?v=3.8.6"></script>
+  <script src="js/radar.js?v=3.8.6"></script>
+  <script src="js/api.js?v=3.8.6"></script>
+  <script src="js/app.js?v=3.8.6"></script>
 
   <script>
     // Initialize Lucide icons on page load

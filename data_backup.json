@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "timestamp": 1789371741.1608887,
+  "timestamp": 1789398821.7345285,
   "items": [
     {
       "id": "item-9179eecd53",
@@ -174,8 +174,41 @@
       "auth_provider": "guest",
       "session_token": null,
       "trades_completed": 0
+    },
+    {
+      "id": "usr-test-12345",
+      "nickname": "IITB Scholar",
+      "avatar": "https://api.dicebear.com/7.x/initials/svg?seed=IITB",
+      "lat": null,
+      "lng": null,
+      "created_at": 1789398821.6750138,
+      "last_active_at": 1789398821.6750138,
+      "google_id": "google-100200300",
+      "email": "student@iitb.ac.in",
+      "picture": "https://api.dicebear.com/7.x/initials/svg?seed=IITB",
+      "is_verified": 1,
+      "is_campus_verified": 1,
+      "auth_provider": "campus",
+      "session_token": "rmtk.eyJhdXRoX3Byb3ZpZGVyIjoiY2FtcHVzIiwiYXZhdGFyIjoiaHR0cHM6Ly9hcGkuZGljZWJlYXIuY29tLzcueC9pbml0aWFscy9zdmc_c2VlZD1JSVRCIiwiZW1haWwiOiJzdHVkZW50QGlpdGIuYWMuaW4iLCJleHAiOjE4MjA5MzQ4MjEuNjU1MDM4LCJnb29nbGVfaWQiOiJnb29nbGUtMTAwMjAwMzAwIiwiaWF0IjoxNzg5Mzk4ODIxLjY1NTAzNzYsImlkIjoidXNyLXRlc3QtMTIzNDUiLCJpc19jYW1wdXNfdmVyaWZpZWQiOjEsImlzX3ZlcmlmaWVkIjoxLCJuaWNrbmFtZSI6IklJVEIgU2Nob2xhciIsInBpY3R1cmUiOiJodHRwczovL2FwaS5kaWNlYmVhci5jb20vNy54L2luaXRpYWxzL3N2Zz9zZWVkPUlJVEIifQ.eeacc1817a6315404f6d289140bd57758150b12dccd00de2200388d9ed0a6ce9",
+      "trades_completed": 0
+    },
+    {
+      "id": "usr-58bbf30e57",
+      "nickname": "BITS Scholar",
+      "avatar": "https://api.dicebear.com/7.x/initials/svg?seed=BITS%20Scholar&backgroundColor=00e5ff,00ff9d,4285f4&textColor=0f172a",
+      "lat": null,
+      "lng": null,
+      "created_at": 1789398821.723365,
+      "last_active_at": 1789398821.723365,
+      "google_id": "usr-email-5602f158d7174a",
+      "email": "scholar@bits-pilani.ac.in",
+      "picture": "https://api.dicebear.com/7.x/initials/svg?seed=BITS%20Scholar&backgroundColor=00e5ff,00ff9d,4285f4&textColor=0f172a",
+      "is_verified": 1,
+      "is_campus_verified": 1,
+      "auth_provider": "campus",
+      "session_token": "rmtk.eyJhdXRoX3Byb3ZpZGVyIjoiY2FtcHVzIiwiYXZhdGFyIjoiaHR0cHM6Ly9hcGkuZGljZWJlYXIuY29tLzcueC9pbml0aWFscy9zdmc_c2VlZD1CSVRTJTIwU2Nob2xhciZiYWNrZ3JvdW5kQ29sb3I9MDBlNWZmLDAwZmY5ZCw0Mjg1ZjQmdGV4dENvbG9yPTBmMTcyYSIsImVtYWlsIjoic2Nob2xhckBiaXRzLXBpbGFuaS5hYy5pbiIsImV4cCI6MTgyMDkzNDgyMS42OTY5NjkzLCJnb29nbGVfaWQiOiJ1c3ItZW1haWwtNTYwMmYxNThkNzE3NGEiLCJpYXQiOjE3ODkzOTg4MjEuNjk2OTY5MywiaWQiOiJ1c3ItNThiYmYzMGU1NyIsImlzX2NhbXB1c192ZXJpZmllZCI6MSwiaXNfdmVyaWZpZWQiOjEsIm5pY2tuYW1lIjoiQklUUyBTY2hvbGFyIiwicGljdHVyZSI6Imh0dHBzOi8vYXBpLmRpY2ViZWFyLmNvbS83LngvaW5pdGlhbHMvc3ZnP3NlZWQ9QklUUyUyMFNjaG9sYXImYmFja2dyb3VuZENvbG9yPTAwZTVmZiwwMGZmOWQsNDI4NWY0JnRleHRDb2xvcj0wZjE3MmEifQ.a797753124bfd220bd9b18b1de4b489d7d4e86d54cd0b10c8fdf648ecd0c31ea",
+      "trades_completed": 0
     }
   ],
-  "messages": [],
-  "offers": []
+  "messages": []
 }
