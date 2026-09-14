@@ -522,13 +522,16 @@ def get_authenticated_user(db):
 @app.route('/api/auth/google', methods=['POST'])
 def auth_google():
     """
-    Authenticate with Google Identity Services ID Token or Instant Demo Campus Profile.
+    Authenticate with Google Identity Services ID Token, Google OAuth, or direct Email ID.
     Transfers prior guest listings and emits persistent cross-device identity.
     """
     db = get_db()
     data = request.get_json() or {}
     credential = data.get('credential')
-    is_demo = data.get('demo', False)
+    input_email = data.get('email')
+    input_name = data.get('name')
+    input_picture = data.get('picture')
+    input_google_id = data.get('google_id')
     device_id = request.headers.get('X-Device-Id') or data.get('device_id')
     now = time.time()
 
@@ -536,6 +539,7 @@ def auth_google():
     email = None
     name = None
     picture = None
+    auth_provider = 'google'
 
     if credential:
         payload = verify_google_token(credential)
@@ -545,13 +549,31 @@ def auth_google():
         email = payload.get('email', '')
         name = payload.get('name', 'Google User')
         picture = payload.get('picture', '')
-    elif is_demo:
-        email = data.get('email', 'student@iitb.ac.in')
-        name = data.get('name', 'Campus Student')
-        picture = data.get('picture') or f"https://api.dicebear.com/7.x/bottts/svg?seed={email}"
-        google_id = "google-demo-" + hashlib.md5(email.lower().encode()).hexdigest()[:14]
+        auth_provider = 'google'
+    elif input_email and '@' in str(input_email):
+        email = str(input_email).strip().lower()
+        if input_name and str(input_name).strip():
+            name = str(input_name).strip()
+        else:
+            prefix = email.split('@')[0].replace('.', ' ').replace('_', ' ').replace('-', ' ')
+            name = prefix.title()
+        
+        # High quality initials avatar if no picture provided
+        picture = input_picture or f"https://api.dicebear.com/7.x/initials/svg?seed={urllib.parse.quote(name)}&backgroundColor=00e5ff,00ff9d,4285f4&textColor=0f172a"
+        
+        if input_google_id and str(input_google_id).strip():
+            google_id = str(input_google_id).strip()
+        else:
+            google_id = "usr-email-" + hashlib.md5(email.encode('utf-8')).hexdigest()[:14]
+            
+        if email.endswith('@gmail.com'):
+            auth_provider = 'google'
+        elif is_campus_email(email):
+            auth_provider = 'campus'
+        else:
+            auth_provider = 'email'
     else:
-        return jsonify({"success": False, "error": "No credential or demo account provided"}), 400
+        return jsonify({"success": False, "error": "Please provide a valid Email address or Google credential"}), 400
 
     is_campus = 1 if is_campus_email(email) else 0
     session_token = "sess-" + uuid.uuid4().hex
@@ -572,11 +594,11 @@ def auth_google():
                 avatar = ?,
                 is_verified = 1,
                 is_campus_verified = ?,
-                auth_provider = 'google',
+                auth_provider = ?,
                 session_token = ?,
                 last_active_at = ?
             WHERE id = ?
-        """, (google_id, name, email, picture, picture, is_campus, session_token, now, user_id))
+        """, (google_id, name, email, picture, picture, is_campus, auth_provider, session_token, now, user_id))
     else:
         # Check if device_id exists as guest
         if device_id:
@@ -593,11 +615,11 @@ def auth_google():
                         avatar = ?,
                         is_verified = 1,
                         is_campus_verified = ?,
-                        auth_provider = 'google',
+                        auth_provider = ?,
                         session_token = ?,
                         last_active_at = ?
                     WHERE id = ?
-                """, (google_id, name, email, picture, picture, is_campus, session_token, now, user_id))
+                """, (google_id, name, email, picture, picture, is_campus, auth_provider, session_token, now, user_id))
 
         if not user_id:
             user_id = "usr-" + uuid.uuid4().hex[:10]
@@ -605,8 +627,8 @@ def auth_google():
                 INSERT INTO users (
                     id, nickname, avatar, lat, lng, created_at, last_active_at,
                     google_id, email, picture, is_verified, is_campus_verified, auth_provider, session_token
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, 'google', ?)
-            """, (user_id, name, picture, None, None, now, now, google_id, email, picture, is_campus, session_token))
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
+            """, (user_id, name, picture, None, None, now, now, google_id, email, picture, is_campus, auth_provider, session_token))
 
     # Link existing items broadcasted on this device or session to this google account
     if device_id:

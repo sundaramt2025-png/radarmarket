@@ -38,7 +38,7 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 
   <!-- Custom Radar HUD Styles -->
-  <link rel="stylesheet" href="css/styles.css?v=3.8.3">
+  <link rel="stylesheet" href="css/styles.css?v=3.8.4">
 
   <script>
     tailwind.config = {
@@ -1769,39 +1769,95 @@
         </div>
 
         <!-- VIEW B: GUEST / SIGN-IN VIEW (Active when logged out) -->
-        <div id="auth-view-guest" class="space-y-5">
-          <p class="text-xs text-slate-300 font-sans leading-relaxed">
-            Sign in with your Google Account to unlock a <strong>Verified Campus Badge</strong>, persistent listings synced between your phone and laptop, and an automatic <strong>+30 DSP-VI Trust Index</strong> radar boost!
-          </p>
-
-          <!-- 1. Live Google Identity Services Button Container -->
-          <div class="p-4 rounded-xl bg-slate-900/80 border border-cyan-500/30 flex flex-col items-center space-y-3">
-            <div class="text-[11px] uppercase text-cyan-300 font-bold flex items-center gap-1.5">
-              <span>Sign In With Google</span>
+        <div id="auth-view-guest" class="space-y-4">
+          
+          <!-- 1. Universal Instant Email & Google ID Sign-In (Primary, Zero Failures) -->
+          <div class="p-4 rounded-xl bg-slate-900/90 border border-cyan-500/40 shadow-[0_0_25px_rgba(0,229,255,0.15)] space-y-3">
+            <div class="flex items-center justify-between">
+              <div class="text-xs uppercase text-cyan-300 font-bold flex items-center gap-1.5">
+                <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+                  <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                  <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                  <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" fill="#FBBC05"/>
+                  <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" fill="#EA4335"/>
+                </svg>
+                <span>Instant Sign-In with Email ID</span>
+              </div>
+              <span class="text-[9px] font-bold uppercase text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-500/40">1-Click Login</span>
             </div>
-            
-            <div class="text-[10px] text-emerald-400 font-mono flex items-center gap-1.5 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-500/30">
-              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-              <span>Google Key: <strong>920180307647-...</strong></span>
+
+            <p class="text-[11px] text-slate-300 font-sans leading-relaxed">
+              Enter your Gmail, College, or Personal email to get your <strong>Verified Student Badge</strong> and sync all beacons across devices!
+            </p>
+
+            <form id="form-universal-email-login" class="space-y-2.5">
+              <div class="relative">
+                <i data-lucide="mail" class="w-4 h-4 text-cyan-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
+                <input 
+                  type="email" 
+                  id="input-universal-email" 
+                  required 
+                  placeholder="Enter your Gmail or College Email (e.g. rohit@gmail.com)" 
+                  class="w-full pl-9 pr-3 py-2.5 bg-slate-950 border border-slate-700 focus:border-cyan-400 rounded-lg text-xs font-mono text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-cyan-400/50 transition"
+                />
+              </div>
+
+              <div class="relative">
+                <i data-lucide="user" class="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2"></i>
+                <input 
+                  type="text" 
+                  id="input-universal-name" 
+                  placeholder="Your Name or Nickname (Optional)" 
+                  class="w-full pl-9 pr-3 py-2 bg-slate-950/70 border border-slate-800 focus:border-cyan-400 rounded-lg text-xs font-mono text-slate-200 placeholder-slate-500 focus:outline-none transition"
+                />
+              </div>
+
+              <!-- Quick 1-Tap Domain Chips -->
+              <div class="flex flex-wrap items-center gap-1.5 text-[10px] pt-0.5">
+                <span class="text-slate-500">Quick fill:</span>
+                <button type="button" class="btn-domain-chip px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-slate-700 transition" data-domain="@gmail.com">@gmail.com</button>
+                <button type="button" class="btn-domain-chip px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 transition" data-domain="@iitb.ac.in">@iitb.ac.in</button>
+                <button type="button" class="btn-domain-chip px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-slate-700 transition" data-domain="@mu.ac.in">@mu.ac.in</button>
+                <button type="button" class="btn-domain-chip px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition" data-domain="@ac.in">@ac.in</button>
+              </div>
+
+              <button type="submit" id="btn-submit-universal-email" class="w-full py-2.5 px-4 rounded-lg bg-gradient-to-r from-cyan-500 via-teal-400 to-emerald-400 hover:from-cyan-400 hover:to-emerald-300 text-slate-950 font-bold text-xs flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(0,229,255,0.3)] hover:shadow-[0_0_20px_rgba(0,229,255,0.5)] transition cursor-pointer">
+                <i data-lucide="check-circle-2" class="w-4 h-4"></i>
+                <span>Sign In & Verify Account</span>
+              </button>
+            </form>
+          </div>
+
+          <!-- 2. Google 1-Tap / OAuth Account Chooser -->
+          <div class="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800 flex flex-col items-center space-y-2.5">
+            <div class="w-full flex items-center justify-between text-[11px]">
+              <span class="text-slate-400 font-bold uppercase">Or Google Account Chooser:</span>
+              <span id="gis-status-badge" class="text-[10px] text-emerald-400 flex items-center gap-1 font-mono">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span>Active</span>
+              </span>
             </div>
 
-            <!-- Real Google GIS One-Tap / Standard Button Mount Target -->
+            <!-- Real Google GIS Mount Target -->
             <div id="google-signin-btn-container" class="flex justify-center min-h-[40px] w-full"></div>
 
-            <!-- Fallback / GIS Trigger -->
-            <button id="btn-trigger-gis-prompt" class="w-full py-2.5 px-4 rounded-lg bg-white hover:bg-slate-100 text-slate-900 font-sans font-medium text-xs flex items-center justify-center gap-2.5 shadow-md transition">
-              <svg class="w-4 h-4" viewBox="0 0 24 24">
+            <!-- 1-Tap / Popup Button -->
+            <button id="btn-trigger-gis-prompt" type="button" class="w-full py-2.5 px-4 rounded-lg bg-white hover:bg-slate-100 text-slate-900 font-sans font-medium text-xs flex items-center justify-center gap-2.5 shadow-md transition cursor-pointer">
+              <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24">
                 <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
                 <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
                 <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" fill="#FBBC05"/>
                 <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" fill="#EA4335"/>
               </svg>
-              <span>Continue with Google</span>
+              <span id="btn-trigger-gis-text">Open Google Account Chooser</span>
             </button>
 
+            <!-- Dynamic Feedback Notice if Google popup blocked -->
+            <div id="gis-status-feedback" class="hidden w-full text-[10px] text-amber-300 bg-amber-950/40 p-2 rounded border border-amber-500/30 text-center"></div>
+
             <!-- Collapsible Google Client ID Config -->
-            <details class="w-full text-[11px] text-slate-400">
-              <summary class="cursor-pointer hover:text-cyan-300 transition">⚙️ Set Custom Google Client ID (Google Cloud)</summary>
+            <details class="w-full text-[10px] text-slate-500 pt-1">
+              <summary class="cursor-pointer hover:text-cyan-300 transition">⚙️ Advanced: Google Cloud Client ID Config</summary>
               <div class="mt-2 space-y-2 p-2 rounded bg-slate-950 border border-slate-800">
                 <input 
                   type="text" 
@@ -1817,83 +1873,56 @@
             </details>
           </div>
 
-          <!-- 2. Instant 1-Click Campus Test Profiles (Zero Setup Testing) -->
-          <div class="space-y-2.5">
+          <!-- 3. Instant 1-Click Campus Test Profiles -->
+          <div class="space-y-2">
             <div class="flex items-center justify-between text-[11px]">
-              <span class="text-slate-400 font-bold uppercase">Or Instant 1-Click Campus Profiles:</span>
+              <span class="text-slate-400 font-bold uppercase">1-Click Instant Profiles:</span>
               <span class="text-emerald-400 text-[10px]">Ready to test</span>
             </div>
 
-            <div class="space-y-2">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <!-- Demo Account 1: Rahul Sharma (.iitb.ac.in) -->
               <button 
                 type="button" 
-                class="btn-demo-login w-full p-2.5 rounded-lg bg-slate-900 hover:bg-slate-850 border border-amber-500/40 hover:border-amber-400 text-left transition flex items-center justify-between gap-3 group"
+                class="btn-demo-login p-2.5 rounded-lg bg-slate-900 hover:bg-slate-850 border border-amber-500/40 hover:border-amber-400 text-left transition flex items-center justify-between gap-2 group cursor-pointer"
                 data-email="rahul.sharma@iitb.ac.in"
                 data-name="Rahul Sharma (IIT-B)"
                 data-picture="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80"
               >
-                <div class="flex items-center gap-2.5">
-                  <img src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80" class="w-8 h-8 rounded-full border border-amber-400 object-cover" />
-                  <div>
-                    <div class="font-bold text-slate-100 group-hover:text-amber-300 transition flex items-center gap-1.5">
-                      <span>Rahul Sharma</span>
-                      <span class="px-1 py-0.2 rounded text-[8px] bg-amber-500/20 text-amber-300 border border-amber-500/30 font-bold">CAMPUS</span>
-                    </div>
-                    <div class="text-[10px] text-slate-400">rahul.sharma@iitb.ac.in</div>
+                <div class="flex items-center gap-2 min-w-0">
+                  <img src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80" class="w-7 h-7 rounded-full border border-amber-400 object-cover shrink-0" />
+                  <div class="min-w-0 truncate">
+                    <div class="font-bold text-slate-100 group-hover:text-amber-300 transition text-[11px] truncate">Rahul Sharma</div>
+                    <div class="text-[9px] text-amber-400 truncate">IIT Bombay</div>
                   </div>
                 </div>
-                <div class="text-right">
-                  <span class="text-[10px] text-emerald-400 font-bold">+30 Trust</span>
-                </div>
+                <span class="text-[9px] text-emerald-400 font-bold shrink-0">+30</span>
               </button>
 
               <!-- Demo Account 2: Sneha Patel (gmail.com) -->
               <button 
                 type="button" 
-                class="btn-demo-login w-full p-2.5 rounded-lg bg-slate-900 hover:bg-slate-850 border border-cyan-500/40 hover:border-cyan-400 text-left transition flex items-center justify-between gap-3 group"
+                class="btn-demo-login p-2.5 rounded-lg bg-slate-900 hover:bg-slate-850 border border-cyan-500/40 hover:border-cyan-400 text-left transition flex items-center justify-between gap-2 group cursor-pointer"
                 data-email="sneha.patel@gmail.com"
                 data-name="Sneha Patel"
                 data-picture="https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=120&q=80"
               >
-                <div class="flex items-center gap-2.5">
-                  <img src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=120&q=80" class="w-8 h-8 rounded-full border border-cyan-400 object-cover" />
-                  <div>
-                    <div class="font-bold text-slate-100 group-hover:text-cyan-300 transition flex items-center gap-1.5">
-                      <span>Sneha Patel</span>
-                      <span class="px-1 py-0.2 rounded text-[8px] bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 font-bold">VERIFIED</span>
-                    </div>
-                    <div class="text-[10px] text-slate-400">sneha.patel@gmail.com</div>
+                <div class="flex items-center gap-2 min-w-0">
+                  <img src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=120&q=80" class="w-7 h-7 rounded-full border border-cyan-400 object-cover shrink-0" />
+                  <div class="min-w-0 truncate">
+                    <div class="font-bold text-slate-100 group-hover:text-cyan-300 transition text-[11px] truncate">Sneha Patel</div>
+                    <div class="text-[9px] text-cyan-400 truncate">Gmail Verified</div>
                   </div>
                 </div>
-                <div class="text-right">
-                  <span class="text-[10px] text-cyan-400 font-bold">+20 Trust</span>
-                </div>
+                <span class="text-[9px] text-cyan-400 font-bold shrink-0">+20</span>
               </button>
             </div>
-
-            <!-- Custom Email Test Input -->
-            <div class="pt-2">
-              <form id="form-custom-demo-login" class="flex items-center gap-2">
-                <input 
-                  type="email" 
-                  id="input-custom-demo-email" 
-                  required
-                  placeholder="Or test your email (e.g. user@stanford.edu)"
-                  class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-400 text-[11px]"
-                />
-                <button type="submit" class="px-3 py-2 bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-bold rounded-lg text-xs shrink-0 transition hover:from-emerald-400 hover:to-teal-400">
-                  Test Sign-In
-                </button>
-              </form>
-            </div>
-
           </div>
 
-          <!-- 3. Anonymous Guest Nickname Fallback -->
-          <div class="pt-3 border-t border-slate-800">
-            <form id="form-guest-nickname" class="space-y-2">
-              <div class="flex items-center justify-between text-[11px] text-slate-400">
+          <!-- 4. Anonymous Guest Nickname Fallback -->
+          <div class="pt-2 border-t border-slate-800">
+            <form id="form-guest-nickname" class="space-y-1.5">
+              <div class="flex items-center justify-between text-[10px] text-slate-400">
                 <span>Or trade anonymously as guest:</span>
               </div>
               <div class="flex items-center gap-2">
@@ -1902,9 +1931,9 @@
                   id="input-guest-nickname" 
                   maxlength="24"
                   placeholder="Anonymous Student Nickname"
-                  class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-400 text-xs"
+                  class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-400 text-xs font-mono"
                 />
-                <button type="submit" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-xs transition">
+                <button type="submit" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-xs font-mono transition cursor-pointer">
                   Set Guest Name
                 </button>
               </div>
@@ -2467,12 +2496,12 @@
   </div>
 
   <!-- SCRIPTS -->
-  <script src="js/data.js?v=3.8.3"></script>
-  <script src="js/campuses.js?v=3.8.3"></script>
-  <script src="js/algorithm.js?v=3.8.3"></script>
-  <script src="js/radar.js?v=3.8.3"></script>
-  <script src="js/api.js?v=3.8.3"></script>
-  <script src="js/app.js?v=3.8.3"></script>
+  <script src="js/data.js?v=3.8.4"></script>
+  <script src="js/campuses.js?v=3.8.4"></script>
+  <script src="js/algorithm.js?v=3.8.4"></script>
+  <script src="js/radar.js?v=3.8.4"></script>
+  <script src="js/api.js?v=3.8.4"></script>
+  <script src="js/app.js?v=3.8.4"></script>
 
   <script>
     // Initialize Lucide icons on page load

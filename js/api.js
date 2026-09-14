@@ -198,17 +198,17 @@
   }
 
   /**
-   * Authenticate with Instant Campus / Student Demo Profile
+   * Authenticate with Direct Email ID (Gmail, College, or Personal)
    */
-  async function loginWithDemoGoogle(demoProfile) {
+  async function loginWithEmail({ email, name, picture, google_id }) {
     try {
       const res = await request("/api/auth/google", {
         method: "POST",
         body: JSON.stringify({
-          demo: true,
-          email: demoProfile.email,
-          name: demoProfile.name,
-          picture: demoProfile.picture,
+          email: String(email || "").trim().toLowerCase(),
+          name: name ? String(name).trim() : "",
+          picture: picture || "",
+          google_id: google_id || "",
           device_id: state.deviceId
         })
       });
@@ -222,11 +222,24 @@
         emit("authStateChanged", { authenticated: true, user: res.user });
         emit("profileUpdated", res.user);
         return res;
+      } else {
+        throw new Error(res?.error || "Sign in failed");
       }
     } catch (err) {
-      console.error("Demo login failed:", err);
+      console.error("Email sign-in failed:", err);
       throw err;
     }
+  }
+
+  /**
+   * Authenticate with Instant Campus / Student Demo Profile
+   */
+  async function loginWithDemoGoogle(demoProfile) {
+    return loginWithEmail({
+      email: demoProfile.email,
+      name: demoProfile.name,
+      picture: demoProfile.picture
+    });
   }
 
   /**
@@ -736,6 +749,7 @@
       }
     },
     loginWithGoogle,
+    loginWithEmail,
     loginWithDemoGoogle,
     logoutGoogle,
     initUser,

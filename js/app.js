@@ -4735,11 +4735,13 @@
     const myBeaconsBtn = document.getElementById("btn-auth-my-beacons");
     const clientIdInput = document.getElementById("input-google-client-id");
     const saveClientIdBtn = document.getElementById("btn-save-google-client-id");
-    const triggerGisBtn = document.getElementById("btn-trigger-gis-prompt");
-    const customDemoForm = document.getElementById("form-custom-demo-login");
-    const customEmailInput = document.getElementById("input-custom-demo-email");
-    const editGoogleNicknameForm = document.getElementById("form-edit-google-nickname");
-    const guestNicknameForm = document.getElementById("form-guest-nickname");
+    const universalForm = document.getElementById("form-universal-email-login");
+    const universalEmailInput = document.getElementById("input-universal-email");
+    const universalNameInput = document.getElementById("input-universal-name");
+    const universalSubmitBtn = document.getElementById("btn-submit-universal-email");
+    const domainChips = modal.querySelectorAll(".btn-domain-chip");
+    const gisStatusFeedback = document.getElementById("gis-status-feedback");
+    const gisPromptText = document.getElementById("btn-trigger-gis-text");
 
     if (!modal) return;
 
@@ -4753,8 +4755,16 @@
         const user = MarketAPI.getCurrentUser();
         updateAuthModalUI(user);
         initGoogleIdentityServices();
+
+        const isAuth = !!(user && (user.google_id || user.auth_provider === "google"));
+        if (!isAuth && universalEmailInput) {
+          setTimeout(() => {
+            universalEmailInput.focus();
+          }, 100);
+        }
       }
       modal.classList.remove("hidden");
+      if (window.lucide) lucide.createIcons();
     };
 
     if (openBtn) openBtn.addEventListener("click", openModal);
@@ -4764,6 +4774,64 @@
     modal.addEventListener("click", (e) => {
       if (e.target === modal) modal.classList.add("hidden");
     });
+
+    // 1. Universal Instant Email & Google ID Sign-In Handler
+    if (universalForm && universalEmailInput) {
+      universalForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const email = universalEmailInput.value.trim();
+        const name = universalNameInput ? universalNameInput.value.trim() : "";
+        if (!email || !email.includes("@")) {
+          showToast("INVALID EMAIL", "Please enter a valid email address.");
+          universalEmailInput.focus();
+          return;
+        }
+
+        if (universalSubmitBtn) {
+          universalSubmitBtn.disabled = true;
+          universalSubmitBtn.innerHTML = `<span class="inline-block w-3.5 h-3.5 border-2 border-slate-950 border-t-transparent rounded-full animate-spin"></span><span>Signing in...</span>`;
+        }
+
+        try {
+          if (window.MarketAPI) {
+            await MarketAPI.loginWithEmail({ email, name });
+            modal.classList.add("hidden");
+            const user = MarketAPI.getCurrentUser();
+            const badgeType = user?.is_campus_verified ? "CAMPUS VERIFIED (+30 Trust)" : "VERIFIED (+20 Trust)";
+            showToast("SIGNED IN SUCCESSFULLY", `Welcome, ${user?.nickname || email}! ${badgeType} activated.`);
+            refreshMarket();
+          }
+        } catch (err) {
+          showToast("SIGN-IN ERROR", err.message || "Failed to sign in with email.");
+        } finally {
+          if (universalSubmitBtn) {
+            universalSubmitBtn.disabled = false;
+            universalSubmitBtn.innerHTML = `<i data-lucide="check-circle-2" class="w-4 h-4"></i><span>Sign In & Verify Account</span>`;
+            if (window.lucide) lucide.createIcons();
+          }
+        }
+      });
+    }
+
+    // Quick Domain Autofill Chips
+    if (domainChips && universalEmailInput) {
+      domainChips.forEach((chip) => {
+        chip.addEventListener("click", () => {
+          const domain = chip.getAttribute("data-domain") || "@gmail.com";
+          const current = universalEmailInput.value.trim();
+          if (!current) {
+            universalEmailInput.value = domain;
+            universalEmailInput.setSelectionRange(0, 0);
+          } else if (current.includes("@")) {
+            const prefix = current.split("@")[0];
+            universalEmailInput.value = prefix + domain;
+          } else {
+            universalEmailInput.value = current + domain;
+          }
+          universalEmailInput.focus();
+        });
+      });
+    }
 
     // Initialize Google Identity Services (GIS)
     function initGoogleIdentityServices() {
@@ -4804,19 +4872,104 @@
       }
     }
 
-    // Trigger GIS One-Tap
+    // Trigger Google Account Chooser (OAuth2 Popup + One-Tap with explicit fallback)
     if (triggerGisBtn) {
       triggerGisBtn.addEventListener("click", () => {
         const clientId = window.MarketAPI ? MarketAPI.getGoogleClientId() : "";
         if (!clientId) {
-          showToast("GOOGLE CLIENT ID NEEDED", "Please paste your full Google Client ID in the settings box below.");
-          const details = modal.querySelector("details");
-          if (details) details.open = true;
+          showToast("ENTER EMAIL", "Enter your Gmail address in the email field above to sign in in 1 click!");
+          if (universalEmailInput) universalEmailInput.focus();
           return;
         }
-        if (typeof google !== "undefined" && google.accounts && google.accounts.id) {
-          google.accounts.id.prompt();
+
+        if (gisStatusFeedback) gisStatusFeedback.classList.add("hidden");
+        if (gisPromptText) gisPromptText.textContent = "Connecting to Google...";
+
+        let popupTriggered = false;
+
+        // Try Google OAuth2 Token Client (Opens official Google Account Chooser popup window)
+        try {
+          if (typeof google !== "undefined" && google.accounts && google.accounts.oauth2) {
+            const tokenClient = google.accounts.oauth2.initTokenClient({
+              client_id: clientId,
+              scope: "email profile openid",
+              callback: async (tokenResponse) => {
+                if (gisPromptText) gisPromptText.textContent = "Open Google Account Chooser";
+                if (tokenResponse && tokenResponse.access_token) {
+                  try {
+                    const infoRes = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+                      headers: { Authorization: `Bearer ${tokenResponse.access_token}` }
+                    });
+                    const info = await infoRes.json();
+                    if (info && info.email) {
+                      await MarketAPI.loginWithEmail({
+                        email: info.email,
+                        name: info.name || info.given_name,
+                        picture: info.picture,
+                        google_id: info.sub
+                      });
+                      modal.classList.add("hidden");
+                      showToast("GOOGLE VERIFIED", `Welcome, ${info.name || info.email}!`);
+                      refreshMarket();
+                      return;
+                    }
+                  } catch (fetchErr) {
+                    console.warn("Google userinfo error:", fetchErr);
+                  }
+                }
+              },
+              error_callback: (err) => {
+                console.warn("Google OAuth2 popup error:", err);
+                if (gisPromptText) gisPromptText.textContent = "Open Google Account Chooser";
+                if (gisStatusFeedback) {
+                  gisStatusFeedback.textContent = "Google Popup was blocked by browser. Please type your Email ID above and tap Sign In!";
+                  gisStatusFeedback.classList.remove("hidden");
+                }
+                if (universalEmailInput) {
+                  universalEmailInput.focus();
+                  if (!universalEmailInput.value) universalEmailInput.value = "@gmail.com";
+                }
+              }
+            });
+
+            tokenClient.requestAccessToken({ prompt: "select_account" });
+            popupTriggered = true;
+          }
+        } catch (e) {
+          console.warn("OAuth2 client exception:", e.message);
         }
+
+        // Also try GIS prompt if popup wasn't initialized
+        if (!popupTriggered && typeof google !== "undefined" && google.accounts && google.accounts.id) {
+          try {
+            google.accounts.id.prompt((notification) => {
+              if (gisPromptText) gisPromptText.textContent = "Open Google Account Chooser";
+              if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+                if (gisStatusFeedback) {
+                  gisStatusFeedback.textContent = "Google 1-Tap was restricted by browser. Enter your Gmail / Email ID above to sign in instantly!";
+                  gisStatusFeedback.classList.remove("hidden");
+                }
+                if (universalEmailInput) universalEmailInput.focus();
+              }
+            });
+          } catch (e) {
+            console.warn("GIS prompt exception:", e.message);
+          }
+        } else if (!popupTriggered) {
+          if (gisPromptText) gisPromptText.textContent = "Open Google Account Chooser";
+          if (gisStatusFeedback) {
+            gisStatusFeedback.textContent = "Google Services blocked by browser security. Enter your Email ID above to sign in in 1 click!";
+            gisStatusFeedback.classList.remove("hidden");
+          }
+          if (universalEmailInput) universalEmailInput.focus();
+        }
+
+        // Reset button text after 3s if no callback fired
+        setTimeout(() => {
+          if (gisPromptText && gisPromptText.textContent === "Connecting to Google...") {
+            gisPromptText.textContent = "Open Google Account Chooser";
+          }
+        }, 3000);
       });
     }
 
@@ -4840,7 +4993,7 @@
         const name = btn.getAttribute("data-name");
         const picture = btn.getAttribute("data-picture");
         if (window.MarketAPI) {
-          await MarketAPI.loginWithDemoGoogle({ email, name, picture });
+          await MarketAPI.loginWithEmail({ email, name, picture });
           modal.classList.add("hidden");
           const user = MarketAPI.getCurrentUser();
           showToast("CAMPUS IDENTITY VERIFIED", `Welcome, ${user?.nickname}! +30 Trust score granted.`);
@@ -4848,29 +5001,6 @@
         }
       });
     });
-
-    // Custom Email Test Sign-In
-    if (customDemoForm && customEmailInput) {
-      customDemoForm.addEventListener("submit", async (e) => {
-        e.preventDefault();
-        const email = customEmailInput.value.trim();
-        if (!email) return;
-        const prefix = email.split("@")[0].replace(/[._]/g, " ");
-        const name = prefix.charAt(0).toUpperCase() + prefix.slice(1);
-        if (window.MarketAPI) {
-          await MarketAPI.loginWithDemoGoogle({
-            email,
-            name,
-            picture: `https://api.dicebear.com/7.x/bottts/svg?seed=${email}`
-          });
-          modal.classList.add("hidden");
-          const user = MarketAPI.getCurrentUser();
-          const bonus = user?.is_campus_verified ? "+30 Campus" : "+20 Google";
-          showToast("VERIFIED SIGN-IN", `Logged in as ${email} (${bonus} Trust).`);
-          refreshMarket();
-        }
-      });
-    }
 
     // Sign Out
     if (signoutBtn) {
