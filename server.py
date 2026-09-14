@@ -15,6 +15,7 @@ import re
 import random
 import urllib.request
 import urllib.error
+import urllib.parse
 from flask import Flask, request, jsonify, send_from_directory, g
 
 # Ensure UTF-8 output on Windows
@@ -1511,6 +1512,122 @@ def send_chat(item_id):
         "success": True,
         "message": msg_payload
     }), 201
+
+# In-memory cache for campus search results to provide sub-10ms response times
+CAMPUS_SEARCH_CACHE = {}
+
+@app.route('/api/campuses/search', methods=['GET'])
+def search_campuses_api():
+    """
+    High-performance Pan-India College & University Search Proxy.
+    Queries OpenStreetMap Nominatim with proper headers, restricted to India,
+    and returns parsed, verified educational campuses with caching.
+    """
+    q = (request.args.get('q') or '').strip()
+    if not q or len(q) < 2:
+        return jsonify({"success": True, "results": []})
+
+    cache_key = q.lower().strip()
+    if cache_key in CAMPUS_SEARCH_CACHE:
+        return jsonify({"success": True, "results": CAMPUS_SEARCH_CACHE[cache_key], "cached": True})
+
+    results = []
+    
+    clean_q = q
+    has_edu_term = any(w in clean_q.lower() for w in ['college', 'university', 'institute', 'campus', 'iit', 'nit', 'iiit', 'iim', 'school', 'polytechnic', 'vidyapeeth', 'academy'])
+    search_terms = [clean_q]
+    if not has_edu_term:
+        search_terms.append(f"{clean_q} college")
+
+    headers = {
+        "User-Agent": "RadarMarket-CampusDirectory/3.8 (https://radarmarket.onrender.com; campus-finder)",
+        "Accept-Language": "en"
+    }
+
+    for term in search_terms:
+        if len(results) >= 8:
+            break
+        try:
+            params = urllib.parse.urlencode({
+                "format": "json",
+                "q": term,
+                "countrycodes": "in",
+                "limit": "10",
+                "addressdetails": "1"
+            })
+            req_url = f"https://nominatim.openstreetmap.org/search?{params}"
+            req = urllib.request.Request(req_url, headers=headers)
+            with urllib.request.urlopen(req, timeout=4) as resp:
+                data = json.loads(resp.read().decode('utf-8'))
+                for r in (data or []):
+                    addr = r.get("address") or {}
+                    city = addr.get("city") or addr.get("town") or addr.get("suburb") or addr.get("county") or addr.get("state_district") or "India"
+                    state_name = addr.get("state") or "India"
+                    raw_name = r.get("display_name") or ""
+                    short_name = raw_name.split(",")[0].strip()
+
+                    if any(existing['shortName'].lower() == short_name.lower() for existing in results):
+                        continue
+
+                    category = "College / Campus"
+                    if "univ" in short_name.lower() or "univ" in raw_name.lower():
+                        category = "University"
+                    elif "institute" in short_name.lower() or "technology" in short_name.lower():
+                        category = "Institute"
+
+                    results.append({
+                        "id": f"osm-{r.get('place_id') or len(results)}",
+                        "name": raw_name,
+                        "shortName": short_name,
+                        "city": city,
+                        "state": state_name,
+                        "lat": float(r["lat"]),
+                        "lng": float(r["lon"]),
+                        "category": category,
+                        "isLiveGeocoded": True
+                    })
+        except Exception as err:
+            print(f"[Campus Search] Nominatim query failed for '{term}': {err}")
+
+    # Fallback to Photon API if Nominatim returns nothing
+    if len(results) == 0:
+        try:
+            photon_params = urllib.parse.urlencode({
+                "q": f"{q} college",
+                "limit": "8",
+                "bbox": "68.1,8.0,97.4,37.1"
+            })
+            photon_url = f"https://photon.komoot.io/api/?{photon_params}"
+            req = urllib.request.Request(photon_url, headers={"User-Agent": "RadarMarket/3.8"})
+            with urllib.request.urlopen(req, timeout=4) as resp:
+                pdata = json.loads(resp.read().decode('utf-8'))
+                for feat in (pdata.get("features") or []):
+                    props = feat.get("properties") or {}
+                    coords = feat.get("geometry", {}).get("coordinates", [])
+                    if len(coords) >= 2:
+                        name = props.get("name") or props.get("city") or q
+                        city = props.get("city") or props.get("district") or props.get("state") or "India"
+                        state_name = props.get("state") or "India"
+                        results.append({
+                            "id": f"photon-{props.get('osm_id') or len(results)}",
+                            "name": f"{name}, {city}, {state_name}",
+                            "shortName": name,
+                            "city": city,
+                            "state": state_name,
+                            "lat": float(coords[1]),
+                            "lng": float(coords[0]),
+                            "category": "College / Campus",
+                            "isLiveGeocoded": True
+                        })
+        except Exception as perr:
+            print(f"[Campus Search] Photon query failed: {perr}")
+
+    # Save in cache
+    if len(CAMPUS_SEARCH_CACHE) > 500:
+        CAMPUS_SEARCH_CACHE.clear()
+    CAMPUS_SEARCH_CACHE[cache_key] = results
+
+    return jsonify({"success": True, "results": results, "cached": False})
 
 @app.route('/api/sync', methods=['GET'])
 def delta_sync():

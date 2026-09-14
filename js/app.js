@@ -3719,35 +3719,83 @@
       }
     }
 
-    if (campuses.length === 0 && query.length >= 3) {
-      container.innerHTML = `
-        <div class="py-8 text-center text-slate-400 font-mono text-xs">
-          <i data-lucide="loader" class="w-5 h-5 text-cyan-400 animate-spin mx-auto mb-2"></i>
-          <p>Searching all Indian colleges & universities via live map...</p>
-        </div>
-      `;
-      if (window.lucide) lucide.createIcons();
+    // If query is provided, show instant local results, but also run live OSM geocoding if query >= 3 chars
+    if (query && query.length >= 3) {
+      const qClean = query.trim();
 
-      if (window.IndianCampuses && typeof window.IndianCampuses.searchLiveIndianColleges === "function") {
-        const liveResults = await window.IndianCampuses.searchLiveIndianColleges(query);
-        container.innerHTML = "";
-        if (liveResults.length > 0) {
-          campuses = liveResults;
+      // If local matches are few or zero, or user is looking for a specific regional college
+      if (campuses.length < 5 && window.IndianCampuses && typeof window.IndianCampuses.searchLiveIndianColleges === "function") {
+        if (statusText) statusText.innerHTML = `Searching pan-India directory & live OSM maps for <span class="text-cyan-300">"${qClean}"</span>...`;
+        
+        // Render initial local matches if any
+        campuses.forEach((c) => {
+          container.appendChild(renderCampusCard(c));
+        });
+
+        // Add a live loading indicator at the bottom
+        const loader = document.createElement("div");
+        loader.id = "campus-live-loader";
+        loader.className = "py-4 text-center text-slate-400 font-mono text-xs flex items-center justify-center gap-2";
+        loader.innerHTML = `<i data-lucide="loader" class="w-4 h-4 text-cyan-400 animate-spin"></i><span>Scanning all universities & colleges across India...</span>`;
+        container.appendChild(loader);
+        if (window.lucide) lucide.createIcons();
+
+        try {
+          const liveResults = await window.IndianCampuses.searchLiveIndianColleges(qClean);
+          const activeLoader = document.getElementById("campus-live-loader");
+          if (activeLoader) activeLoader.remove();
+
+          if (liveResults && liveResults.length > 0) {
+            // Deduplicate against existing displayed campuses
+            const existingIds = new Set(campuses.map(c => c.id || c.name.toLowerCase()));
+            liveResults.forEach(lc => {
+              if (!existingIds.has(lc.id) && !existingIds.has(lc.name.toLowerCase())) {
+                existingIds.add(lc.id);
+                campuses.push(lc);
+                container.appendChild(renderCampusCard(lc));
+              }
+            });
+          }
+        } catch (err) {
+          console.warn("[CampusLiveSearch] Error:", err);
+          const activeLoader = document.getElementById("campus-live-loader");
+          if (activeLoader) activeLoader.remove();
         }
       }
     }
 
+    // If still empty after local + live search
     if (campuses.length === 0) {
       container.innerHTML = `
-        <div class="py-10 text-center text-slate-500 font-mono text-xs">
+        <div class="py-8 text-center text-slate-400 font-mono text-xs">
           <i data-lucide="map-pin-off" class="w-8 h-8 text-slate-600 mx-auto mb-2"></i>
-          <p class="text-slate-300 font-bold mb-1">No colleges found matching "${query}"</p>
-          <p class="text-slate-400 text-[11px] mb-3">Try checking your spelling or search by city name (e.g., Delhi, Pune, Bangalore).</p>
-          <button type="button" id="btn-fallback-pinpoint" class="px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-bold text-xs">
-            📍 Use Custom Reticle Pinpoint Instead
-          </button>
+          <p class="text-slate-200 font-bold mb-1">No exact match found for "${query}"</p>
+          <p class="text-slate-400 text-[11px] mb-4">You can set "${query}" directly as your custom campus or use the pinpoint reticle.</p>
+          <div class="flex flex-col sm:flex-row gap-2 justify-center items-center">
+            <button type="button" id="btn-set-custom-campus" class="w-full sm:w-auto px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 transition shadow-[0_0_15px_rgba(0,229,255,0.3)]">
+              <i data-lucide="graduation-cap" class="w-4 h-4"></i> Set "${query}" as My Campus
+            </button>
+            <button type="button" id="btn-fallback-pinpoint" class="w-full sm:w-auto px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs flex items-center justify-center gap-1.5 transition border border-slate-700">
+              <i data-lucide="crosshair" class="w-4 h-4 text-cyan-400"></i> Custom Pinpoint Map
+            </button>
+          </div>
         </div>
       `;
+      const setCustomBtn = document.getElementById("btn-set-custom-campus");
+      if (setCustomBtn) {
+        setCustomBtn.addEventListener("click", () => {
+          selectCampus({
+            id: `custom_${Date.now()}`,
+            name: query.trim(),
+            shortName: query.trim(),
+            city: "Custom Location",
+            state: "India",
+            category: "CUSTOM",
+            lat: state.userLocation.lat || 19.805,
+            lng: state.userLocation.lng || 72.748
+          });
+        });
+      }
       const fallbackBtn = document.getElementById("btn-fallback-pinpoint");
       if (fallbackBtn) {
         fallbackBtn.addEventListener("click", () => {
@@ -3760,16 +3808,52 @@
       return;
     }
 
+    // When there ARE results, render any cards that haven't been rendered yet
+    if (container.children.length === 0) {
+      campuses.forEach((c) => {
+        const card = renderCampusCard(c);
+        container.appendChild(card);
+      });
+    }
+
+    // Always append a universal 1-tap card at the very bottom when a search query is active
+    if (query && query.trim().length >= 2) {
+      const customCard = document.createElement("div");
+      customCard.className = "mt-3 p-3 rounded-xl border border-dashed border-cyan-500/40 bg-cyan-950/20 hover:bg-cyan-950/40 transition-all flex items-center justify-between gap-3 cursor-pointer group";
+      customCard.innerHTML = `
+        <div class="flex items-center gap-3 min-w-0">
+          <div class="w-9 h-9 rounded-xl bg-cyan-500/20 text-cyan-400 group-hover:bg-cyan-500 group-hover:text-slate-950 flex items-center justify-center font-bold text-sm shrink-0 border border-cyan-500/30 transition-colors">
+            <i data-lucide="plus-circle" class="w-4 h-4"></i>
+          </div>
+          <div class="min-w-0">
+            <h4 class="font-bold text-xs text-cyan-300 truncate">Not seeing your exact department or branch?</h4>
+            <p class="text-[11px] text-slate-400 truncate">Set <span class="text-cyan-200 font-semibold">"${query.trim()}"</span> as your current radar base</p>
+          </div>
+        </div>
+        <button type="button" class="px-2.5 py-1.5 rounded-lg bg-cyan-500/20 text-cyan-300 group-hover:bg-cyan-500 group-hover:text-slate-950 font-mono text-xs font-bold transition shrink-0 border border-cyan-500/40">
+          SET CUSTOM
+        </button>
+      `;
+      customCard.addEventListener("click", () => {
+        selectCampus({
+          id: `custom_${Date.now()}`,
+          name: query.trim(),
+          shortName: query.trim(),
+          city: "Custom Campus",
+          state: "India",
+          category: "CUSTOM",
+          lat: state.userLocation.lat || 19.805,
+          lng: state.userLocation.lng || 72.748
+        });
+      });
+      container.appendChild(customCard);
+    }
+
     if (statusText) {
       statusText.textContent = query 
         ? `Found ${campuses.length} colleges matching "${query}"`
         : `Showing ${campuses.length} Indian colleges & universities`;
     }
-
-    campuses.forEach((c) => {
-      const card = renderCampusCard(c);
-      container.appendChild(card);
-    });
 
     if (window.lucide) lucide.createIcons();
   }
