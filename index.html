@@ -143,14 +143,16 @@
           <span class="hidden lg:inline" id="audio-text">SONAR OFF</span>
         </button>
 
-        <!-- Location Preset Selector -->
-        <div class="relative">
-          <select id="location-select" class="appearance-none bg-slate-900 border border-slate-700 hover:border-cyan-500/50 rounded-lg px-3 py-2 pr-8 text-xs font-mono text-slate-200 focus:outline-none focus:ring-1 focus:ring-cyan-400 transition cursor-pointer">
-            <option value="gps_real" selected>🛰️ Live Device GPS (Real-Time)</option>
-            <option value="set_pin_location">📍 Pinpoint / Search My Campus...</option>
-          </select>
-          <i data-lucide="chevron-down" class="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none"></i>
-        </div>
+        <!-- Pan-India Campus / College Selector Button -->
+        <button id="btn-open-campus-search" type="button" class="px-2.5 py-2 rounded-lg bg-slate-900 hover:bg-slate-850 border border-slate-700 hover:border-cyan-400/80 text-slate-200 hover:text-cyan-300 transition-all flex items-center gap-1.5 text-xs font-mono group cursor-pointer" title="Search and choose college/campus across India">
+          <i data-lucide="graduation-cap" class="w-4 h-4 text-cyan-400 group-hover:scale-110 transition-transform"></i>
+          <span id="current-campus-display" class="max-w-[130px] sm:max-w-[170px] truncate font-bold text-cyan-300">Choose Campus</span>
+          <i data-lucide="chevron-down" class="w-3.5 h-3.5 text-slate-400 group-hover:text-cyan-400"></i>
+        </button>
+        <select id="location-select" class="hidden">
+          <option value="gps_real" selected>🛰️ Live Device GPS (Real-Time)</option>
+          <option value="set_pin_location">📍 Pinpoint / Search My Campus...</option>
+        </select>
 
         <!-- My Beacons Drawer Button -->
         <button id="btn-open-my-beacons" class="px-2.5 py-2 rounded-lg bg-slate-900 hover:bg-slate-850 border border-slate-700 text-slate-300 hover:text-amber-300 transition-all flex items-center gap-1.5 text-xs font-mono" title="View & Manage your active beacons">
@@ -180,17 +182,43 @@
   <section class="border-b border-cyan-500/15 bg-slate-950/50 px-4 lg:px-8 py-3 z-20">
     <div class="max-w-7xl mx-auto flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
       
-      <!-- Search Input -->
-      <div class="relative flex-1 max-w-lg">
-        <i data-lucide="search" class="w-4 h-4 text-cyan-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
-        <input 
-          type="text" 
-          id="search-input" 
-          placeholder="Scan items (e.g. Casio calculator, Kreyszig math, drafting, Lamy)..." 
-          class="w-full pl-9 pr-4 py-2 bg-slate-900/90 border border-slate-800 focus:border-cyan-400 rounded-lg text-xs font-mono text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-cyan-400/50 transition"
-        />
-        <button id="search-clear-btn" class="hidden absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200">
-          <i data-lucide="x" class="w-3.5 h-3.5"></i>
+      <!-- Search Input & Campus Selector -->
+      <div class="flex items-center gap-2 flex-1 max-w-xl">
+        <div class="relative flex-1">
+          <i data-lucide="search" class="w-4 h-4 text-cyan-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
+          <input 
+            type="text" 
+            id="search-input" 
+            placeholder="Scan items (e.g. Casio, NCERT) or search your college/campus..." 
+            class="w-full pl-9 pr-4 py-2 bg-slate-900/90 border border-slate-800 focus:border-cyan-400 rounded-lg text-xs font-mono text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-cyan-400/50 transition"
+          />
+          <button id="search-clear-btn" class="hidden absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200">
+            <i data-lucide="x" class="w-3.5 h-3.5"></i>
+          </button>
+
+          <!-- Inline Campus Search Suggestion Dropdown -->
+          <div id="search-campus-suggestion" class="hidden absolute top-full left-0 right-0 mt-1.5 z-40 p-2.5 bg-slate-950/95 border border-cyan-400/70 rounded-xl shadow-[0_10px_35px_rgba(0,0,0,0.85),0_0_20px_rgba(0,229,255,0.25)] backdrop-blur-md flex items-center justify-between gap-2.5 text-xs font-mono">
+            <div class="flex items-center gap-2.5 min-w-0">
+              <div class="w-7 h-7 rounded-lg bg-cyan-500/20 text-cyan-300 flex items-center justify-center shrink-0 border border-cyan-500/40">
+                <i data-lucide="graduation-cap" class="w-4 h-4"></i>
+              </div>
+              <div class="min-w-0">
+                <div class="text-[10px] text-cyan-400 font-bold uppercase flex items-center gap-1">
+                  <span>Match Campus:</span>
+                  <span id="search-campus-city" class="text-slate-400 font-normal truncate">Mumbai</span>
+                </div>
+                <div id="search-campus-suggestion-name" class="font-bold text-white truncate text-xs">IIT Bombay</div>
+              </div>
+            </div>
+            <button id="btn-search-accept-campus" type="button" class="px-3 py-1.5 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs shrink-0 shadow-[0_0_10px_rgba(0,229,255,0.4)] transition cursor-pointer">
+              Lock Campus
+            </button>
+          </div>
+        </div>
+        <button id="btn-search-bar-campus" type="button" class="px-2.5 py-2 rounded-lg bg-slate-900 hover:bg-slate-850 border border-slate-700 hover:border-cyan-400 text-xs font-mono text-cyan-300 flex items-center gap-1.5 shrink-0 transition cursor-pointer" title="Choose your Indian college / campus">
+          <i data-lucide="graduation-cap" class="w-3.5 h-3.5 text-cyan-400"></i>
+          <span class="hidden sm:inline text-slate-400">Campus:</span>
+          <span id="search-bar-campus-name" class="font-bold max-w-[100px] truncate text-slate-200">Choose</span>
         </button>
       </div>
 
@@ -1983,6 +2011,75 @@
     </div>
   </div>
 
+  <!-- MODAL: PAN-INDIA COLLEGE & CAMPUS SEARCH SELECTOR -->
+  <div id="modal-campus-search" class="modal-overlay fixed inset-0 z-50 hidden flex items-center justify-center p-3 sm:p-6 bg-black/90 backdrop-blur-md">
+    <div class="relative w-full max-w-2xl bg-slate-950 border border-cyan-500/60 rounded-2xl overflow-hidden shadow-[0_0_60px_rgba(0,229,255,0.35)] flex flex-col max-h-[92vh]">
+      
+      <!-- Modal Header -->
+      <div class="px-5 py-3.5 bg-slate-900/95 border-b border-slate-800 flex items-center justify-between text-xs font-mono">
+        <div class="flex items-center gap-2 text-cyan-300">
+          <i data-lucide="graduation-cap" class="w-5 h-5 text-cyan-400"></i>
+          <span class="font-bold uppercase tracking-wider text-sm">Pan-India Campus Directory</span>
+          <span class="text-[10px] px-1.5 py-0.2 rounded bg-cyan-950 text-cyan-400 border border-cyan-500/30">ALL INDIA</span>
+        </div>
+        <button id="btn-close-campus-search" type="button" class="text-slate-400 hover:text-white transition cursor-pointer p-1 rounded-md" title="Close">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- Quick Action / Live GPS bar -->
+      <div class="px-5 py-2.5 bg-slate-900/60 border-b border-slate-800 flex items-center justify-between gap-3 text-xs font-mono">
+        <span class="text-slate-400 text-[11px]">Select your college or switch to live satellite GPS:</span>
+        <button id="btn-campus-use-live-gps" type="button" class="px-3 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-xs font-mono flex items-center gap-1.5 transition cursor-pointer shrink-0">
+          <i data-lucide="crosshair" class="w-3.5 h-3.5 text-emerald-400"></i>
+          <span>Use Live Device GPS</span>
+        </button>
+      </div>
+
+      <!-- Search Input Container -->
+      <div class="p-4 bg-slate-950 border-b border-slate-800/80">
+        <div class="relative w-full">
+          <i data-lucide="search" class="w-4 h-4 text-cyan-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"></i>
+          <input 
+            type="text" 
+            id="campus-search-input" 
+            placeholder="Search any college, university, IIT, NIT, DU, BITS, or city across India..." 
+            class="w-full pl-10 pr-9 py-2.5 bg-slate-900 border border-slate-700 focus:border-cyan-400 rounded-xl text-xs font-mono text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-cyan-400/50 transition"
+            autocomplete="off"
+          />
+          <button id="btn-clear-campus-search" type="button" class="hidden absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white cursor-pointer">
+            <i data-lucide="x" class="w-3.5 h-3.5"></i>
+          </button>
+        </div>
+
+        <!-- Filter category tabs -->
+        <div class="flex items-center gap-1.5 overflow-x-auto pt-3 pb-0.5 scrollbar-none text-[11px] font-mono">
+          <button class="campus-filter-pill active px-2.5 py-1 rounded-lg bg-cyan-950 text-cyan-300 border border-cyan-500/40 shrink-0 cursor-pointer" data-category="all">All India</button>
+          <button class="campus-filter-pill px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-850 text-slate-300 border border-slate-800 hover:border-slate-700 shrink-0 cursor-pointer" data-category="iit">IITs &amp; Premier</button>
+          <button class="campus-filter-pill px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-850 text-slate-300 border border-slate-800 hover:border-slate-700 shrink-0 cursor-pointer" data-category="delhi">Delhi NCR / DU</button>
+          <button class="campus-filter-pill px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-850 text-slate-300 border border-slate-800 hover:border-slate-700 shrink-0 cursor-pointer" data-category="mumbai_pune">Mumbai &amp; Pune</button>
+          <button class="campus-filter-pill px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-850 text-slate-300 border border-slate-800 hover:border-slate-700 shrink-0 cursor-pointer" data-category="south">Bengaluru &amp; South</button>
+          <button class="campus-filter-pill px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-850 text-slate-300 border border-slate-800 hover:border-slate-700 shrink-0 cursor-pointer" data-category="East & Central">East &amp; Central</button>
+        </div>
+      </div>
+
+      <!-- Campus Results List -->
+      <div id="campus-results-container" class="flex-1 overflow-y-auto p-4 space-y-2 min-h-[280px] max-h-[50vh]">
+        <!-- Dynamically rendered campus cards -->
+      </div>
+
+      <!-- Footer with Custom Pinpoint Link -->
+      <div class="px-5 py-3 bg-slate-900/90 border-t border-slate-800 flex items-center justify-between gap-3 text-xs font-mono">
+        <span id="campus-search-status" class="text-slate-400 text-[11px] truncate">Showing Indian campuses. Type above to filter.</span>
+        <button id="btn-campus-open-pinpoint" type="button" class="text-cyan-400 hover:text-cyan-300 hover:underline shrink-0 text-[11px] flex items-center gap-1 cursor-pointer">
+          <i data-lucide="map-pin" class="w-3.5 h-3.5"></i>
+          <span>Custom Map Pinpoint</span>
+        </button>
+      </div>
+
+    </div>
+  </div>
+
   <!-- MODAL: INTERACTIVE CAMPUS MAP PINPOINT PICKER -->
   <div id="modal-pinpoint-picker" class="modal-overlay fixed inset-0 z-50 hidden flex items-center justify-center p-3 sm:p-6 bg-black/90 backdrop-blur-md">
     <div class="relative w-full max-w-2xl bg-slate-950 border border-cyan-500/50 rounded-2xl overflow-hidden shadow-[0_0_50px_rgba(0,229,255,0.3)] flex flex-col max-h-[92vh]">
@@ -2370,11 +2467,12 @@
   </div>
 
   <!-- SCRIPTS -->
-  <script src="js/data.js?v=3.7.0"></script>
-  <script src="js/algorithm.js?v=3.7.0"></script>
-  <script src="js/radar.js?v=3.7.0"></script>
-  <script src="js/api.js?v=3.7.0"></script>
-  <script src="js/app.js?v=3.7.0"></script>
+  <script src="js/data.js?v=3.8.0"></script>
+  <script src="js/campuses.js?v=3.8.0"></script>
+  <script src="js/algorithm.js?v=3.8.0"></script>
+  <script src="js/radar.js?v=3.8.0"></script>
+  <script src="js/api.js?v=3.8.0"></script>
+  <script src="js/app.js?v=3.8.0"></script>
 
   <script>
     // Initialize Lucide icons on page load

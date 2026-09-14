@@ -29,14 +29,35 @@
     }
   } catch (e) {}
 
+  // Restore active Indian campus preference
+  let initialCampus = null;
+  try {
+    const rawCampus = localStorage.getItem("radarmarket_active_campus");
+    if (rawCampus) {
+      initialCampus = JSON.parse(rawCampus);
+      if (initialCampus && !hasStoredGps) {
+        initialLocation = {
+          lat: initialCampus.lat,
+          lng: initialCampus.lng,
+          accuracy: 10,
+          name: `🏫 ${initialCampus.shortName || initialCampus.name}`,
+          isLiveGPS: false,
+          isManual: true,
+          campusId: initialCampus.id
+        };
+      }
+    }
+  } catch (e) {}
+
   // Application State
   const state = {
     userLocation: initialLocation,
+    activeCampus: initialCampus,
     selectedPickupCoords: {
       lat: initialLocation.lat,
       lng: initialLocation.lng,
       accuracy: initialLocation.accuracy || 10,
-      landmark: hasStoredGps ? "Current Live Location" : "Campus Central",
+      landmark: initialCampus ? (initialCampus.shortName || initialCampus.name) : (hasStoredGps ? "Current Live Location" : "Campus Central"),
       isCustom: false,
       isLiveGPS: hasStoredGps
     },
@@ -119,6 +140,14 @@
   document.addEventListener("DOMContentLoaded", async () => {
     initRadarEngine();
     setupEventListeners();
+
+    // Initialize Pan-India Campus display
+    if (state.activeCampus) {
+      updateCampusUI(state.activeCampus);
+    } else if (window.IndianCampuses && window.IndianCampuses.CAMPUSES && window.IndianCampuses.CAMPUSES.length > 0) {
+      const defaultCampus = window.IndianCampuses.CAMPUSES[0];
+      updateCampusUI(defaultCampus);
+    }
 
     // 1. Initialize user profile & network
     if (window.MarketAPI) {
@@ -1063,20 +1092,72 @@
     const searchInput = document.getElementById("search-input");
     const searchClearBtn = document.getElementById("search-clear-btn");
 
+    const campusSuggestBox = document.getElementById("search-campus-suggestion");
+    const campusSuggestName = document.getElementById("search-campus-suggestion-name");
+    const campusSuggestCity = document.getElementById("search-campus-city");
+    const acceptCampusBtn = document.getElementById("btn-search-accept-campus");
+    let matchedCampusCandidate = null;
+
     searchInput.addEventListener("input", (e) => {
-      state.searchQuery = e.target.value;
-      if (state.searchQuery.length > 0) {
+      const q = e.target.value.trim();
+      state.searchQuery = q;
+      if (q.length > 0) {
         searchClearBtn.classList.remove("hidden");
       } else {
         searchClearBtn.classList.add("hidden");
       }
+
+      // Check if user is typing an Indian college or campus
+      if (window.IndianCampuses && q.length >= 2) {
+        const matches = window.IndianCampuses.searchCampuses(q, 1);
+        if (matches && matches.length > 0) {
+          matchedCampusCandidate = matches[0];
+          if (campusSuggestName) campusSuggestName.textContent = matchedCampusCandidate.shortName || matchedCampusCandidate.name;
+          if (campusSuggestCity) campusSuggestCity.textContent = `${matchedCampusCandidate.city}, ${matchedCampusCandidate.state}`;
+          if (campusSuggestBox) campusSuggestBox.classList.remove("hidden");
+          if (window.lucide) lucide.createIcons();
+        } else {
+          matchedCampusCandidate = null;
+          if (campusSuggestBox) campusSuggestBox.classList.add("hidden");
+        }
+      } else {
+        matchedCampusCandidate = null;
+        if (campusSuggestBox) campusSuggestBox.classList.add("hidden");
+      }
+
       recalculateAndRender();
+    });
+
+    if (acceptCampusBtn) {
+      acceptCampusBtn.addEventListener("click", () => {
+        if (matchedCampusCandidate) {
+          selectCampus(matchedCampusCandidate);
+          if (campusSuggestBox) campusSuggestBox.classList.add("hidden");
+          searchInput.value = "";
+          state.searchQuery = "";
+          searchClearBtn.classList.add("hidden");
+          recalculateAndRender();
+        }
+      });
+    }
+
+    searchInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && matchedCampusCandidate && campusSuggestBox && !campusSuggestBox.classList.contains("hidden")) {
+        e.preventDefault();
+        selectCampus(matchedCampusCandidate);
+        campusSuggestBox.classList.add("hidden");
+        searchInput.value = "";
+        state.searchQuery = "";
+        searchClearBtn.classList.add("hidden");
+        recalculateAndRender();
+      }
     });
 
     searchClearBtn.addEventListener("click", () => {
       searchInput.value = "";
       state.searchQuery = "";
       searchClearBtn.classList.add("hidden");
+      if (campusSuggestBox) campusSuggestBox.classList.add("hidden");
       recalculateAndRender();
     });
 
@@ -1127,7 +1208,17 @@
       });
     }
 
-    // 8. Location Preset / Real GPS Selector
+    // 8. Pan-India Campus & Location Selectors
+    const campusBtn = document.getElementById("btn-open-campus-search");
+    if (campusBtn) {
+      campusBtn.addEventListener("click", () => openCampusSearchModal());
+    }
+
+    const searchBarCampusBtn = document.getElementById("btn-search-bar-campus");
+    if (searchBarCampusBtn) {
+      searchBarCampusBtn.addEventListener("click", () => openCampusSearchModal());
+    }
+
     const locSelect = document.getElementById("location-select");
     if (locSelect) {
       locSelect.addEventListener("change", (e) => {
@@ -1144,9 +1235,11 @@
     const hudClick = document.getElementById("btn-hud-location-click");
     if (hudClick) {
       hudClick.addEventListener("click", () => {
-        openCampusLocationPicker();
+        openCampusSearchModal();
       });
     }
+
+    setupCampusSearchModal();
 
     // 8. Modals
     setupSellModal();
@@ -3496,6 +3589,321 @@
         showToast("CAMPUS LOCATION LOCKED", `Set to: ${selected.landmark || "Custom Point"}`);
       }
     );
+  }
+
+  /**
+   * Pan-India College & University Campus Search & Directory Subsystem
+   */
+  let campusSearchModalInitialized = false;
+  let currentCampusCategory = "all";
+  let campusSearchDebounceTimer = null;
+
+  function setupCampusSearchModal() {
+    if (campusSearchModalInitialized) return;
+    campusSearchModalInitialized = true;
+
+    const modal = document.getElementById("modal-campus-search");
+    const closeBtn = document.getElementById("btn-close-campus-search");
+    const searchInput = document.getElementById("campus-search-input");
+    const clearBtn = document.getElementById("btn-clear-campus-search");
+    const liveGpsBtn = document.getElementById("btn-campus-use-live-gps");
+    const pinpointLink = document.getElementById("btn-campus-open-pinpoint");
+    const filterPills = document.querySelectorAll(".campus-filter-pill");
+
+    if (closeBtn && modal) {
+      closeBtn.addEventListener("click", closeCampusSearchModal);
+    }
+
+    if (modal) {
+      modal.addEventListener("click", (e) => {
+        if (e.target === modal) closeCampusSearchModal();
+      });
+    }
+
+    if (searchInput) {
+      searchInput.addEventListener("input", (e) => {
+        const val = e.target.value;
+        if (clearBtn) {
+          clearBtn.classList.toggle("hidden", !val);
+        }
+        if (campusSearchDebounceTimer) clearTimeout(campusSearchDebounceTimer);
+        campusSearchDebounceTimer = setTimeout(() => {
+          renderCampusList(val, currentCampusCategory);
+        }, 150);
+      });
+
+      if (clearBtn) {
+        clearBtn.addEventListener("click", () => {
+          searchInput.value = "";
+          clearBtn.classList.add("hidden");
+          renderCampusList("", currentCampusCategory);
+          searchInput.focus();
+        });
+      }
+    }
+
+    filterPills.forEach((pill) => {
+      pill.addEventListener("click", () => {
+        filterPills.forEach((p) => {
+          p.classList.remove("active", "bg-cyan-950", "text-cyan-300", "border-cyan-500/40");
+          p.classList.add("bg-slate-900", "text-slate-300", "border-slate-800");
+        });
+        pill.classList.add("active", "bg-cyan-950", "text-cyan-300", "border-cyan-500/40");
+        pill.classList.remove("bg-slate-900", "text-slate-300", "border-slate-800");
+
+        currentCampusCategory = pill.dataset.category || "all";
+        const query = searchInput ? searchInput.value.trim() : "";
+        renderCampusList(query, currentCampusCategory);
+      });
+    });
+
+    if (liveGpsBtn) {
+      liveGpsBtn.addEventListener("click", () => {
+        closeCampusSearchModal();
+        activateLiveAreaScan();
+        showToast("🛰️ LIVE GPS ENGAGED", "Scanning current coordinates via device satellite GPS...");
+      });
+    }
+
+    if (pinpointLink) {
+      pinpointLink.addEventListener("click", () => {
+        closeCampusSearchModal();
+        openCampusLocationPicker();
+      });
+    }
+
+    // Restore previously chosen campus from localStorage if present
+    try {
+      const savedCampus = localStorage.getItem("radarmarket_active_campus");
+      if (savedCampus) {
+        const parsed = JSON.parse(savedCampus);
+        state.activeCampus = parsed;
+        updateCampusUI(parsed);
+      }
+    } catch (e) {}
+  }
+
+  function openCampusSearchModal() {
+    const modal = document.getElementById("modal-campus-search");
+    if (!modal) return;
+    setupCampusSearchModal();
+    modal.classList.remove("hidden");
+    const searchInput = document.getElementById("campus-search-input");
+    if (searchInput) {
+      setTimeout(() => searchInput.focus(), 100);
+    }
+    const query = searchInput ? searchInput.value.trim() : "";
+    renderCampusList(query, currentCampusCategory);
+    if (window.lucide) lucide.createIcons();
+  }
+
+  function closeCampusSearchModal() {
+    const modal = document.getElementById("modal-campus-search");
+    if (!modal) return;
+    modal.classList.add("hidden");
+  }
+
+  async function renderCampusList(query = "", category = "all") {
+    const container = document.getElementById("campus-results-container");
+    const statusText = document.getElementById("campus-search-status");
+    if (!container) return;
+
+    container.innerHTML = "";
+
+    let campuses = [];
+    if (window.IndianCampuses) {
+      if (query) {
+        campuses = window.IndianCampuses.searchCampuses(query, 30);
+      } else {
+        campuses = window.IndianCampuses.getCampusesByCategory(category, 30);
+      }
+    }
+
+    if (campuses.length === 0 && query.length >= 3) {
+      container.innerHTML = `
+        <div class="py-8 text-center text-slate-400 font-mono text-xs">
+          <i data-lucide="loader" class="w-5 h-5 text-cyan-400 animate-spin mx-auto mb-2"></i>
+          <p>Searching all Indian colleges & universities via live map...</p>
+        </div>
+      `;
+      if (window.lucide) lucide.createIcons();
+
+      if (window.IndianCampuses && typeof window.IndianCampuses.searchLiveIndianColleges === "function") {
+        const liveResults = await window.IndianCampuses.searchLiveIndianColleges(query);
+        container.innerHTML = "";
+        if (liveResults.length > 0) {
+          campuses = liveResults;
+        }
+      }
+    }
+
+    if (campuses.length === 0) {
+      container.innerHTML = `
+        <div class="py-10 text-center text-slate-500 font-mono text-xs">
+          <i data-lucide="map-pin-off" class="w-8 h-8 text-slate-600 mx-auto mb-2"></i>
+          <p class="text-slate-300 font-bold mb-1">No colleges found matching "${query}"</p>
+          <p class="text-slate-400 text-[11px] mb-3">Try checking your spelling or search by city name (e.g., Delhi, Pune, Bangalore).</p>
+          <button type="button" id="btn-fallback-pinpoint" class="px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-bold text-xs">
+            📍 Use Custom Reticle Pinpoint Instead
+          </button>
+        </div>
+      `;
+      const fallbackBtn = document.getElementById("btn-fallback-pinpoint");
+      if (fallbackBtn) {
+        fallbackBtn.addEventListener("click", () => {
+          closeCampusSearchModal();
+          openCampusLocationPicker();
+        });
+      }
+      if (statusText) statusText.textContent = `0 results found for "${query}"`;
+      if (window.lucide) lucide.createIcons();
+      return;
+    }
+
+    if (statusText) {
+      statusText.textContent = query 
+        ? `Found ${campuses.length} colleges matching "${query}"`
+        : `Showing ${campuses.length} Indian colleges & universities`;
+    }
+
+    campuses.forEach((c) => {
+      const card = renderCampusCard(c);
+      container.appendChild(card);
+    });
+
+    if (window.lucide) lucide.createIcons();
+  }
+
+  function renderCampusCard(campus) {
+    const isSelected = state.activeCampus && (state.activeCampus.id === campus.id || (state.activeCampus.name === campus.name));
+    let distTag = "";
+    if (typeof state.userLocation.lat === "number" && typeof state.userLocation.lng === "number") {
+      const d = calculateDistanceMeters(state.userLocation.lat, state.userLocation.lng, campus.lat, campus.lng);
+      distTag = `<span class="text-[10px] text-slate-400 font-mono shrink-0">${formatDistance(d)}</span>`;
+    }
+
+    const card = document.createElement("div");
+    card.className = `p-3 rounded-xl border ${isSelected ? "border-cyan-400 bg-cyan-950/40 shadow-[0_0_15px_rgba(0,229,255,0.15)]" : "border-slate-800/80 bg-slate-900/80 hover:bg-slate-850 hover:border-slate-700"} transition-all flex items-center justify-between gap-3 cursor-pointer group`;
+    card.innerHTML = `
+      <div class="flex items-center gap-3 min-w-0">
+        <div class="w-9 h-9 rounded-xl ${isSelected ? "bg-cyan-500 text-slate-950" : "bg-slate-800 text-cyan-400 group-hover:bg-cyan-500/20 group-hover:text-cyan-300"} flex items-center justify-center font-bold text-sm shrink-0 border border-slate-700/50 transition-colors">
+          <i data-lucide="graduation-cap" class="w-4 h-4"></i>
+        </div>
+        <div class="min-w-0">
+          <div class="flex items-center gap-2">
+            <h4 class="font-bold text-xs text-slate-100 truncate group-hover:text-cyan-300 transition-colors">${campus.shortName || campus.name}</h4>
+            <span class="text-[9px] font-mono px-1.5 py-0.2 rounded bg-slate-850 text-cyan-400 border border-slate-700 shrink-0 uppercase">${campus.category || 'CAMPUS'}</span>
+          </div>
+          <p class="text-[11px] text-slate-400 truncate">${campus.city ? campus.city + ', ' : ''}${campus.state || 'India'}</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 shrink-0">
+        ${distTag}
+        <button type="button" class="px-2.5 py-1.5 rounded-lg ${isSelected ? "bg-cyan-500 text-slate-950 font-bold" : "bg-slate-800 group-hover:bg-cyan-500 group-hover:text-slate-950 text-slate-200"} text-xs font-mono transition cursor-pointer">
+          ${isSelected ? "ACTIVE" : "SELECT"}
+        </button>
+      </div>
+    `;
+
+    card.addEventListener("click", () => {
+      selectCampus(campus);
+    });
+
+    return card;
+  }
+
+  function selectCampus(campus) {
+    if (!campus) return;
+
+    state.activeCampus = campus;
+    state.userLocation = {
+      lat: campus.lat,
+      lng: campus.lng,
+      accuracy: 10,
+      name: `🏫 ${campus.shortName || campus.name}`,
+      isLiveGPS: false,
+      isManual: true,
+      campusId: campus.id
+    };
+
+    state.selectedPickupCoords = {
+      lat: campus.lat,
+      lng: campus.lng,
+      accuracy: 10,
+      landmark: campus.shortName || campus.name,
+      isCustom: true,
+      isLiveGPS: false
+    };
+
+    // Save active campus to localStorage for persistence across reloads
+    try {
+      localStorage.setItem("radarmarket_active_campus", JSON.stringify(campus));
+      localStorage.setItem("radarmarket_last_known_gps", JSON.stringify({
+        lat: campus.lat,
+        lng: campus.lng,
+        accuracy: 10,
+        landmark: campus.shortName || campus.name,
+        timestamp: Date.now(),
+        isManual: true,
+        campusId: campus.id
+      }));
+    } catch (e) {}
+
+    // Update Header and Search Bar campus displays
+    updateCampusUI(campus);
+
+    // Update Seller form coordinates display if present
+    const coordsDisplay = document.getElementById("sell-coords-display");
+    if (coordsDisplay) {
+      coordsDisplay.textContent = `${campus.lat.toFixed(5)}, ${campus.lng.toFixed(5)}`;
+    }
+    const gpsAccuracyBadge = document.getElementById("sell-gps-accuracy-badge");
+    if (gpsAccuracyBadge) {
+      gpsAccuracyBadge.textContent = `🏫 ${campus.city || "Campus Spot"}`;
+      gpsAccuracyBadge.className = "text-[10px] font-mono font-bold text-cyan-400 bg-cyan-950/80 px-2 py-0.5 rounded border border-cyan-500/40";
+      gpsAccuracyBadge.classList.remove("hidden");
+    }
+
+    // Update map marker if open
+    if (campusUserMarker && campusMap) {
+      campusUserMarker.setLatLng([campus.lat, campus.lng]);
+      campusMap.setView([campus.lat, campus.lng], 15);
+    }
+
+    // Recompute DSP distances and re-render radar
+    recalculateAndRender();
+
+    // Trigger radar sonar sweep
+    if (radarEngine && typeof radarEngine.triggerActiveSonarSweep === "function") {
+      radarEngine.triggerActiveSonarSweep();
+    }
+
+    showToast(
+      "CAMPUS LOCKED",
+      `Radar centered on ${campus.shortName || campus.name} (${campus.city || 'India'})!`
+    );
+
+    closeCampusSearchModal();
+  }
+
+  function updateCampusUI(campus) {
+    const currentDisplay = document.getElementById("current-campus-display");
+    if (currentDisplay) {
+      currentDisplay.textContent = campus ? (campus.shortName || campus.name) : "Choose Campus";
+      currentDisplay.title = campus ? `${campus.name} (${campus.city}, ${campus.state})` : "Choose Campus";
+    }
+
+    const searchBarName = document.getElementById("search-bar-campus-name");
+    if (searchBarName) {
+      searchBarName.textContent = campus ? (campus.shortName || campus.name) : "Choose";
+    }
+
+    const hudLoc = document.getElementById("hud-location-text");
+    if (hudLoc) {
+      hudLoc.innerHTML = `🏫 <span class="text-cyan-300 font-bold">${campus ? (campus.shortName || campus.name) : "Campus Spot"}</span>`;
+      hudLoc.className = "text-cyan-300 font-mono text-[11px] font-bold cursor-pointer truncate max-w-[200px]";
+      hudLoc.onclick = () => openCampusSearchModal();
+    }
   }
 
   /**
@@ -5990,7 +6398,7 @@
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => {
         navigator.serviceWorker
-          .register("/sw.js?v=3.7.0")
+          .register("/sw.js?v=3.8.0")
           .then((reg) => {
             console.log("[PWA] Service Worker registered with scope:", reg.scope);
             // Force active update check on every load

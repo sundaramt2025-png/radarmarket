@@ -3,16 +3,17 @@
  * Provides instant app launching, asset caching, and offline support.
  */
 
-const CACHE_NAME = 'radarmarket-cache-v3.7.0';
+const CACHE_NAME = 'radarmarket-cache-v3.8.0';
 const PRECACHE_ASSETS = [
   '/',
   '/index.html',
-  '/css/styles.css?v=3.7.0',
-  '/js/app.js?v=3.7.0',
-  '/js/algorithm.js?v=3.7.0',
-  '/js/api.js?v=3.7.0',
-  '/js/data.js?v=3.7.0',
-  '/js/radar.js?v=3.7.0',
+  '/css/styles.css?v=3.8.0',
+  '/js/campuses.js?v=3.8.0',
+  '/js/app.js?v=3.8.0',
+  '/js/algorithm.js?v=3.8.0',
+  '/js/api.js?v=3.8.0',
+  '/js/data.js?v=3.8.0',
+  '/js/radar.js?v=3.8.0',
   '/manifest.json',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
@@ -25,7 +26,7 @@ self.addEventListener('install', (event) => {
   self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      console.log('[PWA Service Worker] Precaching shell assets v3.7.0');
+      console.log('[PWA Service Worker] Precaching shell assets v3.8.0');
       return cache.addAll(PRECACHE_ASSETS).catch((err) => {
         console.warn('[PWA Service Worker] Precache warning:', err);
       });
