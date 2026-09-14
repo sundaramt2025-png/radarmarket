@@ -144,9 +144,8 @@
     // Initialize Pan-India Campus display
     if (state.activeCampus) {
       updateCampusUI(state.activeCampus);
-    } else if (window.IndianCampuses && window.IndianCampuses.CAMPUSES && window.IndianCampuses.CAMPUSES.length > 0) {
-      const defaultCampus = window.IndianCampuses.CAMPUSES[0];
-      updateCampusUI(defaultCampus);
+    } else {
+      updateCampusUI(null);
     }
 
     // 1. Initialize user profile & network
@@ -513,7 +512,18 @@
     // Only update via textContent when NOT in live GPS mode, to avoid destroying
     // the pulsing green dot animation set by initLiveLocationTracking via innerHTML.
     if (!state.userLocation.isLiveGPS) {
-      document.getElementById("hud-location-text").textContent = state.userLocation.name;
+      const hud = document.getElementById("hud-location-text");
+      if (hud) {
+        if (state.activeCampus) {
+          hud.textContent = `🏫 ${state.activeCampus.shortName || state.activeCampus.name}`;
+          hud.onclick = () => openCampusSearchModal();
+        } else if (state.userLocation && state.userLocation.isManual && state.userLocation.name && !state.userLocation.name.includes("Detecting") && !state.userLocation.name.includes("SEARCH YOUR COLLAGE")) {
+          hud.textContent = state.userLocation.name;
+        } else {
+          hud.innerHTML = `<span class="text-cyan-300 font-bold animate-pulse">SEARCH YOUR COLLAGE HERE....</span>`;
+          hud.onclick = () => openCampusSearchModal();
+        }
+      }
     }
 
     // Smart Perimeter Alert Banner
@@ -1745,21 +1755,13 @@
         console.warn(`[GPS] Detected coarse ISP network location (${lat.toFixed(4)}, ${lng.toFixed(4)} ±${accuracy}m). Not using Goa.`);
         const hudLoc = document.getElementById("hud-location-text");
         if (hudLoc && !state.userLocation.isManual) {
-          hudLoc.innerHTML = `<span class="text-amber-400 font-bold cursor-pointer animate-pulse">⚠️ Coarse ISP (${isGoaRange ? "Goa" : "Network"} ±${Math.round(accuracy/1000)}km) • Tap to Pin Campus</span>`;
-          hudLoc.onclick = () => openCampusLocationPicker();
-        }
-        // If user location is still uninitialized (null), anchor to active campus listings so radar works immediately
-        if (state.userLocation.lat === null && state.rawItems && state.rawItems.length > 0) {
-          const sample = state.rawItems[0];
-          state.userLocation = {
-            lat: sample.lat,
-            lng: sample.lng,
-            accuracy: 50,
-            name: `📍 ${sample.landmark || "Campus Sector"}`,
-            isLiveGPS: false,
-            isManual: true
-          };
-          recalculateAndRender();
+          if (state.activeCampus) {
+            hudLoc.innerHTML = `🏫 <span class="text-cyan-300 font-bold">${state.activeCampus.shortName || state.activeCampus.name}</span>`;
+            hudLoc.onclick = () => openCampusSearchModal();
+          } else {
+            hudLoc.innerHTML = `🏫 <span class="text-cyan-300 font-bold animate-pulse">SEARCH YOUR COLLAGE HERE....</span>`;
+            hudLoc.onclick = () => openCampusSearchModal();
+          }
         }
         return;
       }
@@ -1835,8 +1837,12 @@
       console.warn("GPS satellite fix pending or unavailable:", err.message);
       const hudLoc = document.getElementById("hud-location-text");
       if (hudLoc && !state.userLocation.isLiveGPS && !state.userLocation.isManual) {
-        hudLoc.innerHTML = `<span class="text-amber-400 cursor-pointer font-bold animate-pulse">📍 Tap to Set Campus on Map</span>`;
-        hudLoc.onclick = () => openCampusLocationPicker();
+        if (state.activeCampus) {
+          hudLoc.innerHTML = `🏫 <span class="text-cyan-300 font-bold">${state.activeCampus.shortName || state.activeCampus.name}</span>`;
+        } else {
+          hudLoc.innerHTML = `🏫 <span class="text-cyan-300 font-bold animate-pulse">SEARCH YOUR COLLAGE HERE....</span>`;
+        }
+        hudLoc.onclick = () => openCampusSearchModal();
       }
     };
 
@@ -4048,19 +4054,24 @@
   function updateCampusUI(campus) {
     const currentDisplay = document.getElementById("current-campus-display");
     if (currentDisplay) {
-      currentDisplay.textContent = campus ? (campus.shortName || campus.name) : "Choose Campus";
-      currentDisplay.title = campus ? `${campus.name} (${campus.city}, ${campus.state})` : "Choose Campus";
+      currentDisplay.textContent = campus ? (campus.shortName || campus.name) : "SEARCH YOUR COLLAGE HERE....";
+      currentDisplay.title = campus ? `${campus.name} (${campus.city}, ${campus.state})` : "SEARCH YOUR COLLAGE HERE....";
     }
 
     const searchBarName = document.getElementById("search-bar-campus-name");
     if (searchBarName) {
-      searchBarName.textContent = campus ? (campus.shortName || campus.name) : "Choose";
+      searchBarName.textContent = campus ? (campus.shortName || campus.name) : "Search College";
     }
 
     const hudLoc = document.getElementById("hud-location-text");
     if (hudLoc) {
-      hudLoc.innerHTML = `🏫 <span class="text-cyan-300 font-bold">${campus ? (campus.shortName || campus.name) : "Campus Spot"}</span>`;
-      hudLoc.className = "text-cyan-300 font-mono text-[11px] font-bold cursor-pointer truncate max-w-[200px]";
+      if (campus) {
+        hudLoc.innerHTML = `🏫 <span class="text-cyan-300 font-bold">${campus.shortName || campus.name}</span>`;
+        hudLoc.className = "text-cyan-300 font-mono text-[11px] font-bold cursor-pointer truncate max-w-[200px]";
+      } else {
+        hudLoc.innerHTML = `🏫 <span class="text-cyan-300 font-bold animate-pulse">SEARCH YOUR COLLAGE HERE....</span>`;
+        hudLoc.className = "text-cyan-300 font-mono text-[11px] font-bold cursor-pointer truncate max-w-[240px]";
+      }
       hudLoc.onclick = () => openCampusSearchModal();
     }
   }

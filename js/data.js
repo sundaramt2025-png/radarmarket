@@ -5,7 +5,7 @@
 const DEFAULT_USER_LOCATION = {
   lat: null,
   lng: null,
-  name: "Detecting Live GPS...",
+  name: "SEARCH YOUR COLLAGE HERE....",
   isLiveGPS: false
 };
 
