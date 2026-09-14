@@ -1160,10 +1160,8 @@
     const searchClearBtn = document.getElementById("search-clear-btn");
 
     const campusSuggestBox = document.getElementById("search-campus-suggestion");
-    const campusSuggestName = document.getElementById("search-campus-suggestion-name");
-    const campusSuggestCity = document.getElementById("search-campus-city");
-    const acceptCampusBtn = document.getElementById("btn-search-accept-campus");
-    let matchedCampusCandidate = null;
+    const campusSuggestList = document.getElementById("search-campus-suggestion-list");
+    let matchedCampusCandidates = [];
 
     searchInput.addEventListener("input", (e) => {
       const q = e.target.value.trim();
@@ -1176,47 +1174,80 @@
 
       // Check if user is typing an Indian college or campus
       if (window.IndianCampuses && q.length >= 2) {
-        const matches = window.IndianCampuses.searchCampuses(q, 1);
+        const matches = window.IndianCampuses.searchCampuses(q, 4);
         if (matches && matches.length > 0) {
-          matchedCampusCandidate = matches[0];
-          if (campusSuggestName) campusSuggestName.textContent = matchedCampusCandidate.shortName || matchedCampusCandidate.name;
-          if (campusSuggestCity) campusSuggestCity.textContent = `${matchedCampusCandidate.city}, ${matchedCampusCandidate.state}`;
+          matchedCampusCandidates = matches;
+          if (campusSuggestList) {
+            campusSuggestList.innerHTML = "";
+            matches.forEach((m) => {
+              let distTag = "";
+              if (typeof state.userLocation.lat === "number" && typeof state.userLocation.lng === "number") {
+                const dist = calculateDistanceMeters(state.userLocation.lat, state.userLocation.lng, m.lat, m.lng);
+                distTag = `<span class="text-[10px] text-slate-400 font-mono">${formatDistance(dist)}</span>`;
+              }
+              const row = document.createElement("div");
+              row.className = "p-2 rounded-lg bg-slate-900/90 hover:bg-cyan-950/60 border border-slate-800 hover:border-cyan-500/60 transition flex items-center justify-between gap-2 cursor-pointer group";
+              row.innerHTML = `
+                <div class="flex items-center gap-2.5 min-w-0">
+                  <div class="w-7 h-7 rounded-lg bg-cyan-500/20 text-cyan-300 flex items-center justify-center shrink-0 border border-cyan-500/40 group-hover:bg-cyan-500 group-hover:text-slate-950 transition-colors">
+                    <i data-lucide="graduation-cap" class="w-4 h-4"></i>
+                  </div>
+                  <div class="min-w-0">
+                    <div class="font-bold text-white group-hover:text-cyan-200 truncate text-xs">${m.shortName || m.name}</div>
+                    <div class="text-[10px] text-slate-400 truncate flex items-center gap-1.5">
+                      <span>${m.city}, ${m.state}</span>
+                      <span class="px-1 py-0.2 rounded bg-slate-800 text-[9px] text-cyan-400 border border-slate-700 uppercase">${m.category || 'CAMPUS'}</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="flex items-center gap-2 shrink-0">
+                  ${distTag}
+                  <button type="button" class="px-2.5 py-1 rounded-md bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-[11px] shrink-0 shadow-[0_0_10px_rgba(0,229,255,0.3)] transition">
+                    Lock
+                  </button>
+                </div>
+              `;
+              row.addEventListener("click", () => {
+                selectCampus(m);
+                if (campusSuggestBox) campusSuggestBox.classList.add("hidden");
+                searchInput.value = "";
+                state.searchQuery = "";
+                searchClearBtn.classList.add("hidden");
+                recalculateAndRender();
+              });
+              campusSuggestList.appendChild(row);
+            });
+            if (window.lucide) lucide.createIcons();
+          }
           if (campusSuggestBox) campusSuggestBox.classList.remove("hidden");
-          if (window.lucide) lucide.createIcons();
         } else {
-          matchedCampusCandidate = null;
+          matchedCampusCandidates = [];
           if (campusSuggestBox) campusSuggestBox.classList.add("hidden");
         }
       } else {
-        matchedCampusCandidate = null;
+        matchedCampusCandidates = [];
         if (campusSuggestBox) campusSuggestBox.classList.add("hidden");
       }
 
       recalculateAndRender();
     });
 
-    if (acceptCampusBtn) {
-      acceptCampusBtn.addEventListener("click", () => {
-        if (matchedCampusCandidate) {
-          selectCampus(matchedCampusCandidate);
-          if (campusSuggestBox) campusSuggestBox.classList.add("hidden");
-          searchInput.value = "";
-          state.searchQuery = "";
-          searchClearBtn.classList.add("hidden");
-          recalculateAndRender();
-        }
-      });
-    }
-
     searchInput.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" && matchedCampusCandidate && campusSuggestBox && !campusSuggestBox.classList.contains("hidden")) {
+      if (e.key === "Enter" && matchedCampusCandidates.length > 0 && campusSuggestBox && !campusSuggestBox.classList.contains("hidden")) {
         e.preventDefault();
-        selectCampus(matchedCampusCandidate);
+        selectCampus(matchedCampusCandidates[0]);
         campusSuggestBox.classList.add("hidden");
         searchInput.value = "";
         state.searchQuery = "";
         searchClearBtn.classList.add("hidden");
         recalculateAndRender();
+      }
+    });
+
+    // Close autocomplete when clicking outside
+    document.addEventListener("click", (e) => {
+      if (campusSuggestBox && !campusSuggestBox.contains(e.target) && e.target !== searchInput) {
+        campusSuggestBox.classList.add("hidden");
       }
     });
 
@@ -1730,6 +1761,10 @@
    * Automatic Real-Time Live GPS Location Tracking
    * Continuously tracks buyer position across campus and recalculates geodesic distance to sellers
    */
+  let lastGpsRenderLat = null;
+  let lastGpsRenderLng = null;
+  let lastGpsRenderTime = 0;
+
   function initLiveLocationTracking() {
     if (!("geolocation" in navigator)) {
       console.warn("Geolocation API not supported by this browser.");
@@ -1829,8 +1864,25 @@
         campusUserMarker.setLatLng([lat, lng]);
       }
 
-      // Recalculate DSP-VI algorithms and distances to all items
-      recalculateAndRender();
+      // GPS Deadband & Jitter Filter: prevent DOM thrashing and scroll jumps during micro-movements
+      const now = Date.now();
+      let shouldRerender = true;
+      if (lastGpsRenderLat !== null && lastGpsRenderLng !== null) {
+        const deltaM = calculateDistanceMeters(lastGpsRenderLat, lastGpsRenderLng, lat, lng);
+        const elapsedMs = now - lastGpsRenderTime;
+        // Suppress full DOM re-sort if movement is < 4 meters and less than 8 seconds have passed
+        if (deltaM < 4 && elapsedMs < 8000) {
+          shouldRerender = false;
+        }
+      }
+
+      if (shouldRerender) {
+        lastGpsRenderLat = lat;
+        lastGpsRenderLng = lng;
+        lastGpsRenderTime = now;
+        // Recalculate DSP-VI algorithms and distances to all items
+        recalculateAndRender();
+      }
     };
 
     const handleGpsError = (err) => {
@@ -3465,6 +3517,27 @@
         draggable: true
       }).addTo(pinpointMap);
 
+      let reverseGeoTimer = null;
+      function reverseGeocodeCoords(lat, lng) {
+        if (reverseGeoTimer) clearTimeout(reverseGeoTimer);
+        reverseGeoTimer = setTimeout(async () => {
+          try {
+            const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`, {
+              headers: { "Accept-Language": "en" }
+            });
+            const data = await res.json();
+            if (data && data.display_name && landmarkInput) {
+              const nameParts = data.display_name.split(",");
+              const readable = nameParts.slice(0, 2).join(",").trim();
+              if (readable && (!landmarkInput.value || landmarkInput.value === "Current Spot" || landmarkInput.value.startsWith("Pin drop"))) {
+                landmarkInput.value = readable;
+                currentPinCoords.landmark = readable;
+              }
+            }
+          } catch (e) {}
+        }, 500);
+      }
+
       pinpointMarker.on("drag", (e) => {
         const pos = e.target.getLatLng();
         currentPinCoords.lat = pos.lat;
@@ -3472,11 +3545,17 @@
         updatePinpointUI();
       });
 
+      pinpointMarker.on("dragend", (e) => {
+        const pos = e.target.getLatLng();
+        reverseGeocodeCoords(pos.lat, pos.lng);
+      });
+
       pinpointMap.on("click", (e) => {
         pinpointMarker.setLatLng(e.latlng);
         currentPinCoords.lat = e.latlng.lat;
         currentPinCoords.lng = e.latlng.lng;
         updatePinpointUI();
+        reverseGeocodeCoords(e.latlng.lat, e.latlng.lng);
       });
 
       setTimeout(() => pinpointMap.invalidateSize(), 200);
@@ -3670,6 +3749,7 @@
     const searchInput = document.getElementById("campus-search-input");
     const clearBtn = document.getElementById("btn-clear-campus-search");
     const liveGpsBtn = document.getElementById("btn-campus-use-live-gps");
+    const autoDetectBtn = document.getElementById("btn-campus-auto-detect");
     const pinpointLink = document.getElementById("btn-campus-open-pinpoint");
     const filterPills = document.querySelectorAll(".campus-filter-pill");
 
@@ -3719,6 +3799,69 @@
         renderCampusList(query, currentCampusCategory);
       });
     });
+
+    if (autoDetectBtn) {
+      autoDetectBtn.addEventListener("click", () => {
+        if (!("geolocation" in navigator)) {
+          showToast("GPS UNAVAILABLE", "HTML5 Geolocation is not supported by your browser.");
+          return;
+        }
+
+        const originalHtml = autoDetectBtn.innerHTML;
+        autoDetectBtn.disabled = true;
+        autoDetectBtn.innerHTML = `<i data-lucide="loader" class="w-3.5 h-3.5 text-cyan-400 animate-spin"></i><span>Detecting...</span>`;
+        if (window.lucide) lucide.createIcons();
+
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            autoDetectBtn.disabled = false;
+            autoDetectBtn.innerHTML = originalHtml;
+            if (window.lucide) lucide.createIcons();
+
+            const lat = pos.coords.latitude;
+            const lng = pos.coords.longitude;
+            const accuracy = Math.round(pos.coords.accuracy || 10);
+
+            // Update user live coordinates
+            state.userLocation = {
+              lat,
+              lng,
+              accuracy,
+              name: `📍 GPS Fix (±${accuracy}m)`,
+              isLiveGPS: true,
+              isManual: false
+            };
+
+            // Find closest Indian campuses
+            let nearestList = [];
+            if (window.IndianCampuses && typeof window.IndianCampuses.findNearestCampuses === "function") {
+              nearestList = window.IndianCampuses.findNearestCampuses(lat, lng, 3);
+            }
+
+            if (nearestList && nearestList.length > 0) {
+              const bestMatch = nearestList[0];
+              // If within 25km of a known college campus, auto-lock it!
+              if (bestMatch.distanceMeters <= 25000) {
+                selectCampus(bestMatch);
+                showToast("📍 CAMPUS AUTO-DETECTED", `Locked to ${bestMatch.shortName || bestMatch.name} (${formatDistance(bestMatch.distanceMeters)} away)!`);
+                return;
+              }
+            }
+
+            // Re-render campus list sorted by proximity to user
+            renderCampusList("", currentCampusCategory);
+            showToast("🛰️ SATELLITE GPS ACTIVE", `Colleges ranked by proximity to your current location (±${accuracy}m).`);
+          },
+          (err) => {
+            autoDetectBtn.disabled = false;
+            autoDetectBtn.innerHTML = originalHtml;
+            if (window.lucide) lucide.createIcons();
+            showToast("GPS TIMEOUT", "Could not acquire satellite fix. Please enable location permissions.");
+          },
+          { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+        );
+      });
+    }
 
     if (liveGpsBtn) {
       liveGpsBtn.addEventListener("click", () => {
@@ -3780,6 +3923,20 @@
       } else {
         campuses = window.IndianCampuses.getCampusesByCategory(category, 30);
       }
+    }
+
+    const hasUserGps = typeof state.userLocation?.lat === "number" && !isNaN(state.userLocation.lat) &&
+                       typeof state.userLocation?.lng === "number" && !isNaN(state.userLocation.lng);
+    const fallbackLat = hasUserGps ? state.userLocation.lat : 28.6139;
+    const fallbackLng = hasUserGps ? state.userLocation.lng : 77.2090;
+
+    // When query is empty and user coordinates exist, rank institutes by closest proximity
+    if (!query && hasUserGps && campuses.length > 0) {
+      campuses.sort((a, b) => {
+        const dA = calculateDistanceMeters(state.userLocation.lat, state.userLocation.lng, a.lat, a.lng);
+        const dB = calculateDistanceMeters(state.userLocation.lat, state.userLocation.lng, b.lat, b.lng);
+        return dA - dB;
+      });
     }
 
     // If query is provided, show instant local results, but also run live OSM geocoding if query >= 3 chars
@@ -3854,8 +4011,8 @@
             city: "Custom Location",
             state: "India",
             category: "CUSTOM",
-            lat: state.userLocation.lat || 19.805,
-            lng: state.userLocation.lng || 72.748
+            lat: fallbackLat,
+            lng: fallbackLng
           });
         });
       }
@@ -3873,6 +4030,19 @@
 
     // When there ARE results, render any cards that haven't been rendered yet
     if (container.children.length === 0) {
+      if (!query && hasUserGps) {
+        const topPill = document.createElement("div");
+        topPill.className = "mb-2 p-2 rounded-xl bg-cyan-950/40 border border-cyan-500/40 flex items-center justify-between text-xs font-mono";
+        topPill.innerHTML = `
+          <div class="flex items-center gap-2 text-cyan-300 min-w-0">
+            <i data-lucide="compass" class="w-4 h-4 text-cyan-400 shrink-0"></i>
+            <span class="truncate">Ranked by proximity to your device GPS</span>
+          </div>
+          <span class="text-[10px] text-emerald-400 font-bold shrink-0 ml-2">⚡ GPS PROXIMITY</span>
+        `;
+        container.appendChild(topPill);
+      }
+
       campuses.forEach((c) => {
         const card = renderCampusCard(c);
         container.appendChild(card);
@@ -3905,8 +4075,8 @@
           city: "Custom Campus",
           state: "India",
           category: "CUSTOM",
-          lat: state.userLocation.lat || 19.805,
-          lng: state.userLocation.lng || 72.748
+          lat: fallbackLat,
+          lng: fallbackLng
         });
       });
       container.appendChild(customCard);

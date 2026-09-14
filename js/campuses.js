@@ -295,6 +295,34 @@
   }
 
   /**
+   * Find Multiple Nearest Pre-Seeded Campuses by Coordinates (sorted by proximity)
+   */
+  function findNearestCampuses(lat, lng, limit = 3) {
+    if (typeof lat !== "number" || typeof lng !== "number") return [];
+
+    function haversine(lat1, lon1, lat2, lon2) {
+      const R = 6371e3;
+      const phi1 = (lat1 * Math.PI) / 180;
+      const phi2 = (lat2 * Math.PI) / 180;
+      const deltaPhi = ((lat2 - lat1) * Math.PI) / 180;
+      const deltaLambda = ((lon2 - lon1) * Math.PI) / 180;
+      const a =
+        Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2) +
+        Math.cos(phi1) * Math.cos(phi2) * Math.sin(deltaLambda / 2) * Math.sin(deltaLambda / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      return R * c;
+    }
+
+    return INDIAN_CAMPUSES
+      .map((c) => ({
+        ...c,
+        distanceMeters: Math.round(haversine(lat, lng, c.lat, c.lng))
+      }))
+      .sort((a, b) => a.distanceMeters - b.distanceMeters)
+      .slice(0, limit);
+  }
+
+  /**
    * Multi-Engine Live Pan-India College Search Pipeline:
    * 1. First tries backend proxy /api/campuses/search?q=... (bypasses CORS & rate limits)
    * 2. Concurrently queries Photon API (https://photon.komoot.io) with Indian bounding box
@@ -383,6 +411,7 @@
     searchCampuses,
     getCampusesByCategory,
     findNearestCampus,
+    findNearestCampuses,
     searchLiveIndianColleges
   };
 })(window);
