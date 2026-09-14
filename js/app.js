@@ -416,8 +416,17 @@
     // 2. Apply anti-collision spatial jitter for overlapping coordinates
     state.evaluatedItems = RadarAlgorithm.applyRadarClusterSolver(evaluated);
 
-    // 3. Filter by category / beacon_type & search query
+    // 3. Filter by category / beacon_type, search query & strict Campus Radius (500m to 2km)
     state.filteredItems = state.evaluatedItems.filter((entry) => {
+      // Strict Campus Perimeter Fence: 500m to 2000m (2 km)
+      // When a campus is selected, only products within 500m - 2000m of that campus are displayed
+      if (state.activeCampus) {
+        const campusMaxRadius = Math.min(2000, Math.max(500, state.maxRadiusMeters || 500));
+        if (entry.distance > campusMaxRadius) {
+          return false; // Strictly exclude items outside the selected college/campus perimeter!
+        }
+      }
+
       // Special filter: BOUNTIES tab shows only wanted beacon_type
       if (state.selectedCategory === "wanted") {
         return entry.item.beacon_type === "wanted";
@@ -783,12 +792,36 @@
     list.innerHTML = "";
 
     if (state.filteredItems.length === 0) {
-      list.innerHTML = `
-        <div class="py-8 text-center text-slate-500 text-xs font-mono">
-          <i data-lucide="scan" class="w-8 h-8 mx-auto mb-2 opacity-40"></i>
-          No items detected matching your scan filters.
-        </div>
-      `;
+      if (state.activeCampus) {
+        const campusName = state.activeCampus.shortName || state.activeCampus.name;
+        const currentKm = ((state.maxRadiusMeters || 500) / 1000).toFixed(1);
+        list.innerHTML = `
+          <div class="py-8 px-3 text-center text-slate-400 text-xs font-mono">
+            <div class="w-10 h-10 mx-auto mb-2.5 rounded-full bg-cyan-950/80 border border-cyan-500/40 flex items-center justify-center text-cyan-400">
+              <i data-lucide="crosshair" class="w-5 h-5"></i>
+            </div>
+            <p class="font-bold text-slate-200 text-xs mb-1">No Beacons Within ${currentKm} km of ${campusName}</p>
+            <p class="text-[11px] text-slate-400 mb-3.5 leading-relaxed">Expand the perimeter slider up to 2.0 km or be the first student to broadcast an item on this campus!</p>
+            <button id="btn-feed-empty-broadcast" type="button" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs transition cursor-pointer shadow-[0_0_12px_rgba(0,229,255,0.3)]">
+              <i data-lucide="plus-circle" class="w-3.5 h-3.5"></i> Broadcast First Beacon
+            </button>
+          </div>
+        `;
+        const emptyBroadcastBtn = document.getElementById("btn-feed-empty-broadcast");
+        if (emptyBroadcastBtn) {
+          emptyBroadcastBtn.onclick = () => {
+            const openSellBtn = document.getElementById("btn-open-sell-modal");
+            if (openSellBtn) openSellBtn.click();
+          };
+        }
+      } else {
+        list.innerHTML = `
+          <div class="py-8 text-center text-slate-500 text-xs font-mono">
+            <i data-lucide="scan" class="w-8 h-8 mx-auto mb-2 opacity-40"></i>
+            No items detected matching your scan filters.
+          </div>
+        `;
+      }
       lucide.createIcons();
       return;
     }
@@ -877,12 +910,36 @@
     grid.innerHTML = "";
 
     if (state.filteredItems.length === 0) {
-      grid.innerHTML = `
-        <div class="col-span-full py-16 text-center text-slate-400 font-mono">
-          <i data-lucide="package-x" class="w-12 h-12 mx-auto mb-3 opacity-40"></i>
-          <p class="text-sm">No items found matching your filter criteria.</p>
-        </div>
-      `;
+      if (state.activeCampus) {
+        const campusName = state.activeCampus.shortName || state.activeCampus.name;
+        const currentKm = ((state.maxRadiusMeters || 500) / 1000).toFixed(1);
+        grid.innerHTML = `
+          <div class="col-span-full py-16 px-4 text-center text-slate-400 font-mono">
+            <div class="w-14 h-14 mx-auto mb-3 rounded-2xl bg-cyan-950/80 border border-cyan-500/40 flex items-center justify-center text-cyan-400 shadow-[0_0_20px_rgba(0,229,255,0.2)]">
+              <i data-lucide="crosshair" class="w-7 h-7"></i>
+            </div>
+            <h3 class="text-base font-bold text-white mb-1.5">No Products Listed Within ${currentKm} km of ${campusName}</h3>
+            <p class="text-xs text-slate-400 max-w-md mx-auto mb-5 leading-relaxed">Only items listed on or near this college are displayed. You can expand the radius slider up to 2.0 km or list the first product yourself!</p>
+            <button id="btn-grid-empty-broadcast" type="button" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs transition cursor-pointer shadow-[0_0_15px_rgba(0,229,255,0.35)]">
+              <i data-lucide="plus-circle" class="w-4 h-4"></i> Broadcast Beacon on Campus
+            </button>
+          </div>
+        `;
+        const emptyGridBroadcastBtn = document.getElementById("btn-grid-empty-broadcast");
+        if (emptyGridBroadcastBtn) {
+          emptyGridBroadcastBtn.onclick = () => {
+            const openSellBtn = document.getElementById("btn-open-sell-modal");
+            if (openSellBtn) openSellBtn.click();
+          };
+        }
+      } else {
+        grid.innerHTML = `
+          <div class="col-span-full py-16 text-center text-slate-400 font-mono">
+            <i data-lucide="package-x" class="w-12 h-12 mx-auto mb-3 opacity-40"></i>
+            <p class="text-sm">No items found matching your filter criteria.</p>
+          </div>
+        `;
+      }
       lucide.createIcons();
       return;
     }
@@ -1559,10 +1616,10 @@
 
     const badgeElem = document.getElementById("map-pin-count-badge");
     if (badgeElem) {
-      badgeElem.textContent = `${state.evaluatedItems.length} SELLERS`;
+      badgeElem.textContent = `${state.filteredItems.length} SELLERS`;
     }
 
-    state.evaluatedItems.forEach((target) => {
+    state.filteredItems.forEach((target) => {
       const item = target.item;
       if (!item.lat || !item.lng) return;
 
@@ -3946,6 +4003,24 @@
       gpsAccuracyBadge.textContent = `🏫 ${campus.city || "Campus Spot"}`;
       gpsAccuracyBadge.className = "text-[10px] font-mono font-bold text-cyan-400 bg-cyan-950/80 px-2 py-0.5 rounded border border-cyan-500/40";
       gpsAccuracyBadge.classList.remove("hidden");
+    }
+
+    // Reset radar perimeter to campus walking quad (500m default, expandable to 2000m)
+    state.maxRadiusMeters = 500;
+    const rangeSlider = document.getElementById("range-slider");
+    if (rangeSlider) {
+      rangeSlider.value = 500;
+      rangeSlider.min = "500";
+      rangeSlider.max = "2000";
+      rangeSlider.step = "100";
+    }
+    const rangeDisplay = document.getElementById("range-value-display");
+    if (rangeDisplay) {
+      rangeDisplay.textContent = "500 m";
+      rangeDisplay.className = "text-emerald-400 font-bold min-w-[46px] text-right";
+    }
+    if (radarEngine) {
+      radarEngine.setMaxRadius(500);
     }
 
     // Update map marker if open
@@ -6482,7 +6557,7 @@
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => {
         navigator.serviceWorker
-          .register("/sw.js?v=3.8.0")
+          .register("/sw.js?v=3.8.2")
           .then((reg) => {
             console.log("[PWA] Service Worker registered with scope:", reg.scope);
             // Force active update check on every load
