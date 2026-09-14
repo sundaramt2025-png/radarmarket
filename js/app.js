@@ -53,6 +53,8 @@
     audioEnabled: false,
     activeChatId: null,
     activeChatAgreedPrice: null,
+    latestAlertItemId: null,
+    unreadInboxCount: 0,
     chatMessagesCache: new Map() // itemId -> Array
   };
 
@@ -186,13 +188,36 @@
 
     // When an incoming chat message arrives
     MarketAPI.on("newChatMessage", (msg) => {
+      const myDeviceId = window.MarketAPI ? MarketAPI.getDeviceId() : null;
+      const isFromMe = msg.sender_id === myDeviceId || msg.sender === "me";
+
       if (state.activeChatId === msg.item_id) {
         appendMessageBubble(msg);
+        if (!isFromMe) {
+          playChatAlertSound(true); // Soft pop when chat is currently active
+        }
+      } else if (!isFromMe) {
+        // Chat is not active for this item: alert user with sound, toast, push, and badge
+        const cleanMsg = formatMessageForAlert(msg.text);
+        const senderName = msg.sender_name || (msg.sender_id === msg.seller_id ? (msg.seller_name || "Seller") : "Buyer");
+        const itemTitle = msg.item_title || "Campus Beacon";
+
+        showCommunicationAlert({
+          type: "message",
+          senderName: senderName,
+          senderAvatar: msg.sender_avatar || "",
+          itemTitle: itemTitle,
+          messageText: cleanMsg,
+          itemId: msg.item_id
+        });
       }
     });
 
     // When an offer bargaining update arrives
     MarketAPI.on("offerUpdated", (payload) => {
+      const myDeviceId = window.MarketAPI ? MarketAPI.getDeviceId() : null;
+      const isFromMe = payload.buyer_id === myDeviceId || payload.sender_id === myDeviceId;
+
       if (state.activeChatId === payload.item_id) {
         if (payload.type === "offer_accepted" && payload.agreed_price) {
           state.activeChatAgreedPrice = payload.agreed_price;
@@ -206,6 +231,33 @@
           }
           playHandshakeChime();
         }
+      }
+
+      // Proactive cross-device notification alert:
+      if (payload.type === "new_offer" && (!isFromMe || payload.seller_id === myDeviceId)) {
+        showCommunicationAlert({
+          type: "offer",
+          senderName: payload.buyer_name || "Prospective Buyer",
+          itemTitle: payload.item_title || "Market Item",
+          messageText: `New offer received: ₹${payload.offer_amount || payload.amount}. Tap to inspect or respond!`,
+          itemId: payload.item_id
+        });
+      } else if (payload.type === "offer_countered" && (payload.buyer_id === myDeviceId || !isFromMe)) {
+        showCommunicationAlert({
+          type: "counter",
+          senderName: payload.seller_name || "Seller",
+          itemTitle: payload.item_title || "Market Item",
+          messageText: `Counter offer received: ₹${payload.counter_amount}. Tap to reply!`,
+          itemId: payload.item_id
+        });
+      } else if (payload.type === "offer_accepted" && (payload.buyer_id === myDeviceId || !isFromMe)) {
+        showCommunicationAlert({
+          type: "accepted",
+          senderName: payload.seller_name || "Seller",
+          itemTitle: payload.item_title || "Market Item",
+          messageText: `Offer accepted at ₹${payload.agreed_price}! Open chat to pick meetup spot.`,
+          itemId: payload.item_id
+        });
       }
     });
 
@@ -1144,6 +1196,9 @@
         }
       }
     });
+
+    // 10. Real-time Communication Alerts & Header Inbox
+    setupCommunicationAlerts();
   }
 
   function switchView(mode) {
@@ -5018,6 +5073,11 @@
   }
 
   async function openChatModal(target) {
+    if (!target || !target.item) return;
+    if (typeof hideCommunicationAlert === "function") hideCommunicationAlert();
+    state.unreadInboxCount = 0;
+    if (typeof updateInboxBadge === "function") updateInboxBadge();
+
     const modal = document.getElementById("modal-chat");
     const item = target.item;
     state.activeChatId = item.id;
@@ -5629,6 +5689,299 @@
   }
 
   /**
+   * Cross-Device Real-Time Communication Alert System
+   * Synthesizes audio chime, displays interactive toast alert, updates header inbox badge,
+   * and triggers background push notifications.
+   */
+  let commToastTimeout = null;
+  let chatAudioCtx = null;
+
+  function getChatAudioContext() {
+    if (!chatAudioCtx) {
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (AudioContextClass) {
+        chatAudioCtx = new AudioContextClass();
+      }
+    }
+    if (chatAudioCtx && chatAudioCtx.state === "suspended") {
+      chatAudioCtx.resume().catch(() => {});
+    }
+    return chatAudioCtx;
+  }
+
+  function playChatAlertSound(isSoft = false) {
+    try {
+      const ctx = getChatAudioContext();
+      if (!ctx) return;
+      const now = ctx.currentTime;
+      if (isSoft) {
+        // Subtle soft blip for open active conversation
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(987.77, now); // B5
+        gain.gain.setValueAtTime(0.08, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.1);
+      } else {
+        // Dynamic dual-tone high-tech notification chime (880Hz -> 1318.5Hz)
+        const osc1 = ctx.createOscillator();
+        const gain1 = ctx.createGain();
+        osc1.type = "sine";
+        osc1.frequency.setValueAtTime(880, now); // A5
+        gain1.gain.setValueAtTime(0.2, now);
+        gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+        osc1.connect(gain1);
+        gain1.connect(ctx.destination);
+        osc1.start(now);
+        osc1.stop(now + 0.14);
+
+        const osc2 = ctx.createOscillator();
+        const gain2 = ctx.createGain();
+        osc2.type = "triangle";
+        osc2.frequency.setValueAtTime(1318.5, now + 0.08); // E6
+        gain2.gain.setValueAtTime(0.25, now + 0.08);
+        gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.32);
+        osc2.connect(gain2);
+        gain2.connect(ctx.destination);
+        osc2.start(now + 0.08);
+        osc2.stop(now + 0.32);
+      }
+    } catch (e) {
+      console.warn("Sound chime playback skipped:", e);
+    }
+  }
+
+  function sendSystemPushNotification(title, body, itemId) {
+    if (!("Notification" in window)) return;
+    try {
+      if (Notification.permission === "granted") {
+        const notif = new Notification(title, {
+          body: body,
+          icon: "/icons/icon-192.png",
+          badge: "/icons/icon-192.png",
+          tag: itemId ? `radar-chat-${itemId}` : "radar-comm",
+          renotify: true
+        });
+        notif.onclick = () => {
+          try {
+            window.focus();
+            if (itemId) openChatForItemId(itemId);
+            notif.close();
+          } catch (e) {}
+        };
+      } else if (Notification.permission !== "denied") {
+        Notification.requestPermission().catch(() => {});
+      }
+    } catch (e) {
+      console.warn("Push notification failed:", e);
+    }
+  }
+
+  function formatMessageForAlert(text) {
+    if (!text) return "Sent a signal.";
+    if (text.startsWith("[OFFER:")) {
+      const amt = text.replace("[OFFER:", "").replace("]", "");
+      return `💰 Made an offer of ₹${amt}`;
+    }
+    if (text.startsWith("[OFFER_ACCEPTED:")) {
+      const amt = text.replace("[OFFER_ACCEPTED:", "").replace("]", "");
+      return `🎉 Accepted offer of ₹${amt}!`;
+    }
+    if (text.startsWith("[OFFER_COUNTERED:")) {
+      const amt = text.replace("[OFFER_COUNTERED:", "").replace("]", "");
+      return `🤝 Counter offer sent: ₹${amt}`;
+    }
+    if (text.startsWith("[OFFER_DECLINED]")) {
+      return `❌ Offer declined.`;
+    }
+    if (text.startsWith("[MEETUP_POINT:")) {
+      const parts = text.slice(14, -1).split(",");
+      const place = parts[2] || "Campus Spot";
+      return `📍 Proposed meetup spot: ${place}`;
+    }
+    if (text.startsWith("[BOUNTY_MATCH:")) {
+      const name = text.replace("[BOUNTY_MATCH:", "").replace("]", "");
+      return `🎯 Bounty matched by ${name}!`;
+    }
+    if (text.startsWith("[HANDSHAKE_VERIFIED]")) {
+      return `🤝 Handshake completed & verified!`;
+    }
+    return text;
+  }
+
+  function showCommunicationAlert({ type = "message", senderName, senderAvatar, itemTitle, messageText, itemId }) {
+    const toast = document.getElementById("comm-alert-toast");
+    if (!toast) return;
+
+    // Track unread signals & target item
+    state.unreadInboxCount = (state.unreadInboxCount || 0) + 1;
+    state.latestAlertItemId = itemId;
+    updateInboxBadge();
+
+    // Play synthesized two-tone chime
+    playChatAlertSound(false);
+
+    // Audio/Visual feedback on radar sweep if radar is active
+    if (radarEngine && typeof radarEngine.triggerActiveSonarSweep === "function") {
+      radarEngine.triggerActiveSonarSweep();
+    }
+
+    // Set UI contents
+    const avatarEl = document.getElementById("comm-alert-avatar");
+    if (avatarEl) {
+      if (senderAvatar) {
+        avatarEl.innerHTML = `<img src="${senderAvatar}" alt="" class="w-full h-full object-cover rounded-full">`;
+      } else {
+        avatarEl.innerHTML = type === "offer" || type === "counter" || type === "accepted" ? "💰" : "💬";
+      }
+    }
+
+    const senderEl = document.getElementById("comm-alert-sender");
+    if (senderEl) {
+      senderEl.textContent = senderName || "Campus User";
+    }
+
+    const badgeEl = document.getElementById("comm-alert-badge");
+    if (badgeEl) {
+      if (type === "offer") {
+        badgeEl.textContent = "NEW OFFER";
+        badgeEl.className = "text-[9px] font-mono px-1.5 py-0.2 rounded bg-amber-950 text-amber-400 border border-amber-500/40 font-bold uppercase";
+      } else if (type === "counter") {
+        badgeEl.textContent = "COUNTER OFFER";
+        badgeEl.className = "text-[9px] font-mono px-1.5 py-0.2 rounded bg-purple-950 text-purple-400 border border-purple-500/40 font-bold uppercase";
+      } else if (type === "accepted") {
+        badgeEl.textContent = "OFFER ACCEPTED";
+        badgeEl.className = "text-[9px] font-mono px-1.5 py-0.2 rounded bg-emerald-950 text-emerald-400 border border-emerald-500/40 font-bold uppercase";
+      } else {
+        badgeEl.textContent = "NEW SIGNAL";
+        badgeEl.className = "text-[9px] font-mono px-1.5 py-0.2 rounded bg-cyan-950 text-cyan-400 border border-cyan-500/40 font-bold uppercase";
+      }
+    }
+
+    const itemEl = document.getElementById("comm-alert-item");
+    if (itemEl) {
+      itemEl.textContent = itemTitle ? `Regarding: ${itemTitle}` : "Regarding beacon";
+    }
+
+    const msgEl = document.getElementById("comm-alert-message");
+    if (msgEl) {
+      msgEl.textContent = messageText || "New communication received.";
+    }
+
+    // Push notification for background tab
+    const pushTitle = `📡 ${senderName || "New Signal"}: ${itemTitle || "Item"}`;
+    sendSystemPushNotification(pushTitle, messageText, itemId);
+
+    // Show toast with slide-in animation
+    toast.classList.remove("hidden");
+    void toast.offsetHeight;
+    toast.classList.remove("opacity-0", "-translate-y-2");
+    toast.classList.add("opacity-100", "translate-y-0");
+
+    if (commToastTimeout) clearTimeout(commToastTimeout);
+    commToastTimeout = setTimeout(() => {
+      hideCommunicationAlert();
+    }, 8000);
+  }
+
+  function hideCommunicationAlert() {
+    const toast = document.getElementById("comm-alert-toast");
+    if (!toast) return;
+    toast.classList.remove("opacity-100", "translate-y-0");
+    toast.classList.add("opacity-0", "-translate-y-2");
+    setTimeout(() => {
+      toast.classList.add("hidden");
+    }, 300);
+  }
+
+  function updateInboxBadge() {
+    const badge = document.getElementById("header-inbox-badge");
+    if (!badge) return;
+    const count = state.unreadInboxCount || 0;
+    if (count > 0) {
+      badge.textContent = count > 9 ? "9+" : count;
+      badge.classList.remove("hidden");
+    } else {
+      badge.classList.add("hidden");
+    }
+  }
+
+  async function openChatForItemId(itemId) {
+    if (!itemId) return;
+    hideCommunicationAlert();
+    state.unreadInboxCount = 0;
+    updateInboxBadge();
+
+    let target = state.evaluatedItems && state.evaluatedItems.find(t => t.item && t.item.id === itemId);
+    if (!target && state.rawItems) {
+      const raw = state.rawItems.find(i => i.id === itemId);
+      if (raw) target = { item: raw };
+    }
+    if (!target && window.MarketAPI) {
+      try {
+        const item = await MarketAPI.getItem(itemId);
+        if (item) target = { item };
+      } catch (e) {}
+    }
+    if (!target) {
+      target = {
+        item: {
+          id: itemId,
+          title: "Campus Listing",
+          price: 0,
+          lat: state.userLocation.lat,
+          lng: state.userLocation.lng
+        }
+      };
+    }
+    openChatModal(target);
+  }
+
+  function setupCommunicationAlerts() {
+    const inboxBtn = document.getElementById("btn-header-inbox");
+    if (inboxBtn) {
+      inboxBtn.addEventListener("click", () => {
+        if (state.latestAlertItemId) {
+          openChatForItemId(state.latestAlertItemId);
+        } else if (state.rawItems && state.rawItems.length > 0) {
+          openChatForItemId(state.rawItems[0].id);
+        } else {
+          showToast("MESSAGES INBOX", "No active communications yet. Tap any beacon on radar to start a chat!");
+        }
+      });
+    }
+
+    const closeToastBtn = document.getElementById("btn-close-comm-toast");
+    if (closeToastBtn) {
+      closeToastBtn.addEventListener("click", () => {
+        hideCommunicationAlert();
+      });
+    }
+
+    const replyBtn = document.getElementById("btn-comm-alert-reply");
+    if (replyBtn) {
+      replyBtn.addEventListener("click", () => {
+        const itemId = state.latestAlertItemId;
+        hideCommunicationAlert();
+        if (itemId) {
+          openChatForItemId(itemId);
+        }
+      });
+    }
+
+    // Opportunistically request notification permission on first user tap
+    document.addEventListener("click", () => {
+      if ("Notification" in window && Notification.permission === "default") {
+        Notification.requestPermission().catch(() => {});
+      }
+    }, { once: true });
+  }
+
+  /**
    * Setup Progressive Web App (PWA) Service Worker & Install Prompt
    */
   let deferredPrompt = null;
@@ -5637,7 +5990,7 @@
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => {
         navigator.serviceWorker
-          .register("/sw.js?v=3.6.0")
+          .register("/sw.js?v=3.7.0")
           .then((reg) => {
             console.log("[PWA] Service Worker registered with scope:", reg.scope);
             // Force active update check on every load

@@ -1258,6 +1258,7 @@ def create_offer(item_id):
     offer_payload = {
         "offer_id": offer_id,
         "item_id": item_id,
+        "item_title": item.get("title") or "Campus Item",
         "buyer_id": buyer_id,
         "buyer_name": buyer_name,
         "seller_id": seller_id,
@@ -1323,6 +1324,9 @@ def respond_offer(offer_id):
         """, (item_id, json.dumps({
             "offer_id": offer_id,
             "item_id": item_id,
+            "item_title": item.get("title") or "Campus Item",
+            "seller_id": item.get("seller_id"),
+            "buyer_id": offer.get("buyer_id"),
             "agreed_price": agreed_price,
             "status": "accepted"
         }), now))
@@ -1362,6 +1366,9 @@ def respond_offer(offer_id):
         """, (item_id, json.dumps({
             "offer_id": offer_id,
             "item_id": item_id,
+            "item_title": item.get("title") or "Campus Item",
+            "seller_id": item.get("seller_id"),
+            "buyer_id": offer.get("buyer_id"),
             "counter_amount": counter_amount,
             "status": "countered"
         }), now))
@@ -1390,6 +1397,9 @@ def respond_offer(offer_id):
         """, (item_id, json.dumps({
             "offer_id": offer_id,
             "item_id": item_id,
+            "item_title": item.get("title") or "Campus Item",
+            "seller_id": item.get("seller_id"),
+            "buyer_id": offer.get("buyer_id"),
             "status": "declined"
         }), now))
 
@@ -1469,10 +1479,19 @@ def send_chat(item_id):
 
     msg_id = cur.lastrowid
 
+    cur.execute("SELECT title, seller_id, seller_name FROM items WHERE id = ?", (item_id,))
+    item_row = cur.fetchone()
+    item_title = item_row['title'] if item_row else "Campus Listing"
+    seller_id = item_row['seller_id'] if item_row else ""
+    seller_name_val = item_row['seller_name'] if item_row else "Seller"
+
     # Emit event
     msg_payload = {
         "id": msg_id,
         "item_id": item_id,
+        "item_title": item_title,
+        "seller_id": seller_id,
+        "seller_name": seller_name_val,
         "sender_id": device_id,
         "sender_name": sender_name,
         "sender_avatar": sender_avatar,
@@ -1546,7 +1565,13 @@ def delta_sync():
             items.append(item)
 
     # Any new messages
-    cur.execute("SELECT * FROM messages WHERE created_at > ? ORDER BY created_at ASC", (since,))
+    cur.execute("""
+        SELECT m.*, i.title as item_title, i.seller_id as seller_id, i.seller_name as seller_name
+        FROM messages m
+        LEFT JOIN items i ON m.item_id = i.id
+        WHERE m.created_at > ?
+        ORDER BY m.created_at ASC
+    """, (since,))
     new_messages = [dict(r) for r in cur.fetchall()]
 
     return jsonify({
