@@ -38,7 +38,7 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 
   <!-- Custom Radar HUD Styles -->
-  <link rel="stylesheet" href="css/styles.css?v=3.4.0">
+  <link rel="stylesheet" href="css/styles.css?v=3.6.0">
 
   <script>
     tailwind.config = {
@@ -294,6 +294,15 @@
                 <span id="sonar-scan-banner-text">ACQUIRING GPS FIX & TRIANGULATING SELLERS...</span>
               </div>
               <span id="sonar-scan-accuracy" class="text-emerald-400 font-bold">±4m GPS FIX</span>
+            </div>
+
+            <!-- Perimeter Contact Helper Banner -->
+            <div id="radar-perimeter-banner" class="hidden absolute bottom-8 left-4 right-4 z-20 p-2.5 rounded-lg bg-amber-950/90 border border-amber-500/80 shadow-[0_0_20px_rgba(255,183,0,0.3)] backdrop-blur-md flex items-center justify-between gap-2 text-xs font-mono">
+              <div class="flex items-center gap-2 text-amber-300 min-w-0">
+                <i data-lucide="radar" class="w-4 h-4 text-amber-400 shrink-0 animate-pulse"></i>
+                <span id="radar-perimeter-banner-text" class="truncate font-semibold">1 contact detected on perimeter</span>
+              </div>
+              <button id="btn-expand-perimeter-range" type="button" class="px-2.5 py-1 rounded bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold uppercase transition cursor-pointer text-[10px] shrink-0">EXPAND RANGE</button>
             </div>
             <canvas 
               id="radar-canvas" 
@@ -2322,11 +2331,11 @@
   </div>
 
   <!-- SCRIPTS -->
-  <script src="js/data.js?v=3.4.0"></script>
-  <script src="js/algorithm.js?v=3.4.0"></script>
-  <script src="js/radar.js?v=3.4.0"></script>
-  <script src="js/api.js?v=3.4.0"></script>
-  <script src="js/app.js?v=3.4.0"></script>
+  <script src="js/data.js?v=3.6.0"></script>
+  <script src="js/algorithm.js?v=3.6.0"></script>
+  <script src="js/radar.js?v=3.6.0"></script>
+  <script src="js/api.js?v=3.6.0"></script>
+  <script src="js/app.js?v=3.6.0"></script>
 
   <script>
     // Initialize Lucide icons on page load

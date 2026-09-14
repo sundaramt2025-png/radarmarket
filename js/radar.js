@@ -70,10 +70,9 @@ class RadarEngine {
 
       let found = null;
       for (const target of this.targets) {
-        if (!target.inRadarRange) continue;
         const pos = this.getScreenCoords(target);
         const dist = Math.hypot(mouseX - pos.x, mouseY - pos.y);
-        if (dist <= 16) {
+        if (dist <= 18) {
           found = target;
           break;
         }
@@ -215,9 +214,8 @@ class RadarEngine {
     const sweepDeg = (this.angle * 180) / Math.PI;
     const prevSweepDeg = (prevAngle * 180) / Math.PI;
 
-    // Check target sweep intersection
+    // Check target sweep intersection (in-range targets and perimeter boundary contacts)
     for (const target of this.targets) {
-      if (!target.inRadarRange) continue;
       const targetDeg = (target.bearing + (target.radarBearingOffset || 0) + 360) % 360;
 
       let swept = false;
@@ -501,6 +499,17 @@ class RadarEngine {
         ctx.stroke();
       }
 
+      // Perimeter Contact Badge (if outside current range slider radius)
+      if (!target.inRadarRange) {
+        ctx.save();
+        ctx.font = "bold 9px 'JetBrains Mono', monospace";
+        ctx.fillStyle = isHovered || isSelected ? "#00e5ff" : "rgba(255, 183, 0, 0.85)";
+        ctx.textAlign = "center";
+        const labelY = coords.y > this.centerY ? coords.y + 13 : coords.y - 9;
+        ctx.fillText(target.distanceFormatted, coords.x, labelY);
+        ctx.restore();
+      }
+
       // Target Reticle if hovered or selected
       if (isHovered || isSelected) {
         this.drawTargetReticle(coords.x, coords.y, blipColor, isSelected);
@@ -596,9 +605,15 @@ class RadarEngine {
     const ctx = this.ctx;
     ctx.save();
     ctx.font = "10px 'JetBrains Mono', monospace";
-    ctx.fillStyle = "rgba(0, 229, 255, 0.4)";
+    ctx.fillStyle = "rgba(0, 229, 255, 0.6)";
     ctx.textAlign = "left";
-    ctx.fillText(`SCAN RPM: ${this.options.rpm} | ACTIVE BLIPS: ${this.targets.filter(t => t.inRadarRange).length}`, 16, this.height - 12);
+    const inRangeCount = this.targets.filter(t => t.inRadarRange).length;
+    const totalCount = this.targets.length;
+    let statusText = `SCAN RPM: ${this.options.rpm} | ACTIVE BLIPS: ${inRangeCount} (${totalCount} in sector)`;
+    if (inRangeCount === 0 && totalCount > 0) {
+      statusText = `SCAN RPM: ${this.options.rpm} | SECTOR CONTACTS: ${totalCount} (Perimeter Ring - Expand Range)`;
+    }
+    ctx.fillText(statusText, 16, this.height - 12);
 
     ctx.textAlign = "right";
     ctx.fillText(`RANGE: ${this.options.maxRadiusMeters >= 1000 ? (this.options.maxRadiusMeters / 1000) + ' km' : this.options.maxRadiusMeters + ' m'}`, this.width - 16, this.height - 12);

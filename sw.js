@@ -3,16 +3,16 @@
  * Provides instant app launching, asset caching, and offline support.
  */
 
-const CACHE_NAME = 'radarmarket-cache-v3.5.1';
+const CACHE_NAME = 'radarmarket-cache-v3.6.0';
 const PRECACHE_ASSETS = [
   '/',
   '/index.html',
-  '/css/styles.css?v=3.3',
-  '/js/app.js?v=3.3',
-  '/js/algorithm.js?v=3.3',
-  '/js/api.js?v=3.3',
-  '/js/data.js?v=3.3',
-  '/js/radar.js?v=3.3',
+  '/css/styles.css?v=3.6.0',
+  '/js/app.js?v=3.6.0',
+  '/js/algorithm.js?v=3.6.0',
+  '/js/api.js?v=3.6.0',
+  '/js/data.js?v=3.6.0',
+  '/js/radar.js?v=3.6.0',
   '/manifest.json',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
@@ -25,7 +25,7 @@ self.addEventListener('install', (event) => {
   self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      console.log('[PWA Service Worker] Precaching shell assets v2.9');
+      console.log('[PWA Service Worker] Precaching shell assets v3.6.0');
       return cache.addAll(PRECACHE_ASSETS).catch((err) => {
         console.warn('[PWA Service Worker] Precache warning:', err);
       });
@@ -59,19 +59,9 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 1. API Requests: Network-First with Cache Fallback
+  // 1. NEVER INTERCEPT OR CACHE DYNAMIC API REQUESTS (/api/*)
+  // All multi-device sync, item listings, offers, and chat MUST go directly to the network!
   if (url.pathname.startsWith('/api/')) {
-    event.respondWith(
-      fetch(request)
-        .then((response) => {
-          if (response && response.status === 200) {
-            const clone = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
-          }
-          return response;
-        })
-        .catch(() => caches.match(request))
-    );
     return;
   }
 

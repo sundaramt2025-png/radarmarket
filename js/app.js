@@ -425,6 +425,34 @@
     if (!state.userLocation.isLiveGPS) {
       document.getElementById("hud-location-text").textContent = state.userLocation.name;
     }
+
+    // Smart Perimeter Alert Banner
+    const perimBanner = document.getElementById("radar-perimeter-banner");
+    const perimText = document.getElementById("radar-perimeter-banner-text");
+    const expandBtn = document.getElementById("btn-expand-perimeter-range");
+    if (perimBanner && perimText) {
+      if (inRangeCount === 0 && totalCount > 0) {
+        const closest = state.filteredItems[0];
+        const neededRadius = Math.min(2000, Math.ceil((closest.distance + 50) / 100) * 100);
+        perimText.textContent = `📡 "${closest.item.title}" detected ${closest.distanceFormatted} away`;
+        perimBanner.classList.remove("hidden");
+        if (expandBtn) {
+          expandBtn.textContent = `EXPAND TO ${neededRadius >= 1000 ? (neededRadius/1000).toFixed(1) + 'KM' : neededRadius + 'M'}`;
+          expandBtn.onclick = () => {
+            state.maxRadiusMeters = neededRadius;
+            const slider = document.getElementById("range-slider");
+            if (slider) slider.value = neededRadius;
+            const display = document.getElementById("range-value-display");
+            if (display) display.textContent = neededRadius >= 1000 ? `${(neededRadius/1000).toFixed(1)} km` : `${neededRadius} m`;
+            if (radarEngine) radarEngine.setMaxRadius(neededRadius);
+            recalculateAndRender();
+            showToast("RADAR EXPANDED", `Radar range expanded to ${neededRadius}m to lock onto target.`);
+          };
+        }
+      } else {
+        perimBanner.classList.add("hidden");
+      }
+    }
   }
 
   /**
@@ -1514,6 +1542,19 @@
         if (hudLoc && !state.userLocation.isManual) {
           hudLoc.innerHTML = `<span class="text-amber-400 font-bold cursor-pointer animate-pulse">⚠️ Coarse ISP (${isGoaRange ? "Goa" : "Network"} ±${Math.round(accuracy/1000)}km) • Tap to Pin Campus</span>`;
           hudLoc.onclick = () => openCampusLocationPicker();
+        }
+        // If user location is still uninitialized (null), anchor to active campus listings so radar works immediately
+        if (state.userLocation.lat === null && state.rawItems && state.rawItems.length > 0) {
+          const sample = state.rawItems[0];
+          state.userLocation = {
+            lat: sample.lat,
+            lng: sample.lng,
+            accuracy: 50,
+            name: `📍 ${sample.landmark || "Campus Sector"}`,
+            isLiveGPS: false,
+            isManual: true
+          };
+          recalculateAndRender();
         }
         return;
       }
@@ -5596,7 +5637,7 @@
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => {
         navigator.serviceWorker
-          .register("/sw.js?v=2.7")
+          .register("/sw.js?v=3.6.0")
           .then((reg) => {
             console.log("[PWA] Service Worker registered with scope:", reg.scope);
             // Force active update check on every load

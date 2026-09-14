@@ -83,6 +83,7 @@
 
     try {
       const res = await fetch(endpoint, {
+        cache: "no-store",
         ...options,
         headers
       });
@@ -161,24 +162,10 @@
       }
     }
 
-    // Auto-reconcile broadcasts from local device vault (survives container redeployments!)
-    setTimeout(async () => {
-      try {
-        const vault = getVaultBroadcasts();
-        if (vault.length > 0) {
-          const serverItems = await getItems();
-          for (const myItem of vault) {
-            const exists = serverItems.some(it => it.id === myItem.id && it.status !== "deleted");
-            if (!exists && myItem.status !== "deleted" && myItem.status !== "sold") {
-              console.log("[Vault] Auto-restoring broadcast to server:", myItem.title);
-              await createItem(myItem);
-            }
-          }
-        }
-      } catch (e) {
-        console.warn("[Vault] Reconciliation error:", e);
-      }
-    }, 1500);
+    // Cleanse any legacy local vault to prevent automated duplicate broadcasts
+    try {
+      localStorage.removeItem(VAULT_KEY);
+    } catch (e) {}
 
     emit("authStateChanged", { authenticated: !!state.googleUser, user: state.currentUser });
     return state.currentUser;
