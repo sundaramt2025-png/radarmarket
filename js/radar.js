@@ -189,6 +189,11 @@ class RadarEngine {
     this.isRunning = true;
     const loop = (now) => {
       if (!this.isRunning) return;
+      if (document.hidden) {
+        this.lastFrameTime = now;
+        requestAnimationFrame(loop);
+        return;
+      }
       const delta = (now - this.lastFrameTime) / 1000;
       this.lastFrameTime = now;
 
@@ -445,6 +450,15 @@ class RadarEngine {
       } else if (target.item.category === "stationery") {
         blipColor = "#00ff9d"; // Emerald for stationery
         glowColor = "rgba(0, 255, 157, 0.8)";
+      } else if (target.item.category === "hostel") {
+        blipColor = "#f59e0b"; // Warm Amber for hostel essentials
+        glowColor = "rgba(245, 158, 11, 0.8)";
+      } else if (target.item.category === "lab") {
+        blipColor = "#a855f7"; // Purple for lab gear & drafters
+        glowColor = "rgba(168, 85, 247, 0.8)";
+      } else if (target.item.category === "tech") {
+        blipColor = "#3b82f6"; // Electric Blue for tech & gadgets
+        glowColor = "rgba(59, 130, 246, 0.8)";
       }
       
       if (!isWanted && !isSold && target.algorithmScore >= 85) {

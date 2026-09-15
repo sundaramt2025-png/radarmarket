@@ -131,6 +131,21 @@
       "https://images.unsplash.com/photo-1532012164546-f432f2e3777a?auto=format&fit=crop&w=600&q=80",
       "https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&w=600&q=80",
       "https://images.unsplash.com/photo-1495446815901-a7297e633e8d?auto=format&fit=crop&w=600&q=80"
+    ],
+    hostel: [
+      "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&w=600&q=80",
+      "https://images.unsplash.com/photo-1507473885765-e6ed057f782c?auto=format&fit=crop&w=600&q=80",
+      "https://images.unsplash.com/photo-1540518614846-7ede433c4ef0?auto=format&fit=crop&w=600&q=80"
+    ],
+    lab: [
+      "https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=600&q=80",
+      "https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=600&q=80",
+      "https://images.unsplash.com/photo-1581092335397-9583fe92d232?auto=format&fit=crop&w=600&q=80"
+    ],
+    tech: [
+      "https://images.unsplash.com/photo-1588508065123-287b28e013da?auto=format&fit=crop&w=600&q=80",
+      "https://images.unsplash.com/photo-1527443224154-c4a3942d3acf?auto=format&fit=crop&w=600&q=80",
+      "https://images.unsplash.com/photo-1541807084-5c52b6b3adef?auto=format&fit=crop&w=600&q=80"
     ]
   };
 
@@ -146,6 +161,15 @@
       updateCampusUI(state.activeCampus);
     } else {
       updateCampusUI(null);
+    }
+
+    // Fast 0ms instant paint from local feed cache before network fetch
+    if (window.MarketAPI && typeof MarketAPI.getCachedFeed === "function") {
+      const cached = MarketAPI.getCachedFeed();
+      if (cached && Array.isArray(cached) && cached.length > 0) {
+        state.rawItems = cached;
+        recalculateAndRender();
+      }
     }
 
     // 1. Initialize user profile & network
@@ -417,10 +441,10 @@
 
     // 3. Filter by category / beacon_type, search query & strict Campus Radius (500m to 2km)
     state.filteredItems = state.evaluatedItems.filter((entry) => {
-      // Strict Campus Perimeter Fence: 500m to 2000m (2 km)
-      // When a campus is selected, only products within 500m - 2000m of that campus are displayed
+      // Strict Campus Perimeter Fence: 500m to 5000m (5 km)
+      // When a campus is selected, products within the selected radar radius are displayed
       if (state.activeCampus) {
-        const campusMaxRadius = Math.min(2000, Math.max(500, state.maxRadiusMeters || 500));
+        const campusMaxRadius = Math.min(5000, Math.max(500, state.maxRadiusMeters || 500));
         if (entry.distance > campusMaxRadius) {
           return false; // Strictly exclude items outside the selected college/campus perimeter!
         }
@@ -509,6 +533,8 @@
     const totalCount = state.filteredItems.length;
     document.getElementById("hud-target-count").textContent = inRangeCount > 0 ? inRangeCount : totalCount;
     document.getElementById("feed-count").textContent = totalCount;
+    const mobileFeedCount = document.getElementById("mobile-feed-count");
+    if (mobileFeedCount) mobileFeedCount.textContent = totalCount;
     // Only update via textContent when NOT in live GPS mode, to avoid destroying
     // the pulsing green dot animation set by initLiveLocationTracking via innerHTML.
     if (!state.userLocation.isLiveGPS) {
@@ -666,9 +692,21 @@
     } else if (item.category === "stationery") {
       catBadge.className = "text-[10px] font-mono px-2 py-0.5 rounded font-bold uppercase badge-stationery";
       catBadge.textContent = "✏️ " + (item.sub_category || item.subCategory || "Stationery");
-    } else {
+    } else if (item.category === "books") {
       catBadge.className = "text-[10px] font-mono px-2 py-0.5 rounded font-bold uppercase badge-book";
       catBadge.textContent = "📖 " + (item.sub_category || item.subCategory || "Book");
+    } else if (item.category === "hostel") {
+      catBadge.className = "text-[10px] font-mono px-2 py-0.5 rounded font-bold uppercase badge-hostel";
+      catBadge.textContent = "🛏️ " + (item.sub_category || item.subCategory || "Hostel");
+    } else if (item.category === "lab") {
+      catBadge.className = "text-[10px] font-mono px-2 py-0.5 rounded font-bold uppercase badge-lab";
+      catBadge.textContent = "🔬 " + (item.sub_category || item.subCategory || "Lab Gear");
+    } else if (item.category === "tech") {
+      catBadge.className = "text-[10px] font-mono px-2 py-0.5 rounded font-bold uppercase badge-tech";
+      catBadge.textContent = "🔌 " + (item.sub_category || item.subCategory || "Tech");
+    } else {
+      catBadge.className = "text-[10px] font-mono px-2 py-0.5 rounded font-bold uppercase badge-stationery";
+      catBadge.textContent = "📦 " + (item.sub_category || item.subCategory || "Item");
     }
 
     document.getElementById("target-condition-badge").textContent = item.condition.toUpperCase();
@@ -682,7 +720,38 @@
     tierElem.textContent = `SIGNAL: ${target.signalClass} (${target.rssi} dBm)`;
     tierElem.className = `text-[10px] font-mono font-bold uppercase ${target.signalBadgeColor}`;
 
-    document.getElementById("target-image").src = item.image || PRESET_PHOTOS[item.category][0];
+    document.getElementById("target-image").src = item.image || (PRESET_PHOTOS[item.category] || PRESET_PHOTOS.stationery)[0];
+
+    // Populate Collapsible DSP-VI Mathematical Telemetry Drawer
+    const bd = target.breakdown || {};
+    const metricProx = document.getElementById("dsp-metric-prox");
+    const barProx = document.getElementById("dsp-bar-prox");
+    if (metricProx && barProx) {
+      const p = Math.round(bd.proximityScore || 0);
+      metricProx.textContent = `${p} / 100`;
+      barProx.style.width = `${Math.min(100, Math.max(0, p))}%`;
+    }
+    const metricVal = document.getElementById("dsp-metric-val");
+    const barVal = document.getElementById("dsp-bar-val");
+    if (metricVal && barVal) {
+      const v = Math.round(bd.valueScore || 0);
+      metricVal.textContent = `${v} / 100`;
+      barVal.style.width = `${Math.min(100, Math.max(0, v))}%`;
+    }
+    const metricRep = document.getElementById("dsp-metric-rep");
+    const barRep = document.getElementById("dsp-bar-rep");
+    if (metricRep && barRep) {
+      const r = Math.round(bd.trustScore || 0);
+      metricRep.textContent = `${r} / 100`;
+      barRep.style.width = `${Math.min(100, Math.max(0, r))}%`;
+    }
+    const metricFresh = document.getElementById("dsp-metric-fresh");
+    const barFresh = document.getElementById("dsp-bar-fresh");
+    if (metricFresh && barFresh) {
+      const f = Math.round(bd.freshnessScore || 0);
+      metricFresh.textContent = `${f} / 100`;
+      barFresh.style.width = `${Math.min(100, Math.max(0, f))}%`;
+    }
     document.getElementById("target-distance").textContent = target.distanceFormatted;
     
     const walkingElem = document.getElementById("target-walking-time");
@@ -795,6 +864,26 @@
   }
 
   /**
+   * Adjust Radar Radius & Update UI/Engine
+   */
+  function setRadarRadius(newRadiusMeters) {
+    state.maxRadiusMeters = newRadiusMeters;
+    const slider = document.getElementById("range-slider");
+    if (slider) slider.value = newRadiusMeters;
+    const rangeDisplay = document.getElementById("range-value-display");
+    if (rangeDisplay) {
+      rangeDisplay.textContent = newRadiusMeters >= 1000 ? `${(newRadiusMeters / 1000).toFixed(1)} km` : `${newRadiusMeters} m`;
+      rangeDisplay.className = newRadiusMeters === 500
+        ? "text-emerald-400 font-bold min-w-[46px] text-right"
+        : "text-cyan-400 font-bold min-w-[46px] text-right";
+    }
+    if (radarEngine) {
+      radarEngine.setMaxRadius(newRadiusMeters);
+    }
+    recalculateAndRender();
+  }
+
+  /**
    * Render Sidebar Live Nearby Feed
    */
   function renderNearbyFeed() {
@@ -802,36 +891,93 @@
     list.innerHTML = "";
 
     if (state.filteredItems.length === 0) {
-      if (state.activeCampus) {
-        const campusName = state.activeCampus.shortName || state.activeCampus.name;
-        const currentKm = ((state.maxRadiusMeters || 500) / 1000).toFixed(1);
-        list.innerHTML = `
-          <div class="py-8 px-3 text-center text-slate-400 text-xs font-mono">
-            <div class="w-10 h-10 mx-auto mb-2.5 rounded-full bg-cyan-950/80 border border-cyan-500/40 flex items-center justify-center text-cyan-400">
-              <i data-lucide="crosshair" class="w-5 h-5"></i>
-            </div>
-            <p class="font-bold text-slate-200 text-xs mb-1">No Beacons Within ${currentKm} km of ${campusName}</p>
-            <p class="text-[11px] text-slate-400 mb-3.5 leading-relaxed">Expand the perimeter slider up to 2.0 km or be the first student to broadcast an item on this campus!</p>
-            <button id="btn-feed-empty-broadcast" type="button" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs transition cursor-pointer shadow-[0_0_12px_rgba(0,229,255,0.3)]">
-              <i data-lucide="plus-circle" class="w-3.5 h-3.5"></i> Broadcast First Beacon
+      const campusName = state.activeCampus ? (state.activeCampus.shortName || state.activeCampus.name) : "Your Zone";
+      const currentKm = ((state.maxRadiusMeters || 500) / 1000).toFixed(1);
+
+      list.innerHTML = `
+        <div class="py-6 px-3.5 text-center rounded-xl bg-slate-900/80 border border-cyan-500/30 font-mono text-xs shadow-[0_0_20px_rgba(0,229,255,0.06)]">
+          <div class="w-11 h-11 mx-auto mb-2.5 rounded-full bg-cyan-950/90 border border-cyan-500/50 flex items-center justify-center text-cyan-400 shadow-[0_0_15px_rgba(0,229,255,0.25)]">
+            <i data-lucide="crosshair" class="w-5 h-5 animate-pulse"></i>
+          </div>
+          <p class="font-bold text-slate-100 text-xs mb-1">0 Beacons Scanned Within ${currentKm} km</p>
+          <p class="text-[11px] text-slate-400 mb-3.5 leading-relaxed max-w-xs mx-auto">
+            No active student listings detected at ${campusName}. Expand your radar radius or broadcast the first beacon!
+          </p>
+
+          <!-- 1-Tap Radius Expansion Buttons -->
+          <div class="flex items-center justify-center gap-2 mb-3">
+            <button id="btn-feed-expand-2km" type="button" class="px-2.5 py-1 rounded-lg bg-cyan-950 hover:bg-cyan-900 border border-cyan-500/50 text-cyan-300 text-[11px] font-bold transition flex items-center gap-1 cursor-pointer">
+              <i data-lucide="maximize-2" class="w-3 h-3"></i>
+              <span>Expand to 2.0 km</span>
+            </button>
+            <button id="btn-feed-expand-5km" type="button" class="px-2.5 py-1 rounded-lg bg-cyan-950 hover:bg-cyan-900 border border-cyan-500/50 text-cyan-300 text-[11px] font-bold transition flex items-center gap-1 cursor-pointer">
+              <i data-lucide="maximize" class="w-3 h-3"></i>
+              <span>Expand to 5.0 km</span>
             </button>
           </div>
-        `;
-        const emptyBroadcastBtn = document.getElementById("btn-feed-empty-broadcast");
-        if (emptyBroadcastBtn) {
-          emptyBroadcastBtn.onclick = () => {
-            const openSellBtn = document.getElementById("btn-open-sell-modal");
-            if (openSellBtn) openSellBtn.click();
-          };
-        }
-      } else {
-        list.innerHTML = `
-          <div class="py-8 text-center text-slate-500 text-xs font-mono">
-            <i data-lucide="scan" class="w-8 h-8 mx-auto mb-2 opacity-40"></i>
-            No items detected matching your scan filters.
+
+          <!-- Quick Action Buttons -->
+          <div class="flex flex-wrap items-center justify-center gap-2 pt-2 border-t border-slate-800">
+            <button id="btn-feed-empty-broadcast" type="button" class="px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition cursor-pointer shadow-[0_0_10px_rgba(0,255,157,0.3)] flex items-center gap-1">
+              <i data-lucide="plus-circle" class="w-3.5 h-3.5"></i>
+              <span>Post Item</span>
+            </button>
+            <button id="btn-feed-empty-wanted" type="button" class="px-3 py-1.5 rounded-lg bg-pink-950 hover:bg-pink-900 border border-pink-500/50 text-pink-300 font-bold text-xs transition cursor-pointer flex items-center gap-1">
+              <i data-lucide="target" class="w-3.5 h-3.5"></i>
+              <span>Post Wanted</span>
+            </button>
+            <button id="btn-feed-empty-waitlist" type="button" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-750 border border-slate-700 text-amber-300 text-xs font-bold transition cursor-pointer flex items-center gap-1">
+              <i data-lucide="bell-ring" class="w-3.5 h-3.5 text-amber-400"></i>
+              <span>Campus Waitlist</span>
+            </button>
           </div>
-        `;
+        </div>
+      `;
+
+      // Wire Fallback Action Buttons
+      const btnExp2 = document.getElementById("btn-feed-expand-2km");
+      if (btnExp2) btnExp2.onclick = () => setRadarRadius(2000);
+
+      const btnExp5 = document.getElementById("btn-feed-expand-5km");
+      if (btnExp5) btnExp5.onclick = () => setRadarRadius(5000);
+
+      const emptyBroadcastBtn = document.getElementById("btn-feed-empty-broadcast");
+      if (emptyBroadcastBtn) {
+        emptyBroadcastBtn.onclick = () => {
+          const openSellBtn = document.getElementById("btn-open-sell-modal");
+          if (openSellBtn) openSellBtn.click();
+        };
       }
+
+      const emptyWantedBtn = document.getElementById("btn-feed-empty-wanted");
+      if (emptyWantedBtn) {
+        emptyWantedBtn.onclick = () => {
+          const openSellBtn = document.getElementById("btn-open-sell-modal");
+          if (openSellBtn) {
+            openSellBtn.click();
+            const wantedRadio = document.querySelector("input[name='sell-beacon-type'][value='wanted']");
+            if (wantedRadio) {
+              wantedRadio.checked = true;
+              wantedRadio.dispatchEvent(new Event("change"));
+            }
+          }
+        };
+      }
+
+      const emptyWaitlistBtn = document.getElementById("btn-feed-empty-waitlist");
+      if (emptyWaitlistBtn) {
+        emptyWaitlistBtn.onclick = () => {
+          const waitlistModal = document.getElementById("modal-campus-waitlist");
+          if (waitlistModal) {
+            waitlistModal.classList.remove("hidden");
+            const campusInput = document.getElementById("waitlist-campus-name");
+            if (campusInput && state.activeCampus) {
+              campusInput.value = state.activeCampus.name || "";
+            }
+          }
+        };
+      }
+
       lucide.createIcons();
       return;
     }
@@ -849,13 +995,21 @@
       }`;
       itemCard.dataset.itemId = item.id;
 
+      const categoryDotClass =
+        item.beacon_type === "wanted" ? "bg-[#ff0077]" :
+        item.category === "stationery" ? "bg-[#00ff9d]" :
+        item.category === "books" ? "bg-[#00e5ff]" :
+        item.category === "hostel" ? "bg-[#f59e0b]" :
+        item.category === "lab" ? "bg-[#a855f7]" :
+        item.category === "tech" ? "bg-[#3b82f6]" : "bg-[#00e5ff]";
+
+      const itemImg = item.image || (PRESET_PHOTOS[item.category] || PRESET_PHOTOS.stationery)[0];
+
       itemCard.innerHTML = `
         <div class="flex items-center gap-2.5 min-w-0">
           <div class="relative shrink-0 cursor-zoom-in feed-img-container" title="Click to inspect photo">
-            <img src="${item.image || PRESET_PHOTOS[item.category][0]}" alt="${item.title}" class="w-10 h-10 rounded-md object-cover border border-slate-700 hover:border-cyan-400 bg-slate-950 transition" />
-            <span class="absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-slate-950 ${
-              item.category === 'stationery' ? 'bg-[#00ff9d]' : 'bg-[#00e5ff]'
-            }"></span>
+            <img src="${itemImg}" alt="${item.title}" class="w-10 h-10 rounded-md object-cover border border-slate-700 hover:border-cyan-400 bg-slate-950 transition" />
+            <span class="absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-slate-950 ${categoryDotClass}"></span>
           </div>
           <div class="min-w-0 flex-1">
             <h4 class="text-xs font-bold text-slate-200 truncate ${isSelected ? 'text-cyan-300' : ''}">${item.title}</h4>
@@ -884,7 +1038,8 @@
         imgTrigger.addEventListener("click", (e) => {
           e.stopPropagation();
           if (window.openPhotoLightbox) {
-            window.openPhotoLightbox(item.image || PRESET_PHOTOS[item.category][0], item.title, item.condition || "Authentic Photo");
+            const safeImg = item.image || (PRESET_PHOTOS[item.category] || PRESET_PHOTOS.stationery)[0];
+            window.openPhotoLightbox(safeImg, item.title, item.condition || "Authentic Photo");
           }
         });
       }
@@ -920,36 +1075,89 @@
     grid.innerHTML = "";
 
     if (state.filteredItems.length === 0) {
-      if (state.activeCampus) {
-        const campusName = state.activeCampus.shortName || state.activeCampus.name;
-        const currentKm = ((state.maxRadiusMeters || 500) / 1000).toFixed(1);
-        grid.innerHTML = `
-          <div class="col-span-full py-16 px-4 text-center text-slate-400 font-mono">
-            <div class="w-14 h-14 mx-auto mb-3 rounded-2xl bg-cyan-950/80 border border-cyan-500/40 flex items-center justify-center text-cyan-400 shadow-[0_0_20px_rgba(0,229,255,0.2)]">
-              <i data-lucide="crosshair" class="w-7 h-7"></i>
-            </div>
-            <h3 class="text-base font-bold text-white mb-1.5">No Products Listed Within ${currentKm} km of ${campusName}</h3>
-            <p class="text-xs text-slate-400 max-w-md mx-auto mb-5 leading-relaxed">Only items listed on or near this college are displayed. You can expand the radius slider up to 2.0 km or list the first product yourself!</p>
-            <button id="btn-grid-empty-broadcast" type="button" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs transition cursor-pointer shadow-[0_0_15px_rgba(0,229,255,0.35)]">
-              <i data-lucide="plus-circle" class="w-4 h-4"></i> Broadcast Beacon on Campus
+      const campusName = state.activeCampus ? (state.activeCampus.shortName || state.activeCampus.name) : "Your Zone";
+      const currentKm = ((state.maxRadiusMeters || 500) / 1000).toFixed(1);
+
+      grid.innerHTML = `
+        <div class="col-span-full py-12 px-4 text-center rounded-2xl bg-slate-900/60 border border-cyan-500/30 font-mono shadow-[0_0_30px_rgba(0,229,255,0.06)]">
+          <div class="w-14 h-14 mx-auto mb-3 rounded-2xl bg-cyan-950/80 border border-cyan-500/50 flex items-center justify-center text-cyan-400 shadow-[0_0_20px_rgba(0,229,255,0.25)]">
+            <i data-lucide="crosshair" class="w-7 h-7 animate-pulse"></i>
+          </div>
+          <h3 class="text-base font-bold text-white mb-1">0 Products Listed Within ${currentKm} km of ${campusName}</h3>
+          <p class="text-xs text-slate-400 max-w-md mx-auto mb-4 leading-relaxed">
+            Only verified items within your selected campus perimeter are shown. Expand your radar range or broadcast the first item to seed your campus!
+          </p>
+
+          <!-- 1-Tap Radius Expansion Buttons -->
+          <div class="flex flex-wrap items-center justify-center gap-2 mb-4">
+            <button id="btn-grid-expand-2km" type="button" class="px-3 py-1.5 rounded-lg bg-cyan-950 hover:bg-cyan-900 border border-cyan-500/50 text-cyan-300 text-xs font-bold transition flex items-center gap-1 cursor-pointer">
+              <i data-lucide="maximize-2" class="w-3.5 h-3.5"></i>
+              <span>Expand to 2.0 km</span>
+            </button>
+            <button id="btn-grid-expand-5km" type="button" class="px-3 py-1.5 rounded-lg bg-cyan-950 hover:bg-cyan-900 border border-cyan-500/50 text-cyan-300 text-xs font-bold transition flex items-center gap-1 cursor-pointer">
+              <i data-lucide="maximize" class="w-3.5 h-3.5"></i>
+              <span>Expand to 5.0 km</span>
             </button>
           </div>
-        `;
-        const emptyGridBroadcastBtn = document.getElementById("btn-grid-empty-broadcast");
-        if (emptyGridBroadcastBtn) {
-          emptyGridBroadcastBtn.onclick = () => {
-            const openSellBtn = document.getElementById("btn-open-sell-modal");
-            if (openSellBtn) openSellBtn.click();
-          };
-        }
-      } else {
-        grid.innerHTML = `
-          <div class="col-span-full py-16 text-center text-slate-400 font-mono">
-            <i data-lucide="package-x" class="w-12 h-12 mx-auto mb-3 opacity-40"></i>
-            <p class="text-sm">No items found matching your filter criteria.</p>
+
+          <!-- Primary Actions -->
+          <div class="flex flex-wrap items-center justify-center gap-2.5 pt-3 border-t border-slate-800/80">
+            <button id="btn-grid-empty-broadcast" type="button" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition cursor-pointer shadow-[0_0_15px_rgba(0,255,157,0.35)]">
+              <i data-lucide="plus-circle" class="w-4 h-4"></i> Post Item
+            </button>
+            <button id="btn-grid-empty-wanted" type="button" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-pink-950 hover:bg-pink-900 border border-pink-500/50 text-pink-300 font-bold text-xs transition cursor-pointer">
+              <i data-lucide="target" class="w-4 h-4"></i> Post Wanted Request
+            </button>
+            <button id="btn-grid-empty-waitlist" type="button" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-750 border border-slate-700 text-amber-300 font-bold text-xs transition cursor-pointer">
+              <i data-lucide="bell-ring" class="w-4 h-4 text-amber-400"></i> Join Campus Waitlist
+            </button>
           </div>
-        `;
+        </div>
+      `;
+
+      const gridExp2 = document.getElementById("btn-grid-expand-2km");
+      if (gridExp2) gridExp2.onclick = () => setRadarRadius(2000);
+
+      const gridExp5 = document.getElementById("btn-grid-expand-5km");
+      if (gridExp5) gridExp5.onclick = () => setRadarRadius(5000);
+
+      const emptyGridBroadcastBtn = document.getElementById("btn-grid-empty-broadcast");
+      if (emptyGridBroadcastBtn) {
+        emptyGridBroadcastBtn.onclick = () => {
+          const openSellBtn = document.getElementById("btn-open-sell-modal");
+          if (openSellBtn) openSellBtn.click();
+        };
       }
+
+      const emptyGridWantedBtn = document.getElementById("btn-grid-empty-wanted");
+      if (emptyGridWantedBtn) {
+        emptyGridWantedBtn.onclick = () => {
+          const openSellBtn = document.getElementById("btn-open-sell-modal");
+          if (openSellBtn) {
+            openSellBtn.click();
+            const wantedRadio = document.querySelector("input[name='sell-beacon-type'][value='wanted']");
+            if (wantedRadio) {
+              wantedRadio.checked = true;
+              wantedRadio.dispatchEvent(new Event("change"));
+            }
+          }
+        };
+      }
+
+      const emptyGridWaitlistBtn = document.getElementById("btn-grid-empty-waitlist");
+      if (emptyGridWaitlistBtn) {
+        emptyGridWaitlistBtn.onclick = () => {
+          const waitlistModal = document.getElementById("modal-campus-waitlist");
+          if (waitlistModal) {
+            waitlistModal.classList.remove("hidden");
+            const campusInput = document.getElementById("waitlist-campus-name");
+            if (campusInput && state.activeCampus) {
+              campusInput.value = state.activeCampus.name || "";
+            }
+          }
+        };
+      }
+
       lucide.createIcons();
       return;
     }
@@ -961,12 +1169,14 @@
       const card = document.createElement("div");
       card.className = "glass-panel glass-panel-hover p-4 flex flex-col justify-between relative overflow-hidden group";
 
+      const itemImg = item.image || (PRESET_PHOTOS[item.category] || PRESET_PHOTOS.stationery)[0];
+
       card.innerHTML = `
         <div>
           <!-- Top Media & Badges -->
           <div class="relative w-full aspect-video rounded-lg overflow-hidden mb-3 bg-slate-950 border border-slate-800 cursor-zoom-in catalog-image-trigger group/img" title="Click to inspect photo in high resolution">
             <img 
-              src="${item.image || PRESET_PHOTOS[item.category][0]}" 
+              src="${itemImg}" 
               alt="${item.title}" 
               class="w-full h-full object-cover group-hover:scale-105 transition duration-300"
             />
@@ -977,9 +1187,21 @@
             </div>
             <div class="absolute top-2 left-2 flex items-center gap-1.5">
               <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase ${
-                item.beacon_type === 'wanted' ? 'bg-pink-950 text-pink-300 border border-pink-500/40' : item.category === 'stationery' ? 'badge-stationery' : 'badge-book'
+                item.beacon_type === 'wanted' ? 'bg-pink-950 text-pink-300 border border-pink-500/40' :
+                item.category === 'stationery' ? 'badge-stationery' :
+                item.category === 'books' ? 'badge-book' :
+                item.category === 'hostel' ? 'badge-hostel' :
+                item.category === 'lab' ? 'badge-lab' :
+                item.category === 'tech' ? 'badge-tech' : 'badge-stationery'
               }">
-                ${item.beacon_type === 'wanted' ? '🚨 Wanted' : item.category === 'stationery' ? '✏️ Stationery' : '📖 Book'}
+                ${
+                  item.beacon_type === 'wanted' ? '🚨 Wanted' :
+                  item.category === 'stationery' ? '✏️ Stationery' :
+                  item.category === 'books' ? '📖 Books' :
+                  item.category === 'hostel' ? '🛏️ Hostel' :
+                  item.category === 'lab' ? '🔬 Lab Gear' :
+                  item.category === 'tech' ? '🔌 Tech' : '📦 Item'
+                }
               </span>
             </div>
             <div class="absolute top-2 right-2">
@@ -1045,7 +1267,8 @@
         imgTrigger.addEventListener("click", (e) => {
           e.stopPropagation();
           if (window.openPhotoLightbox) {
-            window.openPhotoLightbox(item.image || PRESET_PHOTOS[item.category][0], item.title, item.condition || "Authentic Photo");
+            const safeImg = item.image || (PRESET_PHOTOS[item.category] || PRESET_PHOTOS.stationery)[0];
+            window.openPhotoLightbox(safeImg, item.title, item.condition || "Authentic Photo");
           }
         });
       }
@@ -1144,13 +1367,21 @@
     filterBtns.forEach((btn) => {
       btn.addEventListener("click", () => {
         filterBtns.forEach((b) => {
-          b.className = "filter-category-btn px-3 py-1.5 rounded-md text-slate-400 hover:text-slate-200 transition";
+          b.className = "filter-category-btn px-3 py-1.5 rounded-md text-slate-400 hover:text-slate-200 transition shrink-0";
         });
-        const isBounty = btn.dataset.category === "wanted";
-        btn.className = isBounty
-          ? "filter-category-btn px-3 py-1.5 rounded-md text-pink-300 bg-pink-950/80 border border-pink-500/40 transition"
-          : "filter-category-btn px-3 py-1.5 rounded-md text-cyan-400 bg-cyan-950/80 border border-cyan-500/30 transition";
-        state.selectedCategory = btn.dataset.category;
+        const cat = btn.dataset.category;
+        if (cat === "wanted") {
+          btn.className = "filter-category-btn px-3 py-1.5 rounded-md text-pink-300 bg-pink-950/80 border border-pink-500/40 transition shrink-0";
+        } else if (cat === "hostel") {
+          btn.className = "filter-category-btn px-3 py-1.5 rounded-md text-amber-300 bg-amber-950/80 border border-amber-500/40 transition shrink-0";
+        } else if (cat === "lab") {
+          btn.className = "filter-category-btn px-3 py-1.5 rounded-md text-purple-300 bg-purple-950/80 border border-purple-500/40 transition shrink-0";
+        } else if (cat === "tech") {
+          btn.className = "filter-category-btn px-3 py-1.5 rounded-md text-blue-300 bg-blue-950/80 border border-blue-500/40 transition shrink-0";
+        } else {
+          btn.className = "filter-category-btn px-3 py-1.5 rounded-md text-cyan-400 bg-cyan-950/80 border border-cyan-500/30 transition shrink-0";
+        }
+        state.selectedCategory = cat;
         recalculateAndRender();
       });
     });
@@ -1388,7 +1619,121 @@
       }
     });
 
-    // 10. Real-time Communication Alerts & Header Inbox
+    // 10. Floating Mobile Dual-View Switcher (HUD vs Feed List)
+    const mobileToggleRadar = document.getElementById("mobile-toggle-radar");
+    const mobileToggleFeed = document.getElementById("mobile-toggle-feed");
+    const radarScopeCard = document.getElementById("radar-scope-card");
+    const nearbyTargetsPanel = document.getElementById("selected-target-panel");
+
+    if (mobileToggleRadar && mobileToggleFeed) {
+      mobileToggleRadar.addEventListener("click", () => {
+        mobileToggleRadar.className = "px-3.5 py-1.5 rounded-full text-xs font-mono font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-400/40 flex items-center gap-1.5 transition cursor-pointer";
+        mobileToggleFeed.className = "px-3.5 py-1.5 rounded-full text-xs font-mono font-bold text-slate-400 hover:text-slate-200 flex items-center gap-1.5 transition cursor-pointer";
+        if (radarScopeCard) {
+          radarScopeCard.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      });
+
+      mobileToggleFeed.addEventListener("click", () => {
+        mobileToggleFeed.className = "px-3.5 py-1.5 rounded-full text-xs font-mono font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-400/40 flex items-center gap-1.5 transition cursor-pointer";
+        mobileToggleRadar.className = "px-3.5 py-1.5 rounded-full text-xs font-mono font-bold text-slate-400 hover:text-slate-200 flex items-center gap-1.5 transition cursor-pointer";
+        const feedList = document.getElementById("radar-feed-list");
+        if (feedList) {
+          feedList.scrollIntoView({ behavior: "smooth", block: "start" });
+        } else if (nearbyTargetsPanel) {
+          nearbyTargetsPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      });
+    }
+
+    // 11. Campus Waitlist Modal Form Handling
+    const btnOpenWaitlist = document.getElementById("btn-campus-open-waitlist");
+    const waitlistModal = document.getElementById("modal-campus-waitlist");
+    const btnCloseWaitlist = document.getElementById("btn-close-campus-waitlist");
+    const btnCancelWaitlist = document.getElementById("btn-cancel-campus-waitlist");
+    const formWaitlist = document.getElementById("form-campus-waitlist");
+    const waitlistMsg = document.getElementById("waitlist-status-msg");
+
+    if (btnOpenWaitlist && waitlistModal) {
+      btnOpenWaitlist.addEventListener("click", () => {
+        const campusSearchInput = document.getElementById("campus-search-input");
+        const waitlistCampusInput = document.getElementById("waitlist-campus-name");
+        if (waitlistCampusInput) {
+          waitlistCampusInput.value = campusSearchInput?.value?.trim() || "";
+        }
+        waitlistModal.classList.remove("hidden");
+      });
+    }
+
+    const closeWaitlistModal = () => {
+      if (waitlistModal) waitlistModal.classList.add("hidden");
+      if (waitlistMsg) {
+        waitlistMsg.classList.add("hidden");
+        waitlistMsg.textContent = "";
+      }
+    };
+    if (btnCloseWaitlist) btnCloseWaitlist.addEventListener("click", closeWaitlistModal);
+    if (btnCancelWaitlist) btnCancelWaitlist.addEventListener("click", closeWaitlistModal);
+
+    if (formWaitlist) {
+      formWaitlist.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const campusName = document.getElementById("waitlist-campus-name")?.value?.trim();
+        const email = document.getElementById("waitlist-email")?.value?.trim();
+        const submitBtn = document.getElementById("btn-submit-campus-waitlist");
+
+        if (!campusName || !email) return;
+
+        if (submitBtn) {
+          submitBtn.disabled = true;
+          submitBtn.innerHTML = `<span>⏳</span> <span>Joining...</span>`;
+        }
+
+        try {
+          if (window.MarketAPI && typeof MarketAPI.submitCampusWaitlist === "function") {
+            const res = await MarketAPI.submitCampusWaitlist(campusName, email);
+            if (waitlistMsg) {
+              waitlistMsg.className = "text-xs p-2.5 rounded-lg font-mono bg-emerald-950/80 border border-emerald-500/50 text-emerald-300";
+              waitlistMsg.textContent = res.message || `Joined waitlist for ${campusName}!`;
+              waitlistMsg.classList.remove("hidden");
+            }
+            showToast("WAITLIST CONFIRMED", `We will alert ${email} when ${campusName} goes live.`);
+            setTimeout(closeWaitlistModal, 2000);
+          } else {
+            showToast("WAITLIST SAVED", `Saved waitlist entry for ${campusName}.`);
+            closeWaitlistModal();
+          }
+        } catch (err) {
+          if (waitlistMsg) {
+            waitlistMsg.className = "text-xs p-2.5 rounded-lg font-mono bg-rose-950/80 border border-rose-500/50 text-rose-300";
+            waitlistMsg.textContent = err.message || "Failed to submit waitlist. Please try again.";
+            waitlistMsg.classList.remove("hidden");
+          }
+        } finally {
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = `<i data-lucide="send" class="w-3.5 h-3.5"></i> <span>Join Campus Waitlist</span>`;
+            lucide.createIcons();
+          }
+        }
+      });
+    }
+
+    // 12. Universal Email Institutional Domain Recognition
+    const universalEmailInput = document.getElementById("input-universal-email");
+    const emailDomainRecognizer = document.getElementById("email-domain-recognizer");
+    if (universalEmailInput && emailDomainRecognizer) {
+      universalEmailInput.addEventListener("input", (e) => {
+        const val = e.target.value.trim().toLowerCase();
+        if (val.includes(".ac.in") || val.includes(".edu.in") || val.includes(".edu")) {
+          emailDomainRecognizer.classList.remove("hidden");
+        } else {
+          emailDomainRecognizer.classList.add("hidden");
+        }
+      });
+    }
+
+    // 13. Real-time Communication Alerts & Header Inbox
     setupCommunicationAlerts();
   }
 
@@ -4609,8 +4954,12 @@
 
       const category = form.querySelector("input[name='sell-category']:checked").value;
       const beaconType = form.querySelector("input[name='sell-beacon-type']:checked")?.value || "sell";
-      const title = document.getElementById("sell-title").value.trim();
-      const subCategory = document.getElementById("sell-subcategory").value.trim() || (category === "books" ? "Textbook" : "Stationery");
+      const defaultSubcat = 
+        category === "books" ? "Textbook" :
+        category === "hostel" ? "Hostel Essential" :
+        category === "lab" ? "Lab Gear" :
+        category === "tech" ? "Tech Gadget" : "Stationery";
+      const subCategory = document.getElementById("sell-subcategory").value.trim() || defaultSubcat;
       const condition = document.getElementById("sell-condition").value;
       const price = parseFloat(document.getElementById("sell-price").value);
       const origPriceVal = document.getElementById("sell-orig-price").value;
@@ -4622,7 +4971,7 @@
       let image = uploadedPhotoBase64 || document.getElementById("sell-image").value.trim();
 
       if (!image) {
-        const presets = PRESET_PHOTOS[category];
+        const presets = PRESET_PHOTOS[category] || PRESET_PHOTOS.stationery;
         image = presets[Math.floor(Math.random() * presets.length)];
       }
 
@@ -4778,7 +5127,7 @@
       targetImageContainer.addEventListener("click", () => {
         if (state.selectedTarget && state.selectedTarget.item) {
           const item = state.selectedTarget.item;
-          const imgSrc = item.image || PRESET_PHOTOS[item.category][0];
+          const imgSrc = item.image || (PRESET_PHOTOS[item.category] || PRESET_PHOTOS.stationery)[0];
           openPhotoLightbox(imgSrc, item.title, item.condition || "Authentic Photo");
         }
       });
@@ -5900,7 +6249,7 @@
         card.className = "p-3 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-between gap-3 text-xs font-mono";
         card.innerHTML = `
           <div class="flex items-center gap-2.5 min-w-0">
-            <img src="${item.image || PRESET_PHOTOS[item.category][0]}" class="w-10 h-10 rounded object-cover border border-slate-700 shrink-0" />
+            <img src="${item.image || (PRESET_PHOTOS[item.category] || PRESET_PHOTOS.stationery)[0]}" class="w-10 h-10 rounded object-cover border border-slate-700 shrink-0" />
             <div class="min-w-0">
               <div class="flex items-center gap-1.5">
                 <span class="px-1.5 py-0.2 rounded text-[9px] font-bold uppercase ${

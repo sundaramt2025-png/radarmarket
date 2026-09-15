@@ -38,7 +38,7 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 
   <!-- Custom Radar HUD Styles -->
-  <link rel="stylesheet" href="css/styles.css?v=3.8.6">
+  <link rel="stylesheet" href="css/styles.css?v=3.8.7">
 
   <script>
     tailwind.config = {
@@ -246,17 +246,26 @@
       <div class="flex flex-wrap items-center gap-3">
         
         <!-- Category Filter Pills -->
-        <div class="flex items-center p-0.5 rounded-lg bg-slate-900 border border-slate-800 text-xs font-mono">
-          <button class="filter-category-btn px-3 py-1.5 rounded-md text-cyan-400 bg-cyan-950/80 border border-cyan-500/30 transition" data-category="all">
+        <div class="flex items-center p-0.5 rounded-lg bg-slate-900 border border-slate-800 text-xs font-mono overflow-x-auto scrollbar-none">
+          <button class="filter-category-btn px-3 py-1.5 rounded-md text-cyan-400 bg-cyan-950/80 border border-cyan-500/30 transition shrink-0" data-category="all">
             ALL
           </button>
-          <button class="filter-category-btn px-3 py-1.5 rounded-md text-slate-400 hover:text-emerald-300 transition" data-category="stationery">
+          <button class="filter-category-btn px-3 py-1.5 rounded-md text-slate-400 hover:text-emerald-300 transition shrink-0" data-category="stationery">
             ✏️ STATIONERY
           </button>
-          <button class="filter-category-btn px-3 py-1.5 rounded-md text-slate-400 hover:text-cyan-300 transition" data-category="books">
+          <button class="filter-category-btn px-3 py-1.5 rounded-md text-slate-400 hover:text-cyan-300 transition shrink-0" data-category="books">
             📖 BOOKS
           </button>
-          <button class="filter-category-btn px-3 py-1.5 rounded-md text-slate-400 hover:text-pink-300 transition" data-category="wanted">
+          <button class="filter-category-btn px-3 py-1.5 rounded-md text-slate-400 hover:text-amber-300 transition shrink-0" data-category="hostel">
+            🛏️ HOSTEL
+          </button>
+          <button class="filter-category-btn px-3 py-1.5 rounded-md text-slate-400 hover:text-purple-300 transition shrink-0" data-category="lab">
+            🔬 LAB GEAR
+          </button>
+          <button class="filter-category-btn px-3 py-1.5 rounded-md text-slate-400 hover:text-blue-300 transition shrink-0" data-category="tech">
+            🔌 TECH
+          </button>
+          <button class="filter-category-btn px-3 py-1.5 rounded-md text-slate-400 hover:text-pink-300 transition shrink-0" data-category="wanted">
             🎯 BOUNTIES
           </button>
         </div>
@@ -279,7 +288,7 @@
             type="range" 
             id="range-slider" 
             min="500" 
-            max="2000" 
+            max="5000" 
             step="100" 
             value="500" 
             class="w-20 sm:w-28 cursor-pointer"
@@ -394,8 +403,20 @@
                 <span>Books</span>
               </div>
               <div class="flex items-center gap-1.5">
+                <span class="w-2.5 h-2.5 rounded-full bg-[#f59e0b] shadow-[0_0_6px_#f59e0b]"></span>
+                <span>Hostel</span>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <span class="w-2.5 h-2.5 rounded-full bg-[#a855f7] shadow-[0_0_6px_#a855f7]"></span>
+                <span>Lab</span>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <span class="w-2.5 h-2.5 rounded-full bg-[#3b82f6] shadow-[0_0_6px_#3b82f6]"></span>
+                <span>Tech</span>
+              </div>
+              <div class="flex items-center gap-1.5">
                 <span class="w-2.5 h-2.5 rounded-full bg-[#ffb700] shadow-[0_0_6px_#ffb700]"></span>
-                <span>Top Match (90+)</span>
+                <span>Top Match (85+)</span>
               </div>
               <div class="flex items-center gap-1.5">
                 <span class="w-2.5 h-2.5 rounded-full bg-[#ff0077] shadow-[0_0_6px_#ff0077]"></span>
@@ -611,6 +632,55 @@
             </button>
           </div>
 
+          <!-- Collapsible DSP-VI Mathematical Telemetry Accordion Drawer -->
+          <details id="details-dsp-telemetry" class="mb-3 rounded-lg bg-slate-900/80 border border-slate-800 text-xs font-mono group">
+            <summary class="px-3 py-2 cursor-pointer text-cyan-400 hover:text-cyan-300 flex items-center justify-between select-none">
+              <span class="flex items-center gap-1.5 font-bold text-[11px]">
+                <i data-lucide="cpu" class="w-3.5 h-3.5 text-cyan-400"></i>
+                <span>DSP-VI TELEMETRY METRICS</span>
+              </span>
+              <i data-lucide="chevron-down" class="w-3.5 h-3.5 group-open:rotate-180 transition-transform"></i>
+            </summary>
+            <div class="px-3 pb-3 pt-1 space-y-2 border-t border-slate-800/80 text-[10px]">
+              <div>
+                <div class="flex justify-between text-slate-400 mb-0.5">
+                  <span>Geodesic Proximity (40%):</span>
+                  <span id="dsp-metric-prox" class="text-cyan-300 font-bold">--</span>
+                </div>
+                <div class="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                  <div id="dsp-bar-prox" class="bg-cyan-400 h-full transition-all" style="width: 0%"></div>
+                </div>
+              </div>
+              <div>
+                <div class="flex justify-between text-slate-400 mb-0.5">
+                  <span>Value & Discount (30%):</span>
+                  <span id="dsp-metric-val" class="text-emerald-300 font-bold">--</span>
+                </div>
+                <div class="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                  <div id="dsp-bar-val" class="bg-emerald-400 h-full transition-all" style="width: 0%"></div>
+                </div>
+              </div>
+              <div>
+                <div class="flex justify-between text-slate-400 mb-0.5">
+                  <span>Reputation & Trust (20%):</span>
+                  <span id="dsp-metric-rep" class="text-amber-300 font-bold">--</span>
+                </div>
+                <div class="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                  <div id="dsp-bar-rep" class="bg-amber-400 h-full transition-all" style="width: 0%"></div>
+                </div>
+              </div>
+              <div>
+                <div class="flex justify-between text-slate-400 mb-0.5">
+                  <span>Freshness Half-Life (10%):</span>
+                  <span id="dsp-metric-fresh" class="text-purple-300 font-bold">--</span>
+                </div>
+                <div class="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                  <div id="dsp-bar-fresh" class="bg-purple-400 h-full transition-all" style="width: 0%"></div>
+                </div>
+              </div>
+            </div>
+          </details>
+
           <!-- Action Buttons -->
           <div class="grid grid-cols-2 gap-2 mb-2">
             <button id="btn-signal-seller" class="w-full py-2 px-3 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold font-mono text-xs tracking-wider uppercase transition shadow-[0_0_15px_rgba(0,229,255,0.25)] flex items-center justify-center gap-1.5">
@@ -682,6 +752,18 @@
 
   </main>
 
+  <!-- FLOATING MOBILE DUAL-VIEW SWITCHER PILL (Mobile only: HUD vs Feed) -->
+  <div id="mobile-view-switcher" class="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 lg:hidden flex items-center p-1 rounded-full bg-slate-950/90 border border-cyan-500/50 shadow-[0_0_25px_rgba(0,229,255,0.3)] backdrop-blur-md">
+    <button id="mobile-toggle-radar" type="button" class="px-3.5 py-1.5 rounded-full text-xs font-mono font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-400/40 flex items-center gap-1.5 transition cursor-pointer">
+      <i data-lucide="crosshair" class="w-3.5 h-3.5"></i>
+      <span>RADAR HUD</span>
+    </button>
+    <button id="mobile-toggle-feed" type="button" class="px-3.5 py-1.5 rounded-full text-xs font-mono font-bold text-slate-400 hover:text-slate-200 flex items-center gap-1.5 transition cursor-pointer">
+      <i data-lucide="list-filter" class="w-3.5 h-3.5"></i>
+      <span>FEED LIST (<span id="mobile-feed-count">0</span>)</span>
+    </button>
+  </div>
+
   <!-- MODAL: BROADCAST BEACON (POST / SELL NEW ITEM) -->
   <div id="modal-sell" class="modal-overlay fixed inset-0 z-50 hidden flex items-center justify-center p-4">
     <div class="glass-panel w-full max-w-lg border border-cyan-400/50 shadow-[0_0_40px_rgba(0,229,255,0.25)] rounded-2xl overflow-hidden flex flex-col max-h-[92vh]">
@@ -738,14 +820,26 @@
         <!-- Category Selector -->
         <div>
           <label class="block text-slate-300 font-bold mb-1.5 uppercase">Category *</label>
-          <div class="grid grid-cols-2 gap-3">
+          <div class="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
             <label class="flex items-center gap-2 p-2.5 rounded-lg bg-slate-900 border border-slate-700 cursor-pointer hover:border-emerald-400 transition">
               <input type="radio" name="sell-category" value="stationery" checked class="text-emerald-400 focus:ring-0">
-              <span class="text-slate-200">✏️ Stationery Equipment</span>
+              <span class="text-xs text-slate-200 font-semibold">✏️ Stationery</span>
             </label>
             <label class="flex items-center gap-2 p-2.5 rounded-lg bg-slate-900 border border-slate-700 cursor-pointer hover:border-cyan-400 transition">
               <input type="radio" name="sell-category" value="books" class="text-cyan-400 focus:ring-0">
-              <span class="text-slate-200">📖 Second-Hand Book</span>
+              <span class="text-xs text-slate-200 font-semibold">📖 Books</span>
+            </label>
+            <label class="flex items-center gap-2 p-2.5 rounded-lg bg-slate-900 border border-slate-700 cursor-pointer hover:border-amber-400 transition">
+              <input type="radio" name="sell-category" value="hostel" class="text-amber-400 focus:ring-0">
+              <span class="text-xs text-slate-200 font-semibold">🛏️ Hostel</span>
+            </label>
+            <label class="flex items-center gap-2 p-2.5 rounded-lg bg-slate-900 border border-slate-700 cursor-pointer hover:border-purple-400 transition">
+              <input type="radio" name="sell-category" value="lab" class="text-purple-400 focus:ring-0">
+              <span class="text-xs text-slate-200 font-semibold">🔬 Lab Gear</span>
+            </label>
+            <label class="flex items-center gap-2 p-2.5 rounded-lg bg-slate-900 border border-slate-700 cursor-pointer hover:border-blue-400 transition col-span-2 sm:col-span-1">
+              <input type="radio" name="sell-category" value="tech" class="text-blue-400 focus:ring-0">
+              <span class="text-xs text-slate-200 font-semibold">🔌 Tech / Gadgets</span>
             </label>
           </div>
         </div>
@@ -1343,6 +1437,12 @@
         </div>
       </div>
 
+      <!-- Campus Safety Protocol Banner -->
+      <div class="px-3 py-1.5 bg-amber-950/40 border-b border-amber-500/30 flex items-center gap-2 text-[10px] font-mono text-amber-300">
+        <i data-lucide="shield-check" class="w-3.5 h-3.5 text-amber-400 shrink-0"></i>
+        <span><strong>SAFETY PROTOCOL:</strong> Meet in public campus zones (canteen, library, quad). Inspect item before payment. Never send advance UPI deposits.</span>
+      </div>
+
       <!-- Messages Thread -->
       <div id="chat-messages-container" class="flex-1 p-4 overflow-y-auto space-y-3 text-xs font-sans">
         <!-- Message bubbles populated here -->
@@ -1456,6 +1556,12 @@
         <button id="btn-close-handshake" type="button" class="text-slate-400 hover:text-white transition cursor-pointer p-1">
           <i data-lucide="x" class="w-5 h-5"></i>
         </button>
+      </div>
+
+      <!-- Campus Safety Protocol Banner -->
+      <div class="px-4 py-2 bg-amber-950/40 border-b border-amber-500/30 flex items-center gap-2 text-[10px] font-mono text-amber-300 text-left">
+        <i data-lucide="shield-alert" class="w-4 h-4 text-amber-400 shrink-0"></i>
+        <span><strong>CAMPUS SAFETY PROTOCOL:</strong> Complete exchange in public campus areas (canteen, library). Only give/verify PIN after inspecting the physical item.</span>
       </div>
 
       <!-- Main Body: Dynamically Switches between Seller View, Buyer View, and Celebration View -->
@@ -1573,6 +1679,12 @@
         <button type="button" id="btn-close-offer-modal" class="text-slate-400 hover:text-white p-1 rounded transition cursor-pointer">
           <i data-lucide="x" class="w-5 h-5"></i>
         </button>
+      </div>
+
+      <!-- Campus Safety Protocol Banner -->
+      <div class="px-4 py-2 bg-amber-950/40 border-b border-amber-500/30 flex items-center gap-2 text-[10px] font-mono text-amber-300">
+        <i data-lucide="shield-check" class="w-3.5 h-3.5 text-amber-400 shrink-0"></i>
+        <span><strong>SAFETY NOTE:</strong> All deals are strictly in-person campus handshakes. Do not pay advance deposits or off-platform transfers.</span>
       </div>
 
       <div class="p-5 space-y-4 font-mono">
@@ -1810,6 +1922,14 @@
               Enter your Gmail, College, or Personal email to get your <strong>Verified Student Badge</strong> and sync all beacons across devices!
             </p>
 
+            <!-- Institutional Email Advantage Banner -->
+            <div class="p-2.5 rounded-lg bg-amber-950/40 border border-amber-500/40 text-amber-300 text-[11px] flex items-start gap-2 font-mono">
+              <i data-lucide="award" class="w-4 h-4 text-amber-400 shrink-0 mt-0.5"></i>
+              <div>
+                <strong class="text-amber-200">CAMPUS TRUST BOOST:</strong> Log in with your institutional college email (<span class="font-bold text-white">.ac.in</span> or <span class="font-bold text-white">.edu.in</span>) to automatically unlock the <span class="px-1 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold text-[10px]">CAMPUS VERIFIED</span> badge &amp; +30 Trust Algorithm Score!
+              </div>
+            </div>
+
             <form id="form-universal-email-login" class="space-y-2.5">
               <div class="relative">
                 <i data-lucide="mail" class="w-4 h-4 text-cyan-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
@@ -1817,9 +1937,13 @@
                   type="email" 
                   id="input-universal-email" 
                   required 
-                  placeholder="Enter your Gmail or College Email (e.g. rohit@gmail.com)" 
+                  placeholder="Enter your Gmail or College Email (e.g. student@iitb.ac.in)" 
                   class="w-full pl-9 pr-3 py-2.5 bg-slate-950 border border-slate-700 focus:border-cyan-400 rounded-lg text-xs font-mono text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-cyan-400/50 transition"
                 />
+              </div>
+              <div id="email-domain-recognizer" class="hidden text-[10px] font-mono text-emerald-400 font-bold flex items-center gap-1">
+                <i data-lucide="check-circle" class="w-3 h-3 text-emerald-400"></i>
+                <span>Official Campus Institutional Domain Recognized (+30 Trust)!</span>
               </div>
 
               <div class="relative">
@@ -2123,15 +2247,80 @@
         <!-- Dynamically rendered campus cards -->
       </div>
 
-      <!-- Footer with Custom Pinpoint Link -->
-      <div class="px-5 py-3 bg-slate-900/90 border-t border-slate-800 flex items-center justify-between gap-3 text-xs font-mono">
+      <!-- Footer with Custom Pinpoint Link & Campus Waitlist Link -->
+      <div class="px-5 py-3 bg-slate-900/90 border-t border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs font-mono">
         <span id="campus-search-status" class="text-slate-400 text-[11px] truncate">Showing Indian campuses. Type above to filter.</span>
-        <button id="btn-campus-open-pinpoint" type="button" class="text-cyan-400 hover:text-cyan-300 hover:underline shrink-0 text-[11px] flex items-center gap-1 cursor-pointer">
-          <i data-lucide="map-pin" class="w-3.5 h-3.5"></i>
-          <span>Custom Map Pinpoint</span>
+        <div class="flex items-center gap-3">
+          <button id="btn-campus-open-waitlist" type="button" class="text-amber-400 hover:text-amber-300 hover:underline shrink-0 text-[11px] flex items-center gap-1 cursor-pointer">
+            <i data-lucide="bell-ring" class="w-3.5 h-3.5 text-amber-400"></i>
+            <span>College Missing? Join Waitlist</span>
+          </button>
+          <button id="btn-campus-open-pinpoint" type="button" class="text-cyan-400 hover:text-cyan-300 hover:underline shrink-0 text-[11px] flex items-center gap-1 cursor-pointer">
+            <i data-lucide="map-pin" class="w-3.5 h-3.5"></i>
+            <span>Custom Map Pinpoint</span>
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- MODAL: UNLISTED CAMPUS WAITLIST / EXPANSION -->
+  <div id="modal-campus-waitlist" class="modal-overlay fixed inset-0 z-50 hidden flex items-center justify-center p-3 sm:p-6 bg-black/90 backdrop-blur-md">
+    <div class="relative w-full max-w-md bg-slate-950 border border-emerald-500/50 rounded-2xl overflow-hidden shadow-[0_0_50px_rgba(0,255,157,0.25)] flex flex-col">
+      
+      <!-- Header -->
+      <div class="px-5 py-3.5 bg-slate-900/90 border-b border-slate-800 flex items-center justify-between text-xs font-mono">
+        <div class="flex items-center gap-2 text-emerald-300">
+          <i data-lucide="bell-ring" class="w-4 h-4 text-emerald-400 animate-pulse"></i>
+          <span class="font-bold uppercase tracking-wider">Campus Expansion Waitlist</span>
+        </div>
+        <button id="btn-close-campus-waitlist" type="button" class="text-slate-400 hover:text-white transition cursor-pointer p-1 rounded-md">
+          <i data-lucide="x" class="w-4 h-4"></i>
         </button>
       </div>
 
+      <!-- Content / Form -->
+      <form id="form-campus-waitlist" class="p-5 space-y-4 font-mono text-xs">
+        <div class="p-3 rounded-xl bg-emerald-950/30 border border-emerald-500/30 text-emerald-300 text-[11px] leading-relaxed">
+          🚀 Can't find your college or living in an off-campus hostel zone? Join the Radar Market campus waitlist. We bring peer-to-peer nodes live where student demand is highest!
+        </div>
+
+        <div>
+          <label class="block text-slate-300 font-bold mb-1.5 uppercase text-[11px]">College / Campus Name *</label>
+          <input 
+            type="text" 
+            id="waitlist-campus-name" 
+            required
+            placeholder="e.g. SRM University, Thapar, Manipal, Amity..." 
+            class="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700 focus:border-emerald-400 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-emerald-400/50 text-xs transition"
+          />
+        </div>
+
+        <div>
+          <label class="block text-slate-300 font-bold mb-1.5 uppercase text-[11px]">Your Student Email *</label>
+          <input 
+            type="email" 
+            id="waitlist-email" 
+            required
+            placeholder="student@college.ac.in or name@gmail.com" 
+            class="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700 focus:border-emerald-400 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-emerald-400/50 text-xs transition"
+          />
+          <p class="text-[10px] text-slate-400 mt-1">We'll alert you the instant your campus trading node goes live.</p>
+        </div>
+
+        <div id="waitlist-status-msg" class="hidden text-xs p-2.5 rounded-lg font-mono"></div>
+
+        <div class="flex items-center gap-2 pt-1">
+          <button type="submit" id="btn-submit-campus-waitlist" class="flex-1 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold tracking-wider uppercase transition shadow-[0_0_15px_rgba(0,255,157,0.3)] flex items-center justify-center gap-1.5 cursor-pointer">
+            <i data-lucide="send" class="w-3.5 h-3.5"></i>
+            <span>Join Campus Waitlist</span>
+          </button>
+          <button type="button" id="btn-cancel-campus-waitlist" class="px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 transition cursor-pointer">
+            Cancel
+          </button>
+        </div>
+      </form>
     </div>
   </div>
 
@@ -2522,12 +2711,12 @@
   </div>
 
   <!-- SCRIPTS -->
-  <script src="js/data.js?v=3.8.6"></script>
-  <script src="js/campuses.js?v=3.8.6"></script>
-  <script src="js/algorithm.js?v=3.8.6"></script>
-  <script src="js/radar.js?v=3.8.6"></script>
-  <script src="js/api.js?v=3.8.6"></script>
-  <script src="js/app.js?v=3.8.6"></script>
+  <script src="js/data.js?v=3.8.7"></script>
+  <script src="js/campuses.js?v=3.8.7"></script>
+  <script src="js/algorithm.js?v=3.8.7"></script>
+  <script src="js/radar.js?v=3.8.7"></script>
+  <script src="js/api.js?v=3.8.7"></script>
+  <script src="js/app.js?v=3.8.7"></script>
 
   <script>
     // Initialize Lucide icons on page load

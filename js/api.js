@@ -380,20 +380,75 @@
     }
   }
 
+  const FEED_CACHE_KEY = "radarmarket_cached_feed";
+
   /**
-   * Fetch all items from SQLite database
+   * Fast synchronous cached feed retrieval for zero-latency initial UI rendering
+   */
+  function getCachedFeed() {
+    try {
+      const saved = localStorage.getItem(FEED_CACHE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {}
+    return null;
+  }
+
+  /**
+   * Fetch all items from SQLite database with client-side cache fallback
    */
   async function getItems() {
     try {
       const data = await request("/api/items");
-      if (data && data.items) {
+      if (data && data.items && Array.isArray(data.items)) {
+        try {
+          localStorage.setItem(FEED_CACHE_KEY, JSON.stringify(data.items));
+        } catch (e) {}
         return data.items;
       }
     } catch (err) {
-      console.warn("Backend unavailable, falling back to local dataset:", err.message);
+      console.warn("Backend unavailable, falling back to cached feed:", err.message);
     }
-    // Fallback to local memory/storage
+    // Fallback to client cached feed or local dataset
+    const cached = getCachedFeed();
+    if (cached) return cached;
     return MarketData.getMarketItems();
+  }
+
+  /**
+   * Submit student institutional email to unlisted campus waitlist
+   */
+  async function submitCampusWaitlist(campusName, email) {
+    return await request("/api/waitlist", {
+      method: "POST",
+      body: JSON.stringify({ campus_name: campusName, email })
+    });
+  }
+
+  /**
+   * Keep-Alive Heartbeat Loop: Prevents free-tier PaaS (Render, etc.) cold-sleep
+   */
+  let keepAliveTimer = null;
+  function startKeepAliveHeartbeat() {
+    if (keepAliveTimer) return;
+    // Ping backend every 4.5 minutes when tab is visible
+    keepAliveTimer = setInterval(async () => {
+      if (document.hidden) return; // Save mobile battery when tab is in background
+      try {
+        await fetch("/api/ping", { cache: "no-store" });
+      } catch (e) {}
+    }, 270000);
+  }
+
+  // Auto-engage keep-alive when DOM is ready
+  if (typeof document !== "undefined") {
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", startKeepAliveHeartbeat);
+    } else {
+      startKeepAliveHeartbeat();
+    }
   }
 
   /**
@@ -855,6 +910,9 @@
     startSyncLoop,
     stopSyncLoop,
     lookupIsbn,
+    getCachedFeed,
+    startKeepAliveHeartbeat,
+    submitCampusWaitlist,
     on
   };
 })();

@@ -133,6 +133,15 @@ def init_db():
         );
     """)
 
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS campus_waitlist (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            campus_name TEXT NOT NULL,
+            email TEXT NOT NULL,
+            created_at REAL NOT NULL
+        );
+    """)
+
     # Schema Migrations for enhanced features
     try:
         cur.execute("ALTER TABLE items ADD COLUMN beacon_type TEXT DEFAULT 'sell';")
@@ -472,6 +481,40 @@ def lookup_isbn_api(isbn):
         "success": False,
         "error": f"No book records found for ISBN '{clean_isbn}'. Please enter details manually."
     }), 404
+
+# ==============================================================================
+# Keep-Alive Heartbeat & Campus Expansion Waitlist (v2.8)
+# ==============================================================================
+
+@app.route('/api/ping', methods=['GET'])
+def api_ping():
+    """Ultra-lightweight keep-alive heartbeat route to prevent free-tier PaaS sleep."""
+    return jsonify({
+        "status": "ok",
+        "timestamp": time.time(),
+        "service": "radarmarket-v2.8",
+        "mode": "production"
+    })
+
+@app.route('/api/waitlist', methods=['POST'])
+def add_campus_waitlist():
+    """Register student email for new/unlisted campus expansion alerts."""
+    db = get_db()
+    data = request.get_json() or {}
+    campus_name = str(data.get('campus_name', '')).strip()
+    email = str(data.get('email', '')).strip().lower()
+
+    if not campus_name or not email or '@' not in email:
+        return jsonify({"success": False, "error": "Please provide a valid campus name and email address"}), 400
+
+    now = time.time()
+    cur = db.cursor()
+    cur.execute("INSERT INTO campus_waitlist (campus_name, email, created_at) VALUES (?, ?, ?)", (campus_name, email, now))
+    db.commit()
+    return jsonify({
+        "success": True,
+        "message": f"Successfully joined waitlist for {campus_name}! We'll alert you as soon as trading goes live."
+    })
 
 # --- GOOGLE AUTHENTICATION & IDENTITY HELPERS ---
 
