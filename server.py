@@ -1437,7 +1437,7 @@ def create_offer(item_id):
         buyer_name = data.get('buyer_name') or "Student"
 
     try:
-        offer_amount = float(data.get('offer_amount', 0))
+        offer_amount = float(data.get('offer_amount') or data.get('offered_price') or data.get('amount') or 0)
     except (ValueError, TypeError):
         return jsonify({"success": False, "error": "Invalid offer amount"}), 400
 

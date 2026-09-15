@@ -674,6 +674,34 @@
       document.getElementById("target-title").textContent = "No target acquired in this sector";
       document.getElementById("target-algo-score").textContent = "--";
       document.getElementById("target-signal-tier").textContent = "SIGNAL: LOST";
+      document.getElementById("target-distance").textContent = "--";
+      const walkingElem = document.getElementById("target-walking-time");
+      if (walkingElem) walkingElem.textContent = "--";
+      const bearingElem = document.getElementById("target-bearing");
+      if (bearingElem) bearingElem.textContent = "--";
+      const landmarkElem = document.getElementById("target-landmark");
+      if (landmarkElem) landmarkElem.textContent = "--";
+      const targetPrice = document.getElementById("target-price");
+      if (targetPrice) targetPrice.textContent = "₹0";
+
+      // Reset DSP-VI Telemetry Bars
+      const metricProx = document.getElementById("dsp-metric-prox");
+      const barProx = document.getElementById("dsp-bar-prox");
+      if (metricProx) metricProx.textContent = "--";
+      if (barProx) barProx.style.width = "0%";
+      const metricVal = document.getElementById("dsp-metric-val");
+      const barVal = document.getElementById("dsp-bar-val");
+      if (metricVal) metricVal.textContent = "--";
+      if (barVal) barVal.style.width = "0%";
+      const metricRep = document.getElementById("dsp-metric-rep");
+      const barRep = document.getElementById("dsp-bar-rep");
+      if (metricRep) metricRep.textContent = "--";
+      if (barRep) barRep.style.width = "0%";
+      const metricFresh = document.getElementById("dsp-metric-fresh");
+      const barFresh = document.getElementById("dsp-bar-fresh");
+      if (metricFresh) metricFresh.textContent = "--";
+      if (barFresh) barFresh.style.width = "0%";
+
       // Reset proximity zone badge to avoid stale distance values
       const proximityZoneReset = document.getElementById("target-proximity-zone");
       if (proximityZoneReset) {
