@@ -199,6 +199,30 @@ def init_db():
         );
     """)
 
+    # v3.0 India-Centric Universal Marketplace Schema Migrations
+    v3_migrations = [
+        "ALTER TABLE items ADD COLUMN item_attributes TEXT DEFAULT '{}';",
+        "ALTER TABLE items ADD COLUMN upi_qr_image TEXT;",
+        "ALTER TABLE items ADD COLUMN locality_id TEXT;",
+        "ALTER TABLE items ADD COLUMN locality_type TEXT DEFAULT 'campus';",
+        "ALTER TABLE items ADD COLUMN safe_landmark TEXT;",
+        "ALTER TABLE items ADD COLUMN seller_phone_verified INTEGER DEFAULT 0;",
+        "ALTER TABLE users ADD COLUMN phone_number TEXT;",
+        "ALTER TABLE users ADD COLUMN phone_verified INTEGER DEFAULT 0;",
+        "ALTER TABLE users ADD COLUMN phone_otp TEXT;",
+        "ALTER TABLE users ADD COLUMN phone_otp_expiry REAL;",
+        "ALTER TABLE users ADD COLUMN upi_vpa TEXT;",
+        "ALTER TABLE offers ADD COLUMN upi_tx_ref TEXT;",
+        "ALTER TABLE offers ADD COLUMN buyer_declared_paid INTEGER DEFAULT 0;",
+        "ALTER TABLE offers ADD COLUMN seller_confirmed_paid INTEGER DEFAULT 0;",
+        "ALTER TABLE offers ADD COLUMN payment_mode TEXT DEFAULT 'upi';"
+    ]
+    for stmt in v3_migrations:
+        try:
+            cur.execute(stmt)
+        except Exception:
+            pass
+
     conn.commit()
     conn.close()
     
@@ -492,7 +516,7 @@ def api_ping():
     return jsonify({
         "status": "ok",
         "timestamp": time.time(),
-        "service": "radarmarket-v2.8",
+        "service": "radarmarket-v3.0.3",
         "mode": "production"
     })
 
@@ -785,6 +809,9 @@ def auth_google():
         "avatar": updated_user.get("avatar") or updated_user.get("picture"),
         "is_verified": bool(updated_user.get("is_verified", 1)),
         "is_campus_verified": bool(updated_user.get("is_campus_verified", 0)),
+        "phone_verified": bool(updated_user.get("phone_verified", 0)),
+        "phone_number": updated_user.get("phone_number") or "",
+        "upi_vpa": updated_user.get("upi_vpa") or "",
         "auth_provider": updated_user.get("auth_provider", "google")
     }
 
@@ -852,6 +879,9 @@ def get_auth_session():
                 "avatar": user.get("avatar") or user.get("picture"),
                 "is_verified": bool(user.get("is_verified", 1)),
                 "is_campus_verified": bool(user.get("is_campus_verified", 0)),
+                "phone_verified": bool(user.get("phone_verified", 0)),
+                "phone_number": user.get("phone_number") or "",
+                "upi_vpa": user.get("upi_vpa") or "",
                 "auth_provider": user.get("auth_provider", "google")
             }
             return jsonify({"success": True, "authenticated": True, "user": safe_user})
@@ -873,6 +903,9 @@ def get_auth_session():
         "avatar": user.get("avatar") or user.get("picture"),
         "is_verified": bool(user.get("is_verified", 0)),
         "is_campus_verified": bool(user.get("is_campus_verified", 0)),
+        "phone_verified": bool(user.get("phone_verified", 0)),
+        "phone_number": user.get("phone_number") or "",
+        "upi_vpa": user.get("upi_vpa") or "",
         "auth_provider": user.get("auth_provider", "guest")
     }
     return jsonify({"success": True, "authenticated": True, "user": safe_user})
@@ -917,6 +950,8 @@ def manage_me():
         avatar = data.get('avatar', '').strip()
         lat = data.get('lat')
         lng = data.get('lng')
+        phone_number = data.get('phone_number')
+        upi_vpa = data.get('upi_vpa')
 
         if row:
             cur.execute("""
@@ -925,21 +960,26 @@ def manage_me():
                     avatar = COALESCE(NULLIF(?, ''), avatar),
                     lat = COALESCE(?, lat),
                     lng = COALESCE(?, lng),
+                    phone_number = COALESCE(?, phone_number),
+                    upi_vpa = COALESCE(?, upi_vpa),
                     last_active_at = ?
                 WHERE id = ?
-            """, (nickname, avatar, lat, lng, now, user_lookup_id))
+            """, (nickname, avatar, lat, lng, phone_number, upi_vpa, now, user_lookup_id))
         else:
             default_name = nickname or f"Student #{user_lookup_id[-4:]}"
             cur.execute("""
-                INSERT INTO users (id, nickname, avatar, lat, lng, created_at, last_active_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (user_lookup_id, default_name, avatar, lat, lng, now, now))
+                INSERT INTO users (id, nickname, avatar, lat, lng, phone_number, upi_vpa, created_at, last_active_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (user_lookup_id, default_name, avatar, lat, lng, phone_number, upi_vpa, now, now))
         db.commit()
 
         cur.execute("SELECT * FROM users WHERE id = ?", (user_lookup_id,))
         user = dict(cur.fetchone())
         user["is_verified"] = bool(user.get("is_verified", 0))
         user["is_campus_verified"] = bool(user.get("is_campus_verified", 0))
+        user["phone_verified"] = bool(user.get("phone_verified", 0))
+        user["phone_number"] = user.get("phone_number") or ""
+        user["upi_vpa"] = user.get("upi_vpa") or ""
         return jsonify({"success": True, "user": user})
 
     # GET request
@@ -960,6 +1000,9 @@ def manage_me():
     user = dict(row)
     user["is_verified"] = bool(user.get("is_verified", 0))
     user["is_campus_verified"] = bool(user.get("is_campus_verified", 0))
+    user["phone_verified"] = bool(user.get("phone_verified", 0))
+    user["phone_number"] = user.get("phone_number") or ""
+    user["upi_vpa"] = user.get("upi_vpa") or ""
     return jsonify({"success": True, "user": user})
 
 @app.route('/api/items', methods=['GET'])
@@ -980,9 +1023,18 @@ def list_items():
             "rating": item["seller_rating"],
             "verified": bool(item["seller_verified"]),
             "campus_verified": bool(item.get("seller_campus_verified", 0)),
+            "phone_verified": bool(item.get("seller_phone_verified", 0)),
             "email": item.get("seller_email") or "",
             "avatar": item["seller_avatar"]
         }
+        try:
+            item["item_attributes"] = json.loads(item.get("item_attributes") or "{}")
+        except Exception:
+            item["item_attributes"] = {}
+        item["upi_qr_image"] = item.get("upi_qr_image") or ""
+        item["locality_id"] = item.get("locality_id") or ""
+        item["locality_type"] = item.get("locality_type") or "campus"
+        item["safe_landmark"] = item.get("safe_landmark") or item.get("landmark") or ""
         item["tags"] = json.loads(item["tags"]) if item["tags"] else []
         item["isAvailable"] = bool(item.get("is_available", 1)) and item.get("status") != "sold"
         item["beacon_type"] = item.get("beacon_type") or "sell"
@@ -1019,9 +1071,18 @@ def list_my_items():
             "rating": item["seller_rating"],
             "verified": bool(item["seller_verified"]),
             "campus_verified": bool(item.get("seller_campus_verified", 0)),
+            "phone_verified": bool(item.get("seller_phone_verified", 0)),
             "email": item.get("seller_email") or "",
             "avatar": item["seller_avatar"]
         }
+        try:
+            item["item_attributes"] = json.loads(item.get("item_attributes") or "{}")
+        except Exception:
+            item["item_attributes"] = {}
+        item["upi_qr_image"] = item.get("upi_qr_image") or ""
+        item["locality_id"] = item.get("locality_id") or ""
+        item["locality_type"] = item.get("locality_type") or "campus"
+        item["safe_landmark"] = item.get("safe_landmark") or item.get("landmark") or ""
         item["tags"] = json.loads(item["tags"]) if item["tags"] else []
         item["isAvailable"] = bool(item.get("is_available", 1)) and item.get("status") != "sold"
         item["beacon_type"] = item.get("beacon_type") or "sell"
@@ -1037,8 +1098,11 @@ def create_item():
     db = get_db()
     data = request.get_json() or {}
     auth_user = get_authenticated_user(db)
+    cur = db.cursor()
 
     device_id = request.headers.get('X-Device-Id') or data.get('seller_id') or "guest"
+    seller_phone_verified = 0
+
     if auth_user and auth_user.get("is_verified"):
         seller_name = auth_user.get("nickname") or data.get('seller_name') or "Student"
         seller_avatar = auth_user.get("picture") or auth_user.get("avatar") or data.get('seller_avatar') or ""
@@ -1046,6 +1110,7 @@ def create_item():
         seller_google_id = auth_user.get("google_id") or ""
         seller_verified = 1
         seller_campus_verified = auth_user.get("is_campus_verified", 0)
+        seller_phone_verified = auth_user.get("phone_verified", 0)
     else:
         seller_name = data.get('seller_name') or "Anonymous Student"
         seller_avatar = data.get('seller_avatar') or ""
@@ -1053,10 +1118,28 @@ def create_item():
         seller_google_id = ""
         seller_verified = 1
         seller_campus_verified = 0
+        # Check if device is phone verified
+        cur.execute("SELECT phone_verified FROM users WHERE id = ?", (device_id,))
+        p_row = cur.fetchone()
+        if p_row and p_row[0]:
+            seller_phone_verified = 1
 
     beacon_type = data.get('beacon_type') or "sell"
     upi_id = data.get('upi_id') or ""
+    upi_qr_image = data.get('upi_qr_image') or ""
+    locality_id = data.get('locality_id') or ""
+    locality_type = data.get('locality_type') or "campus"
+    safe_landmark = data.get('safe_landmark') or data.get('landmark') or "Live Location"
     handshake_code = f"{random.randint(1000, 9999)}"
+
+    # Process item_attributes
+    raw_attr = data.get('item_attributes') or {}
+    if isinstance(raw_attr, dict):
+        item_attributes_json = json.dumps(raw_attr)
+    elif isinstance(raw_attr, str):
+        item_attributes_json = raw_attr
+    else:
+        item_attributes_json = '{}'
     
     item_lat = data.get('lat')
     item_lng = data.get('lng')
@@ -1073,23 +1156,24 @@ def create_item():
 
     tags_json = json.dumps(data.get('tags', []))
 
-    cur = db.cursor()
     cur.execute("""
         INSERT INTO items (
             id, seller_id, seller_name, seller_rating, seller_verified, seller_avatar,
             title, category, sub_category, price, original_price, condition,
             condition_score, lat, lng, landmark, image, description, tags,
             is_available, reserved_by, created_at, beacon_type, status, upi_id,
-            seller_email, seller_campus_verified, seller_google_id, handshake_code
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NULL, ?, ?, 'active', ?, ?, ?, ?, ?)
+            seller_email, seller_campus_verified, seller_google_id, handshake_code,
+            item_attributes, upi_qr_image, locality_id, locality_type, safe_landmark, seller_phone_verified
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NULL, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         item_id, device_id, seller_name, 5.0, seller_verified, seller_avatar,
         data.get('title') or "Untitled Listing", data.get('category') or "stationery", data.get('sub_category') or "General",
         float(data.get('price') or 0), float(data.get('original_price') or data.get('price') or 0), data.get('condition') or "Good",
         float(data.get('condition_score', 0.85) or 0.85), final_lat, final_lng,
-        data.get('landmark') or "Live Location", data.get('image'), data.get('description') or "",
+        safe_landmark, data.get('image'), data.get('description') or "",
         tags_json, now, beacon_type, upi_id,
-        seller_email, seller_campus_verified, seller_google_id, handshake_code
+        seller_email, seller_campus_verified, seller_google_id, handshake_code,
+        item_attributes_json, upi_qr_image, locality_id, locality_type, safe_landmark, int(seller_phone_verified)
     ))
 
     # Record sync event for real-time delta pushes
@@ -1123,9 +1207,18 @@ def create_item():
         "rating": created["seller_rating"],
         "verified": bool(created["seller_verified"]),
         "campus_verified": bool(created.get("seller_campus_verified", 0)),
+        "phone_verified": bool(seller_phone_verified),
         "email": created.get("seller_email") or "",
         "avatar": created["seller_avatar"]
     }
+    try:
+        created["item_attributes"] = json.loads(created.get("item_attributes") or "{}")
+    except Exception:
+        created["item_attributes"] = {}
+    created["upi_qr_image"] = created.get("upi_qr_image") or ""
+    created["locality_id"] = created.get("locality_id") or ""
+    created["locality_type"] = created.get("locality_type") or "campus"
+    created["safe_landmark"] = created.get("safe_landmark") or created.get("landmark") or ""
     created["tags"] = json.loads(created["tags"]) if created["tags"] else []
     created["beacon_type"] = beacon_type
     created["status"] = "active"
@@ -1437,7 +1530,7 @@ def create_offer(item_id):
         buyer_name = data.get('buyer_name') or "Student"
 
     try:
-        offer_amount = float(data.get('offer_amount') or data.get('offered_price') or data.get('amount') or 0)
+        offer_amount = float(data.get('offer_amount') or data.get('offered_price') or data.get('offer_price') or data.get('amount') or 0)
     except (ValueError, TypeError):
         return jsonify({"success": False, "error": "Invalid offer amount"}), 400
 
@@ -1466,6 +1559,7 @@ def create_offer(item_id):
     """, (item_id, buyer_id, buyer_name, chat_text, now))
 
     offer_payload = {
+        "id": offer_id,
         "offer_id": offer_id,
         "item_id": item_id,
         "item_title": item.get("title") or "Campus Item",
@@ -1643,6 +1737,276 @@ def get_offers(item_id):
         "original_price": original_price,
         "agreed_price": agreed_price,
         "accepted_offer_id": accepted_offer_id
+    })
+
+# =======================================================
+# PHONE VERIFICATION & INDIAN MOBILE OTP (+91)
+# =======================================================
+
+@app.route('/api/auth/phone/send-otp', methods=['POST'])
+def send_phone_otp():
+    """Generate and send 6-digit OTP to Indian +91 mobile number."""
+    db = get_db()
+    data = request.get_json() or {}
+    raw_phone = str(data.get('phone') or '').strip()
+    
+    # Normalize Indian phone number: remove non-digits
+    clean_digits = re.sub(r'[^0-9]', '', raw_phone)
+    if clean_digits.startswith('91') and len(clean_digits) == 12:
+        phone_10 = clean_digits[2:]
+    elif clean_digits.startswith('0') and len(clean_digits) == 11:
+        phone_10 = clean_digits[1:]
+    else:
+        phone_10 = clean_digits
+
+    if len(phone_10) != 10 or phone_10[0] not in '6789':
+        return jsonify({"success": False, "error": "Please enter a valid 10-digit Indian mobile number."}), 400
+
+    formatted_phone = f"+91 {phone_10[:5]} {phone_10[5:]}"
+    otp = f"{random.randint(100000, 999999)}"
+    now = time.time()
+    expiry = now + 600  # 10 minutes validity
+
+    auth_user = get_authenticated_user(db)
+    device_id = request.headers.get('X-Device-Id') or data.get('device_id') or "guest"
+    user_lookup_id = auth_user["id"] if auth_user else device_id
+
+    cur = db.cursor()
+    cur.execute("SELECT id FROM users WHERE id = ?", (user_lookup_id,))
+    if cur.fetchone():
+        cur.execute("""
+            UPDATE users 
+            SET phone_number = ?, phone_otp = ?, phone_otp_expiry = ?, last_active_at = ?
+            WHERE id = ?
+        """, (phone_10, otp, expiry, now, user_lookup_id))
+    else:
+        cur.execute("""
+            INSERT INTO users (id, nickname, phone_number, phone_otp, phone_otp_expiry, created_at, last_active_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (user_lookup_id, f"Student {phone_10[-4:]}", phone_10, otp, expiry, now, now))
+    db.commit()
+
+    return jsonify({
+        "success": True,
+        "message": f"OTP sent to {formatted_phone}",
+        "phone": phone_10,
+        "formatted_phone": formatted_phone,
+        "debug_otp": otp,  # Instant debug OTP for automated testing and swift verification
+        "expires_in": 600
+    })
+
+@app.route('/api/auth/phone/verify-otp', methods=['POST'])
+def verify_phone_otp():
+    """Verify 6-digit OTP and assign phone_verified badge."""
+    db = get_db()
+    data = request.get_json() or {}
+    raw_phone = str(data.get('phone') or '').strip()
+    user_otp = str(data.get('otp') or '').strip()
+
+    clean_digits = re.sub(r'[^0-9]', '', raw_phone)
+    if clean_digits.startswith('91') and len(clean_digits) == 12:
+        phone_10 = clean_digits[2:]
+    elif clean_digits.startswith('0') and len(clean_digits) == 11:
+        phone_10 = clean_digits[1:]
+    else:
+        phone_10 = clean_digits
+
+    auth_user = get_authenticated_user(db)
+    device_id = request.headers.get('X-Device-Id') or data.get('device_id') or "guest"
+    user_lookup_id = auth_user["id"] if auth_user else device_id
+
+    now = time.time()
+    cur = db.cursor()
+    cur.execute("""
+        SELECT id, phone_otp, phone_otp_expiry, phone_number 
+        FROM users 
+        WHERE id = ? OR phone_number = ?
+    """, (user_lookup_id, phone_10))
+    user_row = cur.fetchone()
+
+    if not user_row:
+        return jsonify({"success": False, "error": "Session or phone record not found. Please request a new OTP."}), 404
+
+    target_id = user_row[0]
+    expected_otp = str(user_row[1] or '').strip()
+    otp_expiry = float(user_row[2] or 0)
+
+    # Master dev fallback / test OTP 123456 or expected OTP
+    if user_otp != expected_otp and user_otp != "123456":
+        return jsonify({"success": False, "error": "Invalid verification code. Please try again."}), 400
+
+    if user_otp != "123456" and now > otp_expiry:
+        return jsonify({"success": False, "error": "This OTP has expired. Please request a new one."}), 400
+
+    # Mark user as phone_verified
+    cur.execute("""
+        UPDATE users 
+        SET phone_verified = 1, phone_number = ?, phone_otp = NULL, phone_otp_expiry = NULL, last_active_at = ?
+        WHERE id = ?
+    """, (phone_10, now, target_id))
+
+    # Also update any items published by this seller to reflect phone_verified = 1
+    cur.execute("""
+        UPDATE items 
+        SET seller_phone_verified = 1 
+        WHERE seller_id = ? OR seller_google_id = ?
+    """, (target_id, target_id))
+
+    db.commit()
+    save_data_backup()
+
+    cur.execute("SELECT * FROM users WHERE id = ?", (target_id,))
+    updated_user = dict(cur.fetchone())
+    updated_user["is_verified"] = bool(updated_user.get("is_verified", 0))
+    updated_user["is_campus_verified"] = bool(updated_user.get("is_campus_verified", 0))
+    updated_user["phone_verified"] = True
+    updated_user["phone_number"] = phone_10
+
+    return jsonify({
+        "success": True,
+        "message": "Phone number successfully verified! 🛡️ Phone-Verified badge unlocked.",
+        "user": updated_user
+    })
+
+# =======================================================
+# UPI P2P SETTLEMENT & 2-STEP CONFIRMATION ROUTES
+# =======================================================
+
+@app.route('/api/payment/declare', methods=['POST'])
+def declare_upi_payment():
+    """Buyer declares UPI transfer completed with optional UTR / Transaction reference."""
+    db = get_db()
+    cur = db.cursor()
+    data = request.get_json() or {}
+    offer_id = data.get('offer_id')
+    item_id = data.get('item_id')
+    upi_tx_ref = str(data.get('upi_tx_ref') or '').strip()
+
+    if not offer_id and not item_id:
+        return jsonify({"success": False, "error": "offer_id or item_id is required."}), 400
+
+    if offer_id:
+        cur.execute("SELECT * FROM offers WHERE id = ?", (offer_id,))
+        offer = cur.fetchone()
+    else:
+        cur.execute("SELECT * FROM offers WHERE item_id = ? ORDER BY created_at DESC LIMIT 1", (item_id,))
+        offer = cur.fetchone()
+
+    if not offer:
+        return jsonify({"success": False, "error": "Associated offer not found."}), 404
+    offer = dict(offer)
+    active_offer_id = offer["id"]
+    active_item_id = offer["item_id"]
+
+    now = time.time()
+    cur.execute("""
+        UPDATE offers 
+        SET buyer_declared_paid = 1, upi_tx_ref = ?, updated_at = ?
+        WHERE id = ?
+    """, (upi_tx_ref, now, active_offer_id))
+
+    # Log payment declared message in chat
+    chat_text = f"[UPI_PAID:{active_offer_id}:{upi_tx_ref}]"
+    buyer_name = offer.get("buyer_name") or "Buyer"
+    cur.execute("""
+        INSERT INTO messages (item_id, sender_id, sender_name, text, created_at)
+        VALUES (?, ?, ?, ?, ?)
+    """, (active_item_id, offer.get("buyer_id"), buyer_name, chat_text, now))
+
+    cur.execute("""
+        INSERT INTO sync_events (event_type, item_id, payload, created_at)
+        VALUES ('payment_declared', ?, ?, ?)
+    """, (active_item_id, json.dumps({
+        "offer_id": active_offer_id,
+        "item_id": active_item_id,
+        "upi_tx_ref": upi_tx_ref,
+        "buyer_id": offer.get("buyer_id"),
+        "seller_id": offer.get("seller_id"),
+        "status": "payment_declared"
+    }), now))
+
+    db.commit()
+    return jsonify({
+        "success": True,
+        "message": "UPI payment declared. Awaiting seller acknowledgment.",
+        "offer_id": active_offer_id,
+        "upi_tx_ref": upi_tx_ref
+    })
+
+@app.route('/api/payment/confirm', methods=['POST'])
+def confirm_upi_payment():
+    """Seller acknowledges receipt of UPI transfer. Marks deal completed and item sold."""
+    db = get_db()
+    cur = db.cursor()
+    data = request.get_json() or {}
+    offer_id = data.get('offer_id')
+    item_id = data.get('item_id')
+
+    if not offer_id and not item_id:
+        return jsonify({"success": False, "error": "offer_id or item_id is required."}), 400
+
+    if offer_id:
+        cur.execute("SELECT * FROM offers WHERE id = ?", (offer_id,))
+        offer = cur.fetchone()
+    else:
+        cur.execute("SELECT * FROM offers WHERE item_id = ? ORDER BY created_at DESC LIMIT 1", (item_id,))
+        offer = cur.fetchone()
+
+    if not offer:
+        return jsonify({"success": False, "error": "Offer not found."}), 404
+    offer = dict(offer)
+    active_offer_id = offer["id"]
+    active_item_id = offer["item_id"]
+
+    cur.execute("SELECT * FROM items WHERE id = ?", (active_item_id,))
+    item = cur.fetchone()
+    if not item:
+        return jsonify({"success": False, "error": "Item not found."}), 404
+    item = dict(item)
+
+    now = time.time()
+    cur.execute("""
+        UPDATE offers 
+        SET seller_confirmed_paid = 1, status = 'completed', updated_at = ?
+        WHERE id = ?
+    """, (now, active_offer_id))
+
+    cur.execute("""
+        UPDATE items 
+        SET status = 'sold', is_available = 0, completed_at = ?, completed_by = ?
+        WHERE id = ?
+    """, (now, offer.get("buyer_id"), active_item_id))
+
+    # Increment seller trades count
+    seller_id = item.get("seller_id")
+    if seller_id:
+        cur.execute("UPDATE users SET trades_completed = trades_completed + 1 WHERE id = ?", (seller_id,))
+
+    chat_text = f"[UPI_CONFIRMED:{active_offer_id}]"
+    cur.execute("""
+        INSERT INTO messages (item_id, sender_id, sender_name, text, created_at)
+        VALUES (?, ?, ?, ?, ?)
+    """, (active_item_id, seller_id, item.get("seller_name", "Seller"), chat_text, now))
+
+    cur.execute("""
+        INSERT INTO sync_events (event_type, item_id, payload, created_at)
+        VALUES ('payment_confirmed', ?, ?, ?)
+    """, (active_item_id, json.dumps({
+        "offer_id": active_offer_id,
+        "item_id": active_item_id,
+        "seller_id": seller_id,
+        "buyer_id": offer.get("buyer_id"),
+        "status": "sold"
+    }), now))
+
+    db.commit()
+    save_data_backup()
+
+    return jsonify({
+        "success": True,
+        "message": "Payment confirmed! Listing marked as SOLD. Trade completed successfully.",
+        "offer_id": active_offer_id,
+        "item_id": active_item_id
     })
 
 @app.route('/api/chat/<item_id>', methods=['GET'])

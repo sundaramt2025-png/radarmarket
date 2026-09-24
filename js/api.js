@@ -856,6 +856,54 @@
     throw new Error(`No textbook record found for ISBN "${clean}".`);
   }
 
+  /**
+   * Phone Number Verification (+91 OTP)
+   */
+  async function sendPhoneOtp(phone) {
+    const res = await request("/api/auth/phone/send-otp", {
+      method: "POST",
+      body: JSON.stringify({ phone, device_id: state.deviceId })
+    });
+    return res;
+  }
+
+  async function verifyPhoneOtp(phone, otp) {
+    const res = await request("/api/auth/phone/verify-otp", {
+      method: "POST",
+      body: JSON.stringify({ phone, otp, device_id: state.deviceId })
+    });
+    if (res && res.success && res.user) {
+      state.currentUser = res.user;
+      if (state.googleUser) {
+        state.googleUser.phone_verified = true;
+        state.googleUser.phone_number = res.user.phone_number;
+        try { localStorage.setItem(GOOGLE_USER_KEY, JSON.stringify(state.googleUser)); } catch (e) {}
+      }
+      try { localStorage.setItem(USER_KEY, JSON.stringify(res.user)); } catch (e) {}
+      emit("profileUpdated", res.user);
+    }
+    return res;
+  }
+
+  /**
+   * UPI P2P Settlement (Declare & Confirm)
+   */
+  async function declareUpiPayment(offerId, upiTxRef = "", itemId = null) {
+    const res = await request("/api/payment/declare", {
+      method: "POST",
+      body: JSON.stringify({ offer_id: offerId, upi_tx_ref: upiTxRef, item_id: itemId })
+    });
+    return res;
+  }
+
+  async function confirmUpiPayment(offerId, itemId = null) {
+    const res = await request("/api/payment/confirm", {
+      method: "POST",
+      body: JSON.stringify({ offer_id: offerId, item_id: itemId })
+    });
+    return res;
+  }
+
   window.MarketAPI = {
     getDeviceId: () => state.deviceId,
     getCurrentUser: () => state.currentUser,
@@ -883,6 +931,10 @@
     logoutGoogle,
     initUser,
     updateProfile,
+    sendPhoneOtp,
+    verifyPhoneOtp,
+    declareUpiPayment,
+    confirmUpiPayment,
     getNetworkInfo,
     getItems,
     createItem,

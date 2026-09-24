@@ -38,7 +38,7 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 
   <!-- Custom Radar HUD Styles -->
-  <link rel="stylesheet" href="css/styles.css?v=3.8.7">
+  <link rel="stylesheet" href="css/styles.css?v=3.0.3">
 
   <script>
     tailwind.config = {
@@ -106,7 +106,7 @@
             <span class="font-bold text-lg tracking-wider font-mono bg-gradient-to-r from-cyan-400 via-emerald-300 to-teal-200 bg-clip-text text-transparent">
               RADAR<span class="text-emerald-400">MARKET</span>
             </span>
-            <span class="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-500/40 font-bold tracking-wider">v2.7 GOOGLE MAPS</span>
+            <span id="app-version-badge" class="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-500/40 font-bold tracking-wider">v3.0.3 GOOGLE MAPS</span>
           </div>
           <p class="text-xs text-slate-400 hidden sm:block">Stationery & Used Books Local Sonar Grid</p>
         </div>
@@ -194,9 +194,10 @@
         </button>
 
         <!-- Broadcast Beacon / Sell Button -->
-        <button id="btn-open-sell-modal" class="px-3.5 py-2 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-semibold text-xs tracking-wide uppercase font-mono shadow-[0_0_15px_rgba(0,255,157,0.3)] hover:shadow-[0_0_20px_rgba(0,255,157,0.5)] transition flex items-center gap-1.5">
-          <i data-lucide="plus-circle" class="w-4 h-4"></i>
-          <span>Broadcast Beacon</span>
+        <button id="btn-open-sell-modal" onclick="window.openBroadcastBeaconModal ? window.openBroadcastBeaconModal() : null" class="px-3 sm:px-3.5 py-2 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-semibold text-xs tracking-wide uppercase font-mono shadow-[0_0_15px_rgba(0,255,157,0.3)] hover:shadow-[0_0_20px_rgba(0,255,157,0.5)] transition flex items-center gap-1.5 shrink-0 cursor-pointer">
+          <i data-lucide="plus-circle" class="w-4 h-4 shrink-0"></i>
+          <span class="hidden sm:inline">Broadcast Beacon</span>
+          <span class="sm:hidden">Broadcast</span>
         </button>
 
       </div>
@@ -250,23 +251,26 @@
           <button class="filter-category-btn px-3 py-1.5 rounded-md text-cyan-400 bg-cyan-950/80 border border-cyan-500/30 transition shrink-0" data-category="all">
             ALL
           </button>
+          <button class="filter-category-btn px-3 py-1.5 rounded-md text-slate-400 hover:text-cyan-300 transition shrink-0" data-category="electronics">
+            📱 GADGETS
+          </button>
+          <button class="filter-category-btn px-3 py-1.5 rounded-md text-slate-400 hover:text-yellow-300 transition shrink-0" data-category="books">
+            📚 BOOKS
+          </button>
+          <button class="filter-category-btn px-3 py-1.5 rounded-md text-slate-400 hover:text-pink-400 transition shrink-0" data-category="hostel">
+            🛏️ HOSTEL &amp; PG
+          </button>
           <button class="filter-category-btn px-3 py-1.5 rounded-md text-slate-400 hover:text-emerald-300 transition shrink-0" data-category="stationery">
             ✏️ STATIONERY
           </button>
-          <button class="filter-category-btn px-3 py-1.5 rounded-md text-slate-400 hover:text-cyan-300 transition shrink-0" data-category="books">
-            📖 BOOKS
+          <button class="filter-category-btn px-3 py-1.5 rounded-md text-slate-400 hover:text-orange-400 transition shrink-0" data-category="sports">
+            🏏 SPORTS
           </button>
-          <button class="filter-category-btn px-3 py-1.5 rounded-md text-slate-400 hover:text-amber-300 transition shrink-0" data-category="hostel">
-            🛏️ HOSTEL
+          <button class="filter-category-btn px-3 py-1.5 rounded-md text-slate-400 hover:text-purple-300 transition shrink-0" data-category="fashion">
+            👕 FASHION
           </button>
-          <button class="filter-category-btn px-3 py-1.5 rounded-md text-slate-400 hover:text-purple-300 transition shrink-0" data-category="lab">
-            🔬 LAB GEAR
-          </button>
-          <button class="filter-category-btn px-3 py-1.5 rounded-md text-slate-400 hover:text-blue-300 transition shrink-0" data-category="tech">
-            🔌 TECH
-          </button>
-          <button class="filter-category-btn px-3 py-1.5 rounded-md text-slate-400 hover:text-pink-300 transition shrink-0" data-category="wanted">
-            🎯 BOUNTIES
+          <button class="filter-category-btn px-3 py-1.5 rounded-md text-slate-400 hover:text-rose-400 transition shrink-0" data-category="wanted">
+            🎯 WANTED
           </button>
         </div>
 
@@ -277,38 +281,49 @@
           <span id="bounty-board-badge" class="hidden px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-pink-500/30 text-pink-200 border border-pink-400/50"></span>
         </button>
 
-        <!-- Radar Range Slider & 500m Quick Filter -->
-        <div class="flex items-center gap-2 bg-slate-900/90 border border-slate-800 px-3 py-1.5 rounded-lg text-xs font-mono">
-          <button id="btn-quick-500m" type="button" class="px-2 py-0.5 rounded bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/50 text-[10px] font-bold flex items-center gap-1 transition shadow-[0_0_8px_rgba(0,255,157,0.2)] cursor-pointer" title="Quick lock radar to 500m walking sector">
-            <i data-lucide="crosshair" class="w-3 h-3 text-emerald-400"></i>
-            <span>500M ZONE</span>
-          </button>
-          <span class="text-slate-400 text-[11px] uppercase hidden sm:inline">RANGE:</span>
+        <!-- Proximity Tiers & Radar Range Slider -->
+        <div class="flex items-center gap-1.5 bg-slate-900/90 border border-slate-800 px-2.5 py-1.5 rounded-lg text-xs font-mono">
+          <!-- Proximity Mode Tiers -->
+          <div class="flex items-center gap-1">
+            <button id="tier-campus-btn" type="button" class="proximity-tier-btn active px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-500/50 text-[10px] font-bold transition cursor-pointer" data-tier="campus" title="Campus Mode (1 km walking distance)">
+              🎓 1KM CAMPUS
+            </button>
+            <button id="tier-society-btn" type="button" class="proximity-tier-btn px-2 py-0.5 rounded text-slate-400 hover:text-slate-200 border border-transparent text-[10px] font-bold transition cursor-pointer" data-tier="society" title="Society & Neighborhood Mode (5 km radius)">
+              🏘️ 5KM SOCIETY
+            </button>
+            <button id="tier-city-btn" type="button" class="proximity-tier-btn px-2 py-0.5 rounded text-slate-400 hover:text-slate-200 border border-transparent text-[10px] font-bold transition cursor-pointer" data-tier="city" title="City Cluster Mode (25 km radius)">
+              🏙️ 25KM CITY
+            </button>
+          </div>
+          <div class="h-4 w-px bg-slate-800 mx-1 hidden sm:block"></div>
+          <span class="text-slate-400 text-[11px] uppercase hidden md:inline">RADIUS:</span>
           <input 
             type="range" 
             id="range-slider" 
-            min="500" 
-            max="5000" 
+            min="200" 
+            max="25000" 
             step="100" 
-            value="500" 
-            class="w-20 sm:w-28 cursor-pointer"
+            value="1000" 
+            class="w-16 sm:w-24 cursor-pointer"
           />
-          <span id="range-value-display" class="text-emerald-400 font-bold min-w-[46px] text-right">500 m</span>
+          <span id="range-value-display" class="text-emerald-400 font-bold min-w-[50px] text-right">1.0 km</span>
         </div>
 
-        <!-- View Mode Switcher -->
+        <!-- Dual View Mode Switcher -->
         <div class="flex items-center p-0.5 rounded-lg bg-slate-900 border border-slate-800 text-xs font-mono">
-          <button id="view-radar-btn" class="px-3 py-1.5 rounded-md bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 flex items-center gap-1.5 transition">
+          <button id="view-radar-btn" class="px-2.5 py-1.5 rounded-md bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 flex items-center gap-1.5 transition cursor-pointer" title="Sci-Fi Radar Telemetry HUD">
             <i data-lucide="crosshair" class="w-3.5 h-3.5"></i>
-            <span>RADAR</span>
+            <span class="hidden sm:inline">RADAR HUD</span>
+            <span class="sm:hidden">RADAR</span>
           </button>
-          <button id="view-map-btn" class="px-3 py-1.5 rounded-md text-slate-400 hover:text-slate-200 flex items-center gap-1.5 transition">
+          <button id="view-grid-btn" class="px-2.5 py-1.5 rounded-md text-slate-400 hover:text-slate-200 flex items-center gap-1.5 transition cursor-pointer" title="Low-Bandwidth Card List Feed">
+            <i data-lucide="list" class="w-3.5 h-3.5"></i>
+            <span class="hidden sm:inline">CARD FEED</span>
+            <span class="sm:hidden">FEED</span>
+          </button>
+          <button id="view-map-btn" class="px-2.5 py-1.5 rounded-md text-slate-400 hover:text-slate-200 flex items-center gap-1.5 transition cursor-pointer" title="Google Maps Navigation">
             <i data-lucide="map" class="w-3.5 h-3.5"></i>
             <span>MAP</span>
-          </button>
-          <button id="view-grid-btn" class="px-3 py-1.5 rounded-md text-slate-400 hover:text-slate-200 flex items-center gap-1.5 transition">
-            <i data-lucide="grid" class="w-3.5 h-3.5"></i>
-            <span>CATALOG</span>
           </button>
         </div>
 
@@ -393,34 +408,38 @@
 
           <!-- Scope Bottom Status Legend -->
           <div class="w-full mt-4 pt-3 border-t border-slate-800 flex flex-wrap items-center justify-between gap-3 text-[11px] font-mono text-slate-400">
-            <div class="flex items-center gap-4">
+            <div class="flex items-center gap-3.5 flex-wrap">
               <div class="flex items-center gap-1.5">
-                <span class="w-2.5 h-2.5 rounded-full bg-[#00ff9d] shadow-[0_0_6px_#00ff9d]"></span>
-                <span>Stationery</span>
+                <span class="w-2.5 h-2.5 rounded-full bg-[#00f0ff] shadow-[0_0_6px_#00f0ff]"></span>
+                <span>Gadgets</span>
               </div>
               <div class="flex items-center gap-1.5">
-                <span class="w-2.5 h-2.5 rounded-full bg-[#00e5ff] shadow-[0_0_6px_#00e5ff]"></span>
+                <span class="w-2.5 h-2.5 rounded-full bg-[#ffe600] shadow-[0_0_6px_#ffe600]"></span>
                 <span>Books</span>
               </div>
               <div class="flex items-center gap-1.5">
-                <span class="w-2.5 h-2.5 rounded-full bg-[#f59e0b] shadow-[0_0_6px_#f59e0b]"></span>
+                <span class="w-2.5 h-2.5 rounded-full bg-[#ff007f] shadow-[0_0_6px_#ff007f]"></span>
                 <span>Hostel</span>
               </div>
               <div class="flex items-center gap-1.5">
-                <span class="w-2.5 h-2.5 rounded-full bg-[#a855f7] shadow-[0_0_6px_#a855f7]"></span>
-                <span>Lab</span>
+                <span class="w-2.5 h-2.5 rounded-full bg-[#00ff88] shadow-[0_0_6px_#00ff88]"></span>
+                <span>Stationery</span>
               </div>
               <div class="flex items-center gap-1.5">
-                <span class="w-2.5 h-2.5 rounded-full bg-[#3b82f6] shadow-[0_0_6px_#3b82f6]"></span>
-                <span>Tech</span>
+                <span class="w-2.5 h-2.5 rounded-full bg-[#ff8c00] shadow-[0_0_6px_#ff8c00]"></span>
+                <span>Sports</span>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <span class="w-2.5 h-2.5 rounded-full bg-[#a855f7] shadow-[0_0_6px_#a855f7]"></span>
+                <span>Fashion</span>
               </div>
               <div class="flex items-center gap-1.5">
                 <span class="w-2.5 h-2.5 rounded-full bg-[#ffb700] shadow-[0_0_6px_#ffb700]"></span>
-                <span>Top Match (85+)</span>
+                <span>Top Match</span>
               </div>
               <div class="flex items-center gap-1.5">
-                <span class="w-2.5 h-2.5 rounded-full bg-[#ff0077] shadow-[0_0_6px_#ff0077]"></span>
-                <span>Wanted Request</span>
+                <span class="w-2.5 h-2.5 rounded-full bg-[#ff0055] shadow-[0_0_6px_#ff0055]"></span>
+                <span>Wanted</span>
               </div>
             </div>
             <div class="text-slate-500">
@@ -619,6 +638,7 @@
                   <span id="target-seller-name">Seller Name</span>
                   <i data-lucide="badge-check" id="target-seller-verified" class="w-3.5 h-3.5 text-cyan-400"></i>
                   <span id="target-seller-campus-tag" class="hidden px-1 py-0.2 rounded text-[8px] bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold">CAMPUS</span>
+                  <span id="target-seller-phone-tag" class="hidden px-1 py-0.2 rounded text-[8px] bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-bold">🛡️ PHONE VERIFIED</span>
                 </div>
                 <div class="flex items-center gap-1 text-[11px] text-amber-400 font-mono">
                   <i data-lucide="star" class="w-3 h-3 fill-amber-400"></i>
@@ -692,6 +712,10 @@
               <span id="reserve-btn-text">Reserve Deal</span>
             </button>
           </div>
+          <button id="btn-target-upi-pay" class="hidden w-full mb-2 py-2 px-3 rounded-lg bg-emerald-950/80 hover:bg-emerald-900/90 border border-emerald-400 text-emerald-300 font-bold font-mono text-xs tracking-wider uppercase transition flex items-center justify-center gap-1.5 shadow-[0_0_15px_rgba(0,255,157,0.25)] cursor-pointer">
+            <i data-lucide="qr-code" class="w-4 h-4 text-emerald-400"></i>
+            <span>⚡ PAY VIA UPI (INSTANT SETTLEMENT)</span>
+          </button>
           <button id="btn-open-ar-compass" class="w-full py-2 px-3 rounded-lg bg-gradient-to-r from-emerald-950/80 to-cyan-950/80 hover:from-emerald-900/90 hover:to-cyan-900/90 border border-emerald-400/60 hover:border-emerald-300 text-emerald-300 font-bold font-mono text-xs tracking-wider uppercase transition shadow-[0_0_15px_rgba(0,255,157,0.2)] flex items-center justify-center gap-2 cursor-pointer" title="Open Augmented Reality Camera Compass to locate seller in real life">
             <i data-lucide="compass" class="w-4 h-4 text-emerald-400 animate-spin" style="animation-duration: 10s;"></i>
             <span>AR CAMERA COMPASS & LIVE FINDER</span>
@@ -752,40 +776,71 @@
 
   </main>
 
-  <!-- FLOATING MOBILE DUAL-VIEW SWITCHER PILL (Mobile only: HUD vs Feed) -->
-  <div id="mobile-view-switcher" class="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 lg:hidden flex items-center p-1 rounded-full bg-slate-950/90 border border-cyan-500/50 shadow-[0_0_25px_rgba(0,229,255,0.3)] backdrop-blur-md">
-    <button id="mobile-toggle-radar" type="button" class="px-3.5 py-1.5 rounded-full text-xs font-mono font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-400/40 flex items-center gap-1.5 transition cursor-pointer">
+  <!-- FLOATING MOBILE DUAL-VIEW SWITCHER PILL (Mobile only: HUD vs Feed + Broadcast) -->
+  <div id="mobile-view-switcher" class="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 lg:hidden flex items-center p-1 rounded-full bg-slate-950/90 border border-cyan-500/50 shadow-[0_0_25px_rgba(0,229,255,0.3)] backdrop-blur-md gap-1">
+    <button id="mobile-toggle-radar" type="button" class="px-3 py-1.5 rounded-full text-[11px] font-mono font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-400/40 flex items-center gap-1 transition cursor-pointer">
       <i data-lucide="crosshair" class="w-3.5 h-3.5"></i>
-      <span>RADAR HUD</span>
+      <span>RADAR</span>
     </button>
-    <button id="mobile-toggle-feed" type="button" class="px-3.5 py-1.5 rounded-full text-xs font-mono font-bold text-slate-400 hover:text-slate-200 flex items-center gap-1.5 transition cursor-pointer">
+    <button id="mobile-toggle-feed" type="button" class="px-3 py-1.5 rounded-full text-[11px] font-mono font-bold text-slate-400 hover:text-slate-200 flex items-center gap-1 transition cursor-pointer">
       <i data-lucide="list-filter" class="w-3.5 h-3.5"></i>
-      <span>FEED LIST (<span id="mobile-feed-count">0</span>)</span>
+      <span>FEED (<span id="mobile-feed-count">0</span>)</span>
+    </button>
+    <button id="mobile-toggle-broadcast" type="button" onclick="window.openBroadcastBeaconModal ? window.openBroadcastBeaconModal() : null" class="px-3 py-1.5 rounded-full text-[11px] font-mono font-bold bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 flex items-center gap-1 transition cursor-pointer shadow-[0_0_12px_rgba(0,255,157,0.4)]">
+      <i data-lucide="plus-circle" class="w-3.5 h-3.5"></i>
+      <span>SELL</span>
     </button>
   </div>
 
-  <!-- MODAL: BROADCAST BEACON (POST / SELL NEW ITEM) -->
-  <div id="modal-sell" class="modal-overlay fixed inset-0 z-50 hidden flex items-center justify-center p-4">
-    <div class="glass-panel w-full max-w-lg border border-cyan-400/50 shadow-[0_0_40px_rgba(0,229,255,0.25)] rounded-2xl overflow-hidden flex flex-col max-h-[92vh]">
+  <!-- MODAL: BROADCAST BEACON (POST / SELL NEW ITEM) - 5-STEP UNIVERSAL WIZARD -->
+  <div id="modal-sell" class="modal-overlay fixed inset-0 z-50 hidden flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md">
+    <div class="glass-panel w-full max-w-xl border border-cyan-400/50 shadow-[0_0_40px_rgba(0,229,255,0.25)] rounded-2xl overflow-hidden flex flex-col max-h-[92vh]">
       
       <!-- Modal Header -->
-      <div class="px-6 py-4 border-b border-slate-800 bg-slate-950/80 flex items-center justify-between">
-        <div class="flex items-center gap-2">
-          <div class="w-7 h-7 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center border border-emerald-500/30">
+      <div class="px-5 py-3.5 border-b border-slate-800 bg-slate-950/90 flex items-center justify-between">
+        <div class="flex items-center gap-2.5">
+          <div class="w-7 h-7 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center border border-emerald-500/30 shrink-0">
             <i data-lucide="radio-tower" class="w-4 h-4"></i>
           </div>
           <div>
-            <h3 class="font-bold text-white font-mono text-sm">BROADCAST BEACON (SELL ITEM)</h3>
-            <p class="text-[11px] text-slate-400">Pin your stationery or used book onto nearby student radargrams</p>
+            <div class="flex items-center gap-2">
+              <h3 class="font-bold text-white font-mono text-xs sm:text-sm">BROADCAST BEACON</h3>
+              <span id="wizard-step-badge" class="px-2 py-0.2 rounded-full bg-cyan-950 text-cyan-300 border border-cyan-500/40 text-[9px] font-mono font-bold">STEP 1 OF 5</span>
+            </div>
+            <p id="wizard-step-subtitle" class="text-[10px] text-slate-400 font-mono truncate max-w-[280px] sm:max-w-md">1. Select Visual Category &amp; Signal Type</p>
           </div>
         </div>
-        <button id="btn-close-sell-modal" class="text-slate-400 hover:text-white transition">
+        <button id="btn-close-sell-modal" class="text-slate-400 hover:text-white transition cursor-pointer">
           <i data-lucide="x" class="w-5 h-5"></i>
         </button>
       </div>
 
-      <!-- Form Body -->
-      <form id="sell-item-form" class="p-6 space-y-4 overflow-y-auto text-xs font-mono">
+      <!-- Step Progress Tabs Bar -->
+      <div class="bg-slate-950/90 border-b border-slate-800 px-4 py-2 flex items-center justify-between gap-1 overflow-x-auto text-[10px] font-mono scrollbar-none">
+        <button type="button" class="wizard-tab-btn active flex items-center gap-1 px-2.5 py-1 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/50 shrink-0 transition" data-step="1">
+          <span class="w-4 h-4 rounded-full bg-cyan-400 text-slate-950 font-bold flex items-center justify-center text-[9px]">1</span>
+          <span>Category</span>
+        </button>
+        <button type="button" class="wizard-tab-btn flex items-center gap-1 px-2.5 py-1 rounded text-slate-400 hover:text-slate-200 border border-transparent shrink-0 transition" data-step="2">
+          <span class="w-4 h-4 rounded-full bg-slate-800 text-slate-300 font-bold flex items-center justify-center text-[9px]">2</span>
+          <span>Details &amp; Price</span>
+        </button>
+        <button type="button" class="wizard-tab-btn flex items-center gap-1 px-2.5 py-1 rounded text-slate-400 hover:text-slate-200 border border-transparent shrink-0 transition" data-step="3">
+          <span class="w-4 h-4 rounded-full bg-slate-800 text-slate-300 font-bold flex items-center justify-center text-[9px]">3</span>
+          <span>Specs &amp; Condition</span>
+        </button>
+        <button type="button" class="wizard-tab-btn flex items-center gap-1 px-2.5 py-1 rounded text-slate-400 hover:text-slate-200 border border-transparent shrink-0 transition" data-step="4">
+          <span class="w-4 h-4 rounded-full bg-slate-800 text-slate-300 font-bold flex items-center justify-center text-[9px]">4</span>
+          <span>Photos &amp; UPI</span>
+        </button>
+        <button type="button" class="wizard-tab-btn flex items-center gap-1 px-2.5 py-1 rounded text-slate-400 hover:text-slate-200 border border-transparent shrink-0 transition" data-step="5">
+          <span class="w-4 h-4 rounded-full bg-slate-800 text-slate-300 font-bold flex items-center justify-center text-[9px]">5</span>
+          <span>Meetup Landmark</span>
+        </button>
+      </div>
+
+      <!-- Form Body (Wizard Steps) -->
+      <form id="sell-item-form" novalidate class="p-5 sm:p-6 space-y-4 overflow-y-auto text-xs font-mono flex-1">
         
         <!-- Poster Identity Strip -->
         <div id="sell-poster-identity-strip" class="p-2.5 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-between text-[11px]">
@@ -794,507 +849,848 @@
             <div>
               <span class="text-slate-400">Broadcasting as:</span>
               <strong id="sell-poster-name" class="text-slate-200 ml-1">Guest Student</strong>
-              <span id="sell-poster-verified-badge" class="hidden ml-1 px-1.5 py-0.2 rounded text-[8px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold">✓ VERIFIED</span>
+              <span id="sell-poster-verified-badge" class="hidden ml-1 px-1.5 py-0.2 rounded text-[8px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold">✓ GOOGLE VERIFIED</span>
+              <span id="sell-poster-phone-badge" class="hidden ml-1 px-1.5 py-0.2 rounded text-[8px] bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 font-bold">🛡️ PHONE VERIFIED</span>
             </div>
           </div>
-          <button type="button" id="btn-sell-switch-google" class="text-cyan-400 hover:text-cyan-300 text-[10px] underline">
-            Verify with Google
+          <button type="button" id="btn-sell-switch-google" class="text-cyan-400 hover:text-cyan-300 text-[10px] underline cursor-pointer">
+            Verify Profile
           </button>
         </div>
 
-        <!-- Beacon Mode: Sell vs Wanted Request -->
-        <div>
-          <label class="block text-slate-300 font-bold mb-1.5 uppercase">Beacon Signal Type *</label>
-          <div class="grid grid-cols-2 gap-3">
-            <label class="flex items-center gap-2 p-2.5 rounded-lg bg-slate-900 border border-emerald-500/50 cursor-pointer hover:border-emerald-400 transition" id="label-type-sell">
-              <input type="radio" name="sell-beacon-type" value="sell" checked class="text-emerald-400 focus:ring-0">
-              <span class="text-emerald-300 font-bold">🟢 Selling Item</span>
-            </label>
-            <label class="flex items-center gap-2 p-2.5 rounded-lg bg-slate-900 border border-slate-700 cursor-pointer hover:border-pink-400 transition" id="label-type-wanted">
-              <input type="radio" name="sell-beacon-type" value="wanted" class="text-pink-400 focus:ring-0">
-              <span class="text-pink-400 font-bold">🚨 Wanted Request</span>
-            </label>
-          </div>
-        </div>
-
-        <!-- Category Selector -->
-        <div>
-          <label class="block text-slate-300 font-bold mb-1.5 uppercase">Category *</label>
-          <div class="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-            <label class="flex items-center gap-2 p-2.5 rounded-lg bg-slate-900 border border-slate-700 cursor-pointer hover:border-emerald-400 transition">
-              <input type="radio" name="sell-category" value="stationery" checked class="text-emerald-400 focus:ring-0">
-              <span class="text-xs text-slate-200 font-semibold">✏️ Stationery</span>
-            </label>
-            <label class="flex items-center gap-2 p-2.5 rounded-lg bg-slate-900 border border-slate-700 cursor-pointer hover:border-cyan-400 transition">
-              <input type="radio" name="sell-category" value="books" class="text-cyan-400 focus:ring-0">
-              <span class="text-xs text-slate-200 font-semibold">📖 Books</span>
-            </label>
-            <label class="flex items-center gap-2 p-2.5 rounded-lg bg-slate-900 border border-slate-700 cursor-pointer hover:border-amber-400 transition">
-              <input type="radio" name="sell-category" value="hostel" class="text-amber-400 focus:ring-0">
-              <span class="text-xs text-slate-200 font-semibold">🛏️ Hostel</span>
-            </label>
-            <label class="flex items-center gap-2 p-2.5 rounded-lg bg-slate-900 border border-slate-700 cursor-pointer hover:border-purple-400 transition">
-              <input type="radio" name="sell-category" value="lab" class="text-purple-400 focus:ring-0">
-              <span class="text-xs text-slate-200 font-semibold">🔬 Lab Gear</span>
-            </label>
-            <label class="flex items-center gap-2 p-2.5 rounded-lg bg-slate-900 border border-slate-700 cursor-pointer hover:border-blue-400 transition col-span-2 sm:col-span-1">
-              <input type="radio" name="sell-category" value="tech" class="text-blue-400 focus:ring-0">
-              <span class="text-xs text-slate-200 font-semibold">🔌 Tech / Gadgets</span>
-            </label>
-          </div>
-        </div>
-
-        <!-- ISBN BARCODE SCANNER HUD & AUTO-FILL TOOLBAR -->
-        <div id="isbn-scanner-wrapper" class="space-y-3 pt-1 pb-1">
+        <!-- ============================================== -->
+        <!-- STEP 1: CATEGORY & SIGNAL TYPE -->
+        <!-- ============================================== -->
+        <div id="sell-step-pane-1" class="wizard-pane space-y-4">
           
-          <!-- Trigger Action Bar -->
-          <div class="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-cyan-950/30 border border-cyan-500/30 shadow-[0_0_15px_rgba(0,229,255,0.1)]">
-            <div class="flex items-center gap-2">
-              <div class="w-7 h-7 rounded-lg bg-cyan-500/20 text-cyan-300 flex items-center justify-center border border-cyan-500/30 shrink-0">
-                <i data-lucide="scan-barcode" class="w-4 h-4"></i>
-              </div>
-              <div>
-                <div class="text-[11px] font-bold text-cyan-300 uppercase tracking-wide flex items-center gap-1">
-                  <span>TEXTBOOK ISBN SCANNER</span>
-                  <span class="px-1 py-0.2 rounded text-[8px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">AUTO-FILL</span>
+          <!-- Signal Type: Sell vs Wanted Request -->
+          <div>
+            <label class="block text-slate-300 font-bold mb-1.5 uppercase text-[11px]">Beacon Signal Type *</label>
+            <div class="grid grid-cols-2 gap-3">
+              <label class="flex items-center gap-2 p-2.5 rounded-xl bg-slate-900 border border-emerald-500/50 cursor-pointer hover:border-emerald-400 transition" id="label-type-sell">
+                <input type="radio" name="sell-beacon-type" value="sell" checked class="text-emerald-400 focus:ring-0">
+                <div>
+                  <span class="text-emerald-300 font-bold block text-xs">🟢 Selling Item</span>
+                  <span class="text-slate-500 text-[9px]">Offering an item to nearby peers</span>
                 </div>
-                <p class="text-[9px] text-slate-400">Scan textbook barcode with camera to auto-fill details</p>
-              </div>
-            </div>
-            <div class="flex items-center gap-1.5 shrink-0">
-              <!-- Hidden Native Camera Barcode Photo Capture (Works over HTTP without HTTPS requirement!) -->
-              <input type="file" id="barcode-file-input" accept="image/*" capture="environment" class="hidden" />
-              <input type="file" id="barcode-gallery-input" accept="image/*" class="hidden" />
-
-              <button 
-                type="button" 
-                id="btn-trigger-barcode-scan" 
-                class="px-3 py-1.5 rounded-lg bg-gradient-to-r from-cyan-500 to-emerald-500 hover:from-cyan-400 hover:to-emerald-400 text-slate-950 font-bold text-[10px] shadow-[0_0_12px_rgba(0,229,255,0.35)] transition flex items-center gap-1.5 uppercase tracking-wider"
-              >
-                <i data-lucide="camera" class="w-3.5 h-3.5"></i>
-                <span id="btn-trigger-barcode-text">SCAN BARCODE</span>
-              </button>
-              
-              <button 
-                type="button" 
-                id="btn-trigger-barcode-photo" 
-                class="px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-cyan-500/40 text-cyan-300 text-[10px] transition flex items-center gap-1"
-                title="Take photo of barcode with phone camera"
-              >
-                <i data-lucide="aperture" class="w-3.5 h-3.5 text-cyan-400"></i>
-                <span class="hidden sm:inline">SNAP</span>
-              </button>
-
-              <button 
-                type="button" 
-                id="btn-trigger-barcode-gallery" 
-                class="px-2 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-cyan-500/30 text-cyan-300 hover:text-white text-[10px] transition flex items-center gap-1"
-                title="Upload barcode image from device gallery"
-              >
-                <i data-lucide="image" class="w-3.5 h-3.5"></i>
-              </button>
-
-              <button 
-                type="button" 
-                id="btn-toggle-manual-isbn" 
-                class="px-2 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 hover:text-cyan-300 text-[10px] transition flex items-center gap-1"
-                title="Type ISBN manually"
-              >
-                <i data-lucide="keyboard" class="w-3.5 h-3.5"></i>
-              </button>
+              </label>
+              <label class="flex items-center gap-2 p-2.5 rounded-xl bg-slate-900 border border-slate-700 cursor-pointer hover:border-pink-400 transition" id="label-type-wanted">
+                <input type="radio" name="sell-beacon-type" value="wanted" class="text-pink-400 focus:ring-0">
+                <div>
+                  <span class="text-pink-400 font-bold block text-xs">🚨 Wanted / ISO</span>
+                  <span class="text-slate-500 text-[9px]">Seeking an item from surrounding peers</span>
+                </div>
+              </label>
             </div>
           </div>
 
-          <!-- Offscreen High-Resolution Barcode Canvas Worker -->
-          <div id="scanner-offscreen-reader" style="position: fixed; top: -9999px; left: -9999px; width: 1400px; height: 1400px; opacity: 0.001; pointer-events: none; z-index: -9999;"></div>
-
-          <!-- Live Camera Viewport Container (Collapsible) -->
-          <div id="scanner-viewport-panel" class="hidden p-3 rounded-xl bg-slate-950 border border-cyan-400/60 shadow-[0_0_20px_rgba(0,229,255,0.25)] space-y-2.5">
-            
-            <!-- Viewport Top Bar -->
-            <div class="flex items-center justify-between text-[11px]">
-              <div class="flex items-center gap-1.5 text-cyan-300 font-bold">
-                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                <span class="tracking-wide">OPTICAL ISBN RETICLE</span>
-              </div>
-              <div class="flex items-center gap-2">
-                <select id="scanner-camera-select" class="bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-[10px] text-slate-200 focus:outline-none focus:border-cyan-400 max-w-[120px] truncate">
-                  <option value="">Auto Camera</option>
-                </select>
-                <button type="button" id="btn-toggle-torch" class="hidden px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 border border-amber-500/40 text-amber-300 text-[10px] flex items-center gap-1">
-                  <i data-lucide="zap" class="w-3 h-3"></i>
-                  <span>Flash</span>
-                </button>
-                <button type="button" id="btn-close-scanner" class="p-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white transition">
-                  <i data-lucide="x" class="w-3.5 h-3.5"></i>
-                </button>
-              </div>
-            </div>
-
-            <!-- Video Viewport Canvas with Cyber HUD & Sweeping Laser -->
-            <div class="scanner-viewport-box relative" id="scanner-viewport-box">
-              <div id="scanner-qr-reader" class="w-full h-full"></div>
-              
-              <!-- Reticle Corner Target Brackets -->
-              <div class="reticle-corner reticle-tl"></div>
-              <div class="reticle-corner reticle-tr"></div>
-              <div class="reticle-corner reticle-bl"></div>
-              <div class="reticle-corner reticle-br"></div>
-
-              <!-- Animated Sweeping Laser Beam -->
-              <div id="scanner-laser-beam" class="scanner-laser-beam"></div>
-
-              <!-- Holographic Targeting Guide Box -->
-              <div class="scanner-target-window flex items-center justify-center">
-                <span id="scanner-status-text" class="text-[10px] text-cyan-300 font-mono tracking-wider bg-slate-950/85 px-2 py-0.5 rounded border border-cyan-500/40 text-center shadow">
-                  ALIGN EAN-13 BARCODE HERE
-                </span>
-              </div>
-            </div>
-
-            <!-- Viewport Hint -->
-            <div class="flex items-center justify-between text-[10px] text-slate-400 px-1">
-              <button type="button" id="btn-snap-photo-from-cam" class="text-cyan-300 hover:underline flex items-center gap-1">
-                <i data-lucide="camera" class="w-3 h-3 text-cyan-400"></i>
-                <span>Snap Barcode Photo</span>
-              </button>
-              <button type="button" id="btn-switch-to-manual-from-cam" class="text-slate-400 hover:text-cyan-400">
-                Type ISBN Manually
-              </button>
-            </div>
-          </div>
-
-          <!-- Manual ISBN Input Tray (Collapsible) -->
-          <div id="manual-isbn-panel" class="hidden p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-2.5">
-            <div class="flex items-center justify-between">
-              <label class="text-[11px] font-bold text-slate-300 uppercase">Enter Textbook ISBN (10 or 13 digits)</label>
-              <button type="button" id="btn-close-manual-isbn" class="text-slate-400 hover:text-white text-[10px]">
-                ✕ Close
-              </button>
-            </div>
-            <div class="flex gap-2">
-              <input 
-                type="text" 
-                id="manual-isbn-input" 
-                placeholder="e.g. 9780262033848 or 978-0-13-468599-1" 
-                class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-400 font-mono text-xs"
-              />
-              <button 
-                type="button" 
-                id="btn-manual-isbn-fetch" 
-                class="px-3 py-1.5 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-[11px] transition flex items-center gap-1.5 shrink-0"
-              >
-                <i data-lucide="search" class="w-3.5 h-3.5"></i>
-                <span id="btn-manual-isbn-text">FETCH DATA</span>
-              </button>
-            </div>
-
-            <!-- Mobile Phone Direct Camera Snap Trigger -->
-            <div class="flex items-center justify-between text-[11px] pt-1 border-t border-slate-900/90 text-slate-400">
-              <span class="text-[10px]">On phone? Skip typing:</span>
-              <button type="button" id="btn-snap-photo-from-manual" class="px-2.5 py-1 rounded bg-cyan-950/60 hover:bg-cyan-900/60 border border-cyan-500/40 text-cyan-300 text-[10px] font-bold flex items-center gap-1.5 transition">
-                <i data-lucide="camera" class="w-3 h-3 text-cyan-400"></i>
-                <span>📷 SNAP BARCODE PHOTO</span>
-              </button>
-            </div>
-            
-            <!-- Quick Demo Chips for Instant Testing -->
-            <div class="flex items-center gap-1.5 flex-wrap pt-0.5 text-[10px]">
-              <span class="text-slate-500">Quick Test:</span>
-              <button type="button" class="btn-quick-isbn px-1.5 py-0.5 rounded bg-slate-900 hover:bg-slate-800 border border-slate-800 text-cyan-300 hover:border-cyan-500/40 transition" data-isbn="9780262033848">CLRS Algorithms</button>
-              <button type="button" class="btn-quick-isbn px-1.5 py-0.5 rounded bg-slate-900 hover:bg-slate-800 border border-slate-800 text-cyan-300 hover:border-cyan-500/40 transition" data-isbn="9781285740621">Stewart Calculus</button>
-              <button type="button" class="btn-quick-isbn px-1.5 py-0.5 rounded bg-slate-900 hover:bg-slate-800 border border-slate-800 text-cyan-300 hover:border-cyan-500/40 transition" data-isbn="9780131103627">K&R C Language</button>
-              <button type="button" class="btn-quick-isbn px-1.5 py-0.5 rounded bg-slate-900 hover:bg-slate-800 border border-slate-800 text-cyan-300 hover:border-cyan-500/40 transition" data-isbn="9780134685991">Effective Java</button>
-            </div>
-          </div>
-
-          <!-- Scanned Book Info Preview Card -->
-          <div id="scanned-book-card" class="hidden p-3 rounded-xl bg-slate-900/90 border border-emerald-500/50 shadow-[0_0_20px_rgba(0,255,157,0.15)] flex items-start gap-3">
-            <img id="scanned-book-cover" src="" class="w-12 h-16 object-cover rounded-lg border border-emerald-400/40 shrink-0 shadow bg-slate-950" />
-            <div class="flex-1 min-w-0 font-sans">
-              <div class="flex items-center justify-between gap-1 mb-0.5">
-                <span class="px-1.5 py-0.2 rounded text-[8px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold font-mono">
-                  ✓ AUTO-FILLED FROM ISBN
-                </span>
-                <button type="button" id="btn-rescan-book" class="text-cyan-400 hover:text-cyan-300 text-[10px] underline font-mono">
-                  Scan Another
-                </button>
-              </div>
-              <h4 id="scanned-book-title" class="font-bold text-white text-xs truncate">Book Title</h4>
-              <p id="scanned-book-author" class="text-[11px] text-slate-300 truncate">Author Name</p>
-              <p id="scanned-book-meta" class="text-[10px] text-slate-400 mt-0.5 truncate font-mono">Publisher • Year • ISBN</p>
-            </div>
-          </div>
-
-        </div>
-
-        <!-- Title -->
-        <div>
-          <label class="block text-slate-300 font-bold mb-1 uppercase" id="title-label">Item Title / Model / Author *</label>
-          <input 
-            type="text" 
-            id="sell-title" 
-            required 
-            placeholder="e.g. Casio Scientific Calculator or Kreyszig Engineering Math" 
-            class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-400"
-          />
-        </div>
-
-        <!-- Subcategory / Condition -->
-        <div class="grid grid-cols-2 gap-3">
+          <!-- 6 Core India-Centric Category Cards -->
           <div>
-            <label class="block text-slate-300 font-bold mb-1 uppercase">Subcategory</label>
-            <input 
-              type="text" 
-              id="sell-subcategory" 
-              placeholder="e.g. Engineering, Architecture, Fiction" 
-              class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-400"
-            />
+            <label class="block text-slate-300 font-bold mb-1.5 uppercase text-[11px]">Select Category *</label>
+            <div class="grid grid-cols-2 sm:grid-cols-3 gap-2.5" id="wizard-category-cards-grid">
+              
+              <label class="category-card-choice flex flex-col p-2.5 rounded-xl bg-slate-900 border border-cyan-500/40 cursor-pointer hover:border-cyan-400 transition active" data-cat="electronics">
+                <input type="radio" name="sell-category" value="electronics" checked class="hidden">
+                <div class="flex items-center justify-between mb-1">
+                  <span class="text-lg">📱</span>
+                  <span class="w-2 h-2 rounded-full bg-[#00f0ff]"></span>
+                </div>
+                <div class="font-bold text-slate-100 text-xs truncate">Electronics</div>
+                <div class="text-[9px] text-slate-400 truncate">Phones, Laptops, Earbuds</div>
+              </label>
+
+              <label class="category-card-choice flex flex-col p-2.5 rounded-xl bg-slate-900 border border-slate-800 cursor-pointer hover:border-yellow-400 transition" data-cat="books">
+                <input type="radio" name="sell-category" value="books" class="hidden">
+                <div class="flex items-center justify-between mb-1">
+                  <span class="text-lg">📚</span>
+                  <span class="w-2 h-2 rounded-full bg-[#ffe600]"></span>
+                </div>
+                <div class="font-bold text-slate-100 text-xs truncate">Books &amp; Prep</div>
+                <div class="text-[9px] text-slate-400 truncate">Engineering, UPSC, CAT</div>
+              </label>
+
+              <label class="category-card-choice flex flex-col p-2.5 rounded-xl bg-slate-900 border border-slate-800 cursor-pointer hover:border-pink-400 transition" data-cat="hostel">
+                <input type="radio" name="sell-category" value="hostel" class="hidden">
+                <div class="flex items-center justify-between mb-1">
+                  <span class="text-lg">🛏️</span>
+                  <span class="w-2 h-2 rounded-full bg-[#ff007f]"></span>
+                </div>
+                <div class="font-bold text-slate-100 text-xs truncate">Hostel &amp; PG</div>
+                <div class="text-[9px] text-slate-400 truncate">Mattresses, Kettles, Lamps</div>
+              </label>
+
+              <label class="category-card-choice flex flex-col p-2.5 rounded-xl bg-slate-900 border border-slate-800 cursor-pointer hover:border-emerald-400 transition" data-cat="stationery">
+                <input type="radio" name="sell-category" value="stationery" class="hidden">
+                <div class="flex items-center justify-between mb-1">
+                  <span class="text-lg">✏️</span>
+                  <span class="w-2 h-2 rounded-full bg-[#00ff88]"></span>
+                </div>
+                <div class="font-bold text-slate-100 text-xs truncate">Stationery</div>
+                <div class="text-[9px] text-slate-400 truncate">Drafters, Boards, Lab Coats</div>
+              </label>
+
+              <label class="category-card-choice flex flex-col p-2.5 rounded-xl bg-slate-900 border border-slate-800 cursor-pointer hover:border-orange-400 transition" data-cat="sports">
+                <input type="radio" name="sell-category" value="sports" class="hidden">
+                <div class="flex items-center justify-between mb-1">
+                  <span class="text-lg">🏏</span>
+                  <span class="w-2 h-2 rounded-full bg-[#ff8c00]"></span>
+                </div>
+                <div class="font-bold text-slate-100 text-xs truncate">Sports &amp; Fitness</div>
+                <div class="text-[9px] text-slate-400 truncate">Cricket, Badminton, Cycles</div>
+              </label>
+
+              <label class="category-card-choice flex flex-col p-2.5 rounded-xl bg-slate-900 border border-slate-800 cursor-pointer hover:border-purple-400 transition" data-cat="fashion">
+                <input type="radio" name="sell-category" value="fashion" class="hidden">
+                <div class="flex items-center justify-between mb-1">
+                  <span class="text-lg">👕</span>
+                  <span class="w-2 h-2 rounded-full bg-[#a855f7]"></span>
+                </div>
+                <div class="font-bold text-slate-100 text-xs truncate">Fashion &amp; Merch</div>
+                <div class="text-[9px] text-slate-400 truncate">Hoodies, Suits, Backpacks</div>
+              </label>
+
+            </div>
           </div>
+
+          <!-- Dynamic Subcategory Dropdown -->
           <div>
-            <label class="block text-slate-300 font-bold mb-1 uppercase">Condition *</label>
-            <select id="sell-condition" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-cyan-400">
-              <option value="Like New">Like New (Mint)</option>
-              <option value="Good" selected>Good (Lightly Used)</option>
-              <option value="Fair">Fair (Readable/Functional)</option>
+            <label class="block text-slate-300 font-bold mb-1 uppercase text-[10px]">Subcategory / Item Type *</label>
+            <select id="sell-subcategory-select" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-cyan-400 cursor-pointer">
+              <!-- Populated dynamically via JS -->
             </select>
           </div>
-        </div>
 
-        <!-- Pricing: Asking & Original Price -->
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="block text-slate-300 font-bold mb-1 uppercase" id="price-label">Asking Price / Budget (₹) *</label>
-            <input 
-              type="number" 
-              id="sell-price" 
-              required 
-              min="10" 
-              placeholder="350" 
-              class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-400"
-            />
-          </div>
-          <div>
-            <label class="block text-slate-300 font-bold mb-1 uppercase">Original Retail (₹)</label>
-            <input 
-              type="number" 
-              id="sell-orig-price" 
-              min="10" 
-              placeholder="850" 
-              class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-400"
-            />
-          </div>
-        </div>
-
-        <!-- UPI ID (Optional for fast payouts) -->
-        <div>
-          <label class="block text-slate-300 font-bold mb-1 uppercase">Your UPI ID (Optional for instant QR payments)</label>
-          <input 
-            type="text" 
-            id="sell-upi-id" 
-            placeholder="e.g. username@okhdfcbank or 9876543210@paytm" 
-            class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-400"
-          />
-        </div>
-
-        <!-- Pickup Landmark & Exact Spot Pinpoint System -->
-        <div class="p-3 rounded-xl bg-slate-900/90 border border-cyan-500/30 space-y-2.5">
-          <div class="flex items-center justify-between">
-            <label class="block text-slate-300 font-bold uppercase text-xs flex items-center gap-1.5">
-              <i data-lucide="map-pin" class="w-3.5 h-3.5 text-cyan-400"></i>
-              <span>Pickup Landmark & Exact Spot *</span>
-            </label>
-            <span id="sell-gps-accuracy-badge" class="hidden text-[10px] font-mono px-1.5 py-0.2 rounded bg-emerald-950 text-emerald-300 border border-emerald-500/40">
-              ±3m GPS Fix
-            </span>
-          </div>
-
-          <input 
-            type="text" 
-            id="sell-landmark" 
-            required 
-            placeholder="e.g. Science Library 1st Floor Cafe or Gate 2 by Banyan Tree" 
-            class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-400 text-xs font-sans"
-          />
-
-          <!-- Location Controls: GPS, Pin Dropper, Maps Preview -->
-          <div class="grid grid-cols-2 gap-2">
-            <button 
-              type="button" 
-              id="btn-sell-gps-exact" 
-              class="px-2.5 py-2 rounded-lg bg-cyan-950/80 hover:bg-cyan-900/90 border border-cyan-400/50 text-cyan-300 flex items-center justify-center gap-1.5 text-xs font-mono font-bold transition shadow-[0_0_10px_rgba(0,229,255,0.15)] cursor-pointer"
-              title="Acquire exact current GPS coordinates from phone satellite"
-            >
-              <i data-lucide="crosshair" class="w-3.5 h-3.5 text-cyan-400"></i>
-              <span>📍 USE EXACT GPS</span>
-            </button>
-            <button 
-              type="button" 
-              id="btn-sell-pick-pin" 
-              class="px-2.5 py-2 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-700 hover:border-cyan-400/50 text-slate-200 hover:text-cyan-300 flex items-center justify-center gap-1.5 text-xs font-mono font-bold transition cursor-pointer"
-              title="Open campus map to drag or click exact pickup pin"
-            >
-              <i data-lucide="map" class="w-3.5 h-3.5 text-emerald-400"></i>
-              <span>🗺️ MARK ON MAP</span>
-            </button>
-          </div>
-
-          <!-- Coordinate Readout & Google Maps Preview -->
-          <div class="flex items-center justify-between pt-1 border-t border-slate-800 text-[11px] font-mono">
-            <div class="flex items-center gap-1.5 text-slate-400">
-              <span>COORDS:</span>
-              <span id="sell-coords-display" class="text-cyan-300 font-bold">Detecting Live GPS...</span>
-            </div>
-            <button 
-              type="button" 
-              id="btn-sell-preview-maps" 
-              class="text-emerald-400 hover:text-emerald-300 underline flex items-center gap-1 text-[11px] cursor-pointer"
-              title="Preview selected coordinates in Google Maps"
-            >
-              <span>Preview Google Maps</span>
-              <i data-lucide="external-link" class="w-3 h-3"></i>
-            </button>
-          </div>
-
-          <!-- Campus Landmark Quick Presets -->
-          <div class="pt-1">
-            <div class="text-[10px] text-slate-500 font-mono mb-1">Campus Presets:</div>
-            <div class="flex items-center gap-1.5 flex-wrap text-[10px]">
-              <button type="button" class="btn-landmark-preset px-2 py-0.5 rounded bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-cyan-500/40 text-slate-300 transition" data-landmark="Central Library Reception Desk">🏛️ Central Library</button>
-              <button type="button" class="btn-landmark-preset px-2 py-0.5 rounded bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-cyan-500/40 text-slate-300 transition" data-landmark="Campus Cafe Lounge / Nescafe">☕ Campus Cafe</button>
-              <button type="button" class="btn-landmark-preset px-2 py-0.5 rounded bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-cyan-500/40 text-slate-300 transition" data-landmark="Student Activity Center (SAC)">🏟️ SAC Ground</button>
-              <button type="button" class="btn-landmark-preset px-2 py-0.5 rounded bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-cyan-500/40 text-slate-300 transition" data-landmark="Main Gate Security Post">🛡️ Main Gate</button>
-              <button type="button" class="btn-landmark-preset px-2 py-0.5 rounded bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-cyan-500/40 text-slate-300 transition" data-landmark="Hostel Quad Courtyard">🏢 Hostel Quad</button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Description -->
-        <div>
-          <label class="block text-slate-300 font-bold mb-1 uppercase">Description / Notes</label>
-          <textarea 
-            id="sell-desc" 
-            rows="2" 
-            placeholder="Mention edition, missing pages, urgency, etc..." 
-            class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-400"
-          ></textarea>
-        </div>
-
-        <!-- Real Camera Snap & Photo File Upload -->
-        <div>
-          <div class="flex items-center justify-between mb-1.5">
-            <label class="block text-slate-300 font-bold uppercase text-xs">Item Photo (Camera / Gallery)</label>
-            <span class="text-[10px] font-mono text-emerald-400 flex items-center gap-1">
-              <i data-lucide="zap" class="w-3 h-3"></i> Auto-Compressed (&lt; 70 KB)
-            </span>
-          </div>
-
-          <!-- Hidden File Inputs -->
-          <input 
-            type="file" 
-            id="sell-camera-input" 
-            accept="image/*" 
-            capture="environment" 
-            class="hidden"
-          />
-          <input 
-            type="file" 
-            id="sell-gallery-input" 
-            accept="image/*" 
-            class="hidden"
-          />
-
-          <!-- Dual Camera / Gallery Triggers -->
-          <div id="photo-upload-actions" class="grid grid-cols-2 gap-2">
-            <button 
-              type="button" 
-              id="btn-trigger-camera" 
-              class="px-3 py-2.5 rounded-lg bg-cyan-950/70 hover:bg-cyan-900/80 border border-cyan-400/50 text-cyan-300 flex items-center justify-center gap-2 text-xs font-mono font-bold transition shadow-[0_0_10px_rgba(0,229,255,0.15)]"
-            >
-              <i data-lucide="camera" class="w-4 h-4 text-cyan-400"></i>
-              <span>📷 SNAP CAMERA</span>
-            </button>
-            <button 
-              type="button" 
-              id="btn-trigger-gallery" 
-              class="px-3 py-2.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 hover:text-white flex items-center justify-center gap-2 text-xs font-mono transition"
-            >
-              <i data-lucide="image" class="w-4 h-4 text-slate-400"></i>
-              <span>🖼️ CHOOSE PHOTO</span>
-            </button>
-          </div>
-
-          <!-- Live Compressing Progress Indicator -->
-          <div id="image-compressing-spinner" class="hidden my-2 p-2.5 rounded-lg bg-cyan-950/40 border border-cyan-500/30 flex items-center gap-2 font-mono text-xs text-cyan-300">
-            <i data-lucide="loader-2" class="w-4 h-4 animate-spin text-cyan-400"></i>
-            <span>Compressing & optimizing image on device...</span>
-          </div>
-
-          <!-- Enhanced Photo Preview Card -->
-          <div id="image-preview-box" class="hidden mt-2 p-2.5 rounded-xl bg-slate-950 border border-emerald-500/40 flex items-center justify-between gap-3 shadow-[0_0_15px_rgba(0,255,157,0.15)]">
-            <div class="flex items-center gap-3 min-w-0">
-              <img id="image-preview-thumb" src="" alt="Listing photo preview" class="w-12 h-12 rounded-lg object-cover border border-emerald-400 shadow-sm shrink-0" />
-              <div class="min-w-0 font-mono">
-                <div class="text-xs font-bold text-slate-100 flex items-center gap-1.5 truncate">
-                  <span>Authentic Item Photo</span>
-                  <span class="text-emerald-400 text-[10px]">✓ Ready</span>
+          <!-- ISBN BARCODE SCANNER HUD & AUTO-FILL TOOLBAR -->
+          <div id="isbn-scanner-wrapper" class="hidden space-y-3 pt-1 pb-1">
+            <!-- Trigger Action Bar -->
+            <div class="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-cyan-950/30 border border-cyan-500/30 shadow-[0_0_15px_rgba(0,229,255,0.1)]">
+              <div class="flex items-center gap-2">
+                <div class="w-7 h-7 rounded-lg bg-cyan-500/20 text-cyan-300 flex items-center justify-center border border-cyan-500/30 shrink-0">
+                  <i data-lucide="scan-barcode" class="w-4 h-4"></i>
                 </div>
-                <div class="flex items-center gap-1.5 mt-0.5">
-                  <span id="image-compression-badge" class="text-[10px] px-1.5 py-0.2 rounded bg-emerald-950 text-emerald-300 border border-emerald-500/40">
-                    -- KB
-                  </span>
-                  <span class="text-[10px] text-slate-500">Ready to broadcast</span>
+                <div>
+                  <div class="text-[11px] font-bold text-cyan-300 uppercase tracking-wide flex items-center gap-1">
+                    <span>TEXTBOOK ISBN SCANNER</span>
+                    <span class="px-1 py-0.2 rounded text-[8px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">AUTO-FILL</span>
+                  </div>
+                  <p class="text-[9px] text-slate-400">Scan textbook barcode with camera to auto-fill details</p>
                 </div>
               </div>
+              <div class="flex items-center gap-1.5 shrink-0">
+                <!-- Hidden Native Camera Barcode Photo Capture -->
+                <input type="file" id="barcode-file-input" accept="image/*" capture="environment" class="hidden" />
+                <input type="file" id="barcode-gallery-input" accept="image/*" class="hidden" />
+
+                <button 
+                  type="button" 
+                  id="btn-trigger-barcode-scan" 
+                  class="px-3 py-1.5 rounded-lg bg-gradient-to-r from-cyan-500 to-emerald-500 hover:from-cyan-400 hover:to-emerald-400 text-slate-950 font-bold text-[10px] shadow-[0_0_12px_rgba(0,229,255,0.35)] transition flex items-center gap-1.5 uppercase tracking-wider"
+                >
+                  <i data-lucide="camera" class="w-3.5 h-3.5"></i>
+                  <span id="btn-trigger-barcode-text">SCAN BARCODE</span>
+                </button>
+                
+                <button 
+                  type="button" 
+                  id="btn-trigger-barcode-photo" 
+                  class="px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-cyan-500/40 text-cyan-300 text-[10px] transition flex items-center gap-1"
+                  title="Take photo of barcode with phone camera"
+                >
+                  <i data-lucide="aperture" class="w-3.5 h-3.5 text-cyan-400"></i>
+                  <span class="hidden sm:inline">SNAP</span>
+                </button>
+
+                <button 
+                  type="button" 
+                  id="btn-trigger-barcode-gallery" 
+                  class="px-2 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-cyan-500/30 text-cyan-300 hover:text-white text-[10px] transition flex items-center gap-1"
+                  title="Upload barcode image from device gallery"
+                >
+                  <i data-lucide="image" class="w-3.5 h-3.5"></i>
+                </button>
+
+                <button 
+                  type="button" 
+                  id="btn-toggle-manual-isbn" 
+                  class="px-2 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 hover:text-cyan-300 text-[10px] transition flex items-center gap-1"
+                  title="Type ISBN manually"
+                >
+                  <i data-lucide="keyboard" class="w-3.5 h-3.5"></i>
+                </button>
+              </div>
             </div>
-            <div class="flex items-center gap-2 shrink-0">
-              <button type="button" id="btn-retake-photo" class="text-xs text-cyan-400 hover:text-cyan-300 font-mono underline" title="Retake photo">Retake</button>
-              <button type="button" id="btn-remove-photo" class="p-1 rounded text-rose-400 hover:text-rose-300 hover:bg-rose-950/50 transition" title="Remove photo">
-                <i data-lucide="trash-2" class="w-4 h-4"></i>
+
+            <!-- Offscreen High-Resolution Barcode Canvas Worker -->
+            <div id="scanner-offscreen-reader" style="position: fixed; top: -9999px; left: -9999px; width: 1400px; height: 1400px; opacity: 0.001; pointer-events: none; z-index: -9999;"></div>
+
+            <!-- Live Camera Viewport Container (Collapsible) -->
+            <div id="scanner-viewport-panel" class="hidden p-3 rounded-xl bg-slate-950 border border-cyan-400/60 shadow-[0_0_20px_rgba(0,229,255,0.25)] space-y-2.5">
+              
+              <!-- Viewport Top Bar -->
+              <div class="flex items-center justify-between text-[11px]">
+                <div class="flex items-center gap-1.5 text-cyan-300 font-bold">
+                  <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                  <span class="tracking-wide">OPTICAL ISBN RETICLE</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <select id="scanner-camera-select" class="bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-[10px] text-slate-200 focus:outline-none focus:border-cyan-400 max-w-[120px] truncate">
+                    <option value="">Auto Camera</option>
+                  </select>
+                  <button type="button" id="btn-toggle-torch" class="hidden px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 border border-amber-500/40 text-amber-300 text-[10px] flex items-center gap-1">
+                    <i data-lucide="zap" class="w-3 h-3"></i>
+                    <span>Flash</span>
+                  </button>
+                  <button type="button" id="btn-close-scanner" class="p-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white transition">
+                    <i data-lucide="x" class="w-3.5 h-3.5"></i>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Video Viewport Canvas with Cyber HUD & Sweeping Laser -->
+              <div class="scanner-viewport-box relative" id="scanner-viewport-box">
+                <div id="scanner-qr-reader" class="w-full h-full"></div>
+                
+                <!-- Reticle Corner Target Brackets -->
+                <div class="reticle-corner reticle-tl"></div>
+                <div class="reticle-corner reticle-tr"></div>
+                <div class="reticle-corner reticle-bl"></div>
+                <div class="reticle-corner reticle-br"></div>
+
+                <!-- Animated Sweeping Laser Beam -->
+                <div id="scanner-laser-beam" class="scanner-laser-beam"></div>
+
+                <!-- Holographic Targeting Guide Box -->
+                <div class="scanner-target-window flex items-center justify-center">
+                  <span id="scanner-status-text" class="text-[10px] text-cyan-300 font-mono tracking-wider bg-slate-950/85 px-2 py-0.5 rounded border border-cyan-500/40 text-center shadow">
+                    ALIGN EAN-13 BARCODE HERE
+                  </span>
+                </div>
+              </div>
+
+              <!-- Viewport Hint -->
+              <div class="flex items-center justify-between text-[10px] text-slate-400 px-1">
+                <button type="button" id="btn-snap-photo-from-cam" class="text-cyan-300 hover:underline flex items-center gap-1">
+                  <i data-lucide="camera" class="w-3 h-3 text-cyan-400"></i>
+                  <span>Snap Barcode Photo</span>
+                </button>
+                <button type="button" id="btn-switch-to-manual-from-cam" class="text-slate-400 hover:text-cyan-400">
+                  Type ISBN Manually
+                </button>
+              </div>
+            </div>
+
+            <!-- Manual ISBN Input Tray (Collapsible) -->
+            <div id="manual-isbn-panel" class="hidden p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-2.5">
+              <div class="flex items-center justify-between">
+                <label class="text-[11px] font-bold text-slate-300 uppercase">Enter Textbook ISBN (10 or 13 digits)</label>
+                <button type="button" id="btn-close-manual-isbn" class="text-slate-400 hover:text-white text-[10px]">
+                  ✕ Close
+                </button>
+              </div>
+              <div class="flex gap-2">
+                <input 
+                  type="text" 
+                  id="manual-isbn-input" 
+                  placeholder="e.g. 9780262033848 or 978-0-13-468599-1" 
+                  class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-400 font-mono text-xs"
+                />
+                <button 
+                  type="button" 
+                  id="btn-manual-isbn-fetch" 
+                  class="px-3 py-1.5 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-[11px] transition flex items-center gap-1.5 shrink-0"
+                >
+                  <i data-lucide="search" class="w-3.5 h-3.5"></i>
+                  <span id="btn-manual-isbn-text">FETCH DATA</span>
+                </button>
+              </div>
+
+              <!-- Mobile Phone Direct Camera Snap Trigger -->
+              <div class="flex items-center justify-between text-[11px] pt-1 border-t border-slate-900/90 text-slate-400">
+                <span class="text-[10px]">On phone? Skip typing:</span>
+                <button type="button" id="btn-snap-photo-from-manual" class="px-2.5 py-1 rounded bg-cyan-950/60 hover:bg-cyan-900/60 border border-cyan-500/40 text-cyan-300 text-[10px] font-bold flex items-center gap-1.5 transition">
+                  <i data-lucide="camera" class="w-3 h-3 text-cyan-400"></i>
+                  <span>📷 SNAP BARCODE PHOTO</span>
+                </button>
+              </div>
+              
+              <!-- Quick Demo Chips for Instant Testing -->
+              <div class="flex items-center gap-1.5 flex-wrap pt-0.5 text-[10px]">
+                <span class="text-slate-500">Quick Test:</span>
+                <button type="button" class="btn-quick-isbn px-1.5 py-0.5 rounded bg-slate-900 hover:bg-slate-800 border border-slate-800 text-cyan-300 hover:border-cyan-500/40 transition" data-isbn="9780262033848">CLRS Algorithms</button>
+                <button type="button" class="btn-quick-isbn px-1.5 py-0.5 rounded bg-slate-900 hover:bg-slate-800 border border-slate-800 text-cyan-300 hover:border-cyan-500/40 transition" data-isbn="9781285740621">Stewart Calculus</button>
+                <button type="button" class="btn-quick-isbn px-1.5 py-0.5 rounded bg-slate-900 hover:bg-slate-800 border border-slate-800 text-cyan-300 hover:border-cyan-500/40 transition" data-isbn="9780131103627">K&R C Language</button>
+                <button type="button" class="btn-quick-isbn px-1.5 py-0.5 rounded bg-slate-900 hover:bg-slate-800 border border-slate-800 text-cyan-300 hover:border-cyan-500/40 transition" data-isbn="9780134685991">Effective Java</button>
+              </div>
+            </div>
+
+            <!-- Scanned Book Info Preview Card -->
+            <div id="scanned-book-card" class="hidden p-3 rounded-xl bg-slate-900/90 border border-emerald-500/50 shadow-[0_0_20px_rgba(0,255,157,0.15)] flex items-start gap-3">
+              <img id="scanned-book-cover" src="" class="w-12 h-16 object-cover rounded-lg border border-emerald-400/40 shrink-0 shadow bg-slate-950" />
+              <div class="flex-1 min-w-0 font-sans">
+                <div class="flex items-center justify-between gap-1 mb-0.5">
+                  <span class="px-1.5 py-0.2 rounded text-[8px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold font-mono">
+                    ✓ AUTO-FILLED FROM ISBN
+                  </span>
+                  <button type="button" id="btn-rescan-book" class="text-cyan-400 hover:text-cyan-300 text-[10px] underline font-mono">
+                    Scan Another
+                  </button>
+                </div>
+                <h4 id="scanned-book-title" class="font-bold text-white text-xs truncate">Book Title</h4>
+                <p id="scanned-book-author" class="text-[11px] text-slate-300 truncate">Author Name</p>
+                <p id="scanned-book-meta" class="text-[10px] text-slate-400 mt-0.5 truncate font-mono">Publisher • Year • ISBN</p>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- ============================================== -->
+        <!-- STEP 2: BASIC DETAILS & PRICING -->
+        <!-- ============================================== -->
+        <div id="sell-step-pane-2" class="wizard-pane hidden space-y-4">
+          
+          <div>
+            <label class="block text-slate-300 font-bold mb-1 uppercase text-[10px]">Listing Title *</label>
+            <input 
+              type="text" 
+              id="sell-title" 
+              placeholder="e.g. Casio fx-991CW Scientific Calculator (Mint Condition)" 
+              class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-400 font-bold"
+            />
+          </div>
+
+          <div>
+            <label class="block text-slate-300 font-bold mb-1 uppercase text-[10px]">Description &amp; Highlights</label>
+            <textarea 
+              id="sell-desc" 
+              rows="3" 
+              placeholder="Mention key details: bill availability, usage history, included accessories, or negotiation leeway..." 
+              class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-400"
+            ></textarea>
+          </div>
+
+          <!-- Pricing Grid: Selling Price & Original Price -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-xl bg-slate-900 border border-slate-800">
+            <div>
+              <label class="block text-emerald-400 font-bold mb-1 uppercase text-[10px]">Selling Price (₹) *</label>
+              <div class="relative">
+                <span class="absolute left-3 top-2 text-slate-400 font-bold text-sm">₹</span>
+                <input 
+                  type="number" 
+                  id="sell-price" 
+                  min="0"
+                  step="1"
+                  placeholder="250" 
+                  class="w-full bg-slate-950 border border-slate-700 rounded-lg pl-8 pr-3 py-2 text-emerald-300 font-mono font-bold text-sm focus:outline-none focus:border-emerald-400"
+                />
+              </div>
+            </div>
+
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <label class="block text-slate-400 font-bold uppercase text-[10px]">Original MRP / New Price (₹)</label>
+                <span id="sell-discount-badge" class="hidden px-1.5 py-0.2 rounded bg-emerald-950 text-emerald-300 border border-emerald-500/40 text-[9px] font-bold">
+                  0% OFF
+                </span>
+              </div>
+              <div class="relative">
+                <span class="absolute left-3 top-2 text-slate-400 font-bold text-sm">₹</span>
+                <input 
+                  type="number" 
+                  id="sell-original-price" 
+                  min="0"
+                  step="1"
+                  placeholder="500 (optional)" 
+                  class="w-full bg-slate-950 border border-slate-700 rounded-lg pl-8 pr-3 py-2 text-slate-300 font-mono text-sm focus:outline-none focus:border-cyan-400"
+                />
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- ============================================== -->
+        <!-- STEP 3: DYNAMIC SPECS & CONDITION -->
+        <!-- ============================================== -->
+        <div id="sell-step-pane-3" class="wizard-pane hidden space-y-4">
+          
+          <!-- Dynamic Specs Fields Container (Auto-populated by active category) -->
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <label class="block text-cyan-300 font-bold uppercase text-[10px]">Category Specifications</label>
+              <span class="text-[9px] text-slate-500">Auto-tailored for selected category</span>
+            </div>
+            <div id="wizard-dynamic-specs" class="space-y-3 p-3 rounded-xl bg-slate-900 border border-slate-800">
+              <!-- Dynamically populated fields -->
+            </div>
+          </div>
+
+          <!-- Condition & Rating Score -->
+          <div class="p-3 rounded-xl bg-slate-900 border border-slate-800 space-y-2.5">
+            <div class="flex items-center justify-between">
+              <label class="block text-slate-300 font-bold uppercase text-[10px]">Overall Condition *</label>
+              <span id="condition-score-display" class="text-cyan-300 font-mono font-bold text-[11px]">85% (Good)</span>
+            </div>
+            
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[10px]">
+              <label class="flex items-center gap-1.5 p-2 rounded-lg bg-slate-950 border border-slate-700 cursor-pointer hover:border-cyan-400 transition">
+                <input type="radio" name="sell-condition" value="Brand New" class="text-cyan-400 focus:ring-0">
+                <span class="text-slate-200">Brand New</span>
+              </label>
+              <label class="flex items-center gap-1.5 p-2 rounded-lg bg-slate-950 border border-slate-700 cursor-pointer hover:border-cyan-400 transition">
+                <input type="radio" name="sell-condition" value="Like New" class="text-cyan-400 focus:ring-0">
+                <span class="text-slate-200">Like New</span>
+              </label>
+              <label class="flex items-center gap-1.5 p-2 rounded-lg bg-slate-950 border border-cyan-500/50 cursor-pointer hover:border-cyan-400 transition">
+                <input type="radio" name="sell-condition" value="Good" checked class="text-cyan-400 focus:ring-0">
+                <span class="text-cyan-300 font-bold">Good</span>
+              </label>
+              <label class="flex items-center gap-1.5 p-2 rounded-lg bg-slate-950 border border-slate-700 cursor-pointer hover:border-cyan-400 transition">
+                <input type="radio" name="sell-condition" value="Fair" class="text-cyan-400 focus:ring-0">
+                <span class="text-slate-200">Fair / Used</span>
+              </label>
+            </div>
+
+            <input 
+              type="range" 
+              id="sell-condition-score" 
+              min="0.5" 
+              max="1.0" 
+              step="0.05" 
+              value="0.85" 
+              class="w-full cursor-pointer accent-cyan-400"
+            />
+          </div>
+
+        </div>
+
+        <!-- ============================================== -->
+        <!-- STEP 4: PHOTOS & UPI CHECKOUT -->
+        <!-- ============================================== -->
+        <div id="sell-step-pane-4" class="wizard-pane hidden space-y-4">
+          
+          <!-- Item Photos Upload -->
+          <div>
+            <div class="flex items-center justify-between mb-1.5">
+              <label class="block text-slate-300 font-bold uppercase text-[10px]">Item Photos (Snap / Gallery)</label>
+              <span class="text-[9px] font-mono text-emerald-400 flex items-center gap-1">
+                <i data-lucide="zap" class="w-3 h-3"></i> Auto-Compressed (&lt; 70 KB)
+              </span>
+            </div>
+
+            <!-- Hidden File Inputs -->
+            <input type="file" id="sell-camera-input" accept="image/*" capture="environment" class="hidden" />
+            <input type="file" id="sell-gallery-input" accept="image/*" class="hidden" />
+
+            <!-- Action Buttons -->
+            <div id="photo-upload-actions" class="grid grid-cols-2 gap-2">
+              <button 
+                type="button" 
+                id="btn-trigger-camera" 
+                class="px-3 py-2.5 rounded-xl bg-cyan-950/70 hover:bg-cyan-900/80 border border-cyan-400/50 text-cyan-300 flex items-center justify-center gap-2 text-xs font-mono font-bold transition shadow-[0_0_10px_rgba(0,229,255,0.15)] cursor-pointer"
+              >
+                <i data-lucide="camera" class="w-4 h-4 text-cyan-400"></i>
+                <span>📷 SNAP CAMERA</span>
+              </button>
+              <button 
+                type="button" 
+                id="btn-trigger-gallery" 
+                class="px-3 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 hover:text-white flex items-center justify-center gap-2 text-xs font-mono transition cursor-pointer"
+              >
+                <i data-lucide="image" class="w-4 h-4 text-slate-400"></i>
+                <span>🖼️ CHOOSE PHOTO</span>
               </button>
             </div>
+
+            <!-- Preview Card -->
+            <div id="image-preview-box" class="hidden mt-2 p-2.5 rounded-xl bg-slate-950 border border-emerald-500/40 flex items-center justify-between gap-3 shadow-[0_0_15px_rgba(0,255,157,0.15)]">
+              <div class="flex items-center gap-3 min-w-0">
+                <img id="image-preview-thumb" src="" alt="Listing photo preview" class="w-12 h-12 rounded-lg object-cover border border-emerald-400 shadow-sm shrink-0" />
+                <div class="min-w-0 font-mono">
+                  <div class="text-xs font-bold text-slate-100 flex items-center gap-1.5 truncate">
+                    <span>Authentic Item Photo</span>
+                    <span class="text-emerald-400 text-[10px]">✓ Ready</span>
+                  </div>
+                  <div class="flex items-center gap-1.5 mt-0.5">
+                    <span id="image-compression-badge" class="text-[10px] px-1.5 py-0.2 rounded bg-emerald-950 text-emerald-300 border border-emerald-500/40">-- KB</span>
+                    <span class="text-[10px] text-slate-500">Ready</span>
+                  </div>
+                </div>
+              </div>
+              <div class="flex items-center gap-2 shrink-0">
+                <button type="button" id="btn-retake-photo" class="text-xs text-cyan-400 hover:text-cyan-300 underline cursor-pointer">Retake</button>
+                <button type="button" id="btn-remove-photo" class="p-1 rounded text-rose-400 hover:text-rose-300 cursor-pointer">
+                  <i data-lucide="trash-2" class="w-4 h-4"></i>
+                </button>
+              </div>
+            </div>
+
+            <input 
+              type="text" 
+              id="sell-image" 
+              placeholder="Or paste external image URL" 
+              class="w-full mt-2 bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-400 text-[11px]"
+            />
           </div>
 
-          <input 
-            type="url" 
-            id="sell-image" 
-            placeholder="Or paste external image URL" 
-            class="w-full mt-2 bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-400 text-[11px]"
-          />
-        </div>
+          <!-- UPI Payment Details -->
+          <div class="p-3 rounded-xl bg-slate-900 border border-emerald-500/30 space-y-2.5">
+            <div class="flex items-center justify-between">
+              <label class="block text-emerald-400 font-bold uppercase text-[10px] flex items-center gap-1">
+                <i data-lucide="qr-code" class="w-3.5 h-3.5"></i>
+                <span>UPI Payment Receiving Setup (Optional)</span>
+              </label>
+              <span class="text-[9px] text-slate-400">Google Pay / PhonePe / Paytm</span>
+            </div>
 
-        <!-- Live GPS Broadcasting Verification Strip -->
-        <div id="sell-gps-verification-banner" class="p-2.5 rounded-xl bg-slate-950/90 border border-emerald-500/40 flex items-center justify-between font-mono text-[11px] mb-2">
-          <div class="flex items-center gap-2 min-w-0">
-            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping shrink-0"></span>
-            <div class="truncate">
-              <span class="text-slate-400 text-[9px] uppercase block">Broadcast GPS Lock:</span>
-              <span id="sell-live-gps-telemetry" class="text-emerald-300 font-bold">Acquiring Live Satellites...</span>
+            <div>
+              <label class="block text-slate-400 text-[9px] uppercase mb-1">Your UPI ID / VPA</label>
+              <input 
+                type="text" 
+                id="sell-upi-id" 
+                placeholder="e.g. yourname@okhdfcbank or 9876543210@paytm" 
+                class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 placeholder-slate-600 focus:outline-none focus:border-emerald-400 text-xs font-mono"
+              />
+            </div>
+
+            <div>
+              <div class="flex items-center justify-between text-[9px] text-slate-400 mb-1">
+                <span>Upload Personal UPI QR Code (Image / Screenshot)</span>
+                <span class="text-slate-500">Optional</span>
+              </div>
+              <input type="file" id="sell-upi-qr-input" accept="image/*" class="hidden" />
+              <button 
+                type="button" 
+                id="btn-upload-upi-qr" 
+                class="w-full py-2 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-700 hover:border-emerald-500/50 text-slate-300 text-xs transition flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <i data-lucide="upload" class="w-3.5 h-3.5 text-emerald-400"></i>
+                <span id="btn-upload-upi-qr-text">Attach Static UPI QR Image</span>
+              </button>
+              <div id="upi-qr-preview-thumb-box" class="hidden mt-2 flex items-center gap-2 p-2 rounded-lg bg-slate-950 border border-emerald-500/40">
+                <img id="upi-qr-preview-img" src="" class="w-10 h-10 object-contain rounded border border-slate-700 bg-white" />
+                <span class="text-[10px] text-emerald-300 font-bold truncate">UPI QR Attached</span>
+                <button type="button" id="btn-remove-upi-qr" class="ml-auto text-rose-400 text-[10px] underline cursor-pointer">Remove</button>
+              </div>
             </div>
           </div>
-          <button 
-            type="button" 
-            id="btn-sell-ping-gps"
-            class="px-2 py-1 rounded bg-emerald-950 hover:bg-emerald-900 border border-emerald-400/50 text-emerald-300 text-[10px] font-bold transition shrink-0 cursor-pointer"
-            title="Re-ping device satellite GPS hardware"
-          >
-            REFRESH GPS
-          </button>
+
         </div>
 
-        <!-- Submit Button -->
-        <div class="pt-1">
+        <!-- ============================================== -->
+        <!-- STEP 5: SAFE MEETUP & LIVE LOCATION -->
+        <!-- ============================================== -->
+        <div id="sell-step-pane-5" class="wizard-pane hidden space-y-4">
+          
+          <!-- Safe Meetup Landmark Selection -->
+          <div>
+            <div class="flex items-center justify-between mb-1.5">
+              <label class="block text-cyan-300 font-bold uppercase text-[10px] flex items-center gap-1">
+                <i data-lucide="shield-check" class="w-3.5 h-3.5 text-emerald-400"></i>
+                <span>Indian Safe Meetup Landmark *</span>
+              </label>
+              <span class="text-[9px] text-slate-400">Public &amp; Secure Spots</span>
+            </div>
+
+            <select id="sell-safe-landmark-select" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-cyan-400 cursor-pointer text-xs">
+              <!-- Populated from SAFE_LANDMARKS -->
+            </select>
+
+            <input 
+              type="text" 
+              id="sell-custom-landmark" 
+              placeholder="Or type custom landmark (e.g. Wing B 2nd Floor Courtyard)" 
+              class="w-full mt-2 bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-400 text-[11px]"
+            />
+          </div>
+
+          <!-- GPS Triangulation Controls -->
+          <div class="p-3 rounded-xl bg-slate-900 border border-slate-800 space-y-2.5">
+            <div class="flex items-center justify-between">
+              <label class="block text-slate-300 font-bold uppercase text-[10px]">Broadcasting Coordinates *</label>
+              <div class="flex items-center gap-2">
+                <button 
+                  type="button" 
+                  id="btn-sell-gps-exact" 
+                  class="px-2 py-1 rounded bg-cyan-950 hover:bg-cyan-900 border border-cyan-400/50 text-cyan-300 text-[10px] font-bold transition flex items-center gap-1 cursor-pointer"
+                >
+                  <i data-lucide="crosshair" class="w-3 h-3 text-cyan-400"></i>
+                  <span>Live GPS</span>
+                </button>
+                <button 
+                  type="button" 
+                  id="btn-sell-pick-pin" 
+                  class="px-2 py-1 rounded bg-slate-950 hover:bg-slate-800 border border-slate-700 text-slate-300 text-[10px] font-bold transition flex items-center gap-1 cursor-pointer"
+                >
+                  <i data-lucide="map" class="w-3 h-3 text-emerald-400"></i>
+                  <span>Mark on Map</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Coordinate Readout & Google Maps Preview -->
+            <div class="flex items-center justify-between pt-1 border-t border-slate-800 text-[10px]">
+              <div class="flex items-center gap-1.5 text-slate-400 truncate">
+                <span>COORDS:</span>
+                <span id="sell-coords-display" class="text-cyan-300 font-bold truncate">Acquiring live GPS...</span>
+                <span id="sell-gps-accuracy-badge" class="hidden text-[10px] font-mono font-bold text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-500/40"></span>
+              </div>
+              <button 
+                type="button" 
+                id="btn-sell-preview-maps" 
+                class="text-emerald-400 hover:text-emerald-300 underline flex items-center gap-1 text-[10px] shrink-0 cursor-pointer"
+              >
+                <span>Google Maps</span>
+                <i data-lucide="external-link" class="w-3 h-3"></i>
+              </button>
+            </div>
+
+            <!-- Live GPS Status Banner -->
+            <div id="sell-gps-verification-banner" class="p-2 rounded-lg bg-slate-950 border border-emerald-500/40 flex items-center justify-between text-[10px]">
+              <div class="flex items-center gap-2 min-w-0">
+                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping shrink-0"></span>
+                <span id="sell-live-gps-telemetry" class="text-emerald-300 font-bold truncate">GPS Triangulation Locked</span>
+              </div>
+              <button 
+                type="button" 
+                id="btn-sell-ping-gps"
+                class="px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 text-[9px] font-bold cursor-pointer"
+              >
+                REFRESH
+              </button>
+            </div>
+
+          </div>
+
+        </div>
+
+        <!-- ============================================== -->
+        <!-- WIZARD FOOTER NAVIGATION CONTROLS -->
+        <!-- ============================================== -->
+        <div class="pt-3 border-t border-slate-800 flex items-center justify-between gap-3">
           <button 
-            type="submit" 
-            id="btn-submit-beacon"
-            class="w-full py-3 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-bold uppercase tracking-wider shadow-[0_0_20px_rgba(0,255,157,0.4)] transition flex items-center justify-center gap-2"
+            type="button" 
+            id="btn-sell-wizard-prev" 
+            class="px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 transition flex items-center gap-1.5 text-xs cursor-pointer opacity-50 pointer-events-none"
+          >
+            <i data-lucide="arrow-left" class="w-3.5 h-3.5"></i>
+            <span>Back</span>
+          </button>
+
+          <div class="flex items-center gap-1">
+            <span class="wizard-dot w-2 h-2 rounded-full bg-cyan-400"></span>
+            <span class="wizard-dot w-2 h-2 rounded-full bg-slate-800"></span>
+            <span class="wizard-dot w-2 h-2 rounded-full bg-slate-800"></span>
+            <span class="wizard-dot w-2 h-2 rounded-full bg-slate-800"></span>
+            <span class="wizard-dot w-2 h-2 rounded-full bg-slate-800"></span>
+          </div>
+
+          <button 
+            type="button" 
+            id="btn-sell-wizard-next" 
+            class="px-5 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-emerald-500 hover:from-cyan-400 hover:to-emerald-400 text-slate-950 font-bold transition flex items-center gap-1.5 text-xs shadow-[0_0_15px_rgba(0,229,255,0.3)] cursor-pointer"
+          >
+            <span>Next</span>
+            <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i>
+          </button>
+
+          <button 
+            type="button" 
+            id="btn-submit-beacon" 
+            onclick="window.submitBroadcastBeacon ? window.submitBroadcastBeacon() : null"
+            class="hidden px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-bold uppercase transition flex items-center gap-1.5 text-xs shadow-[0_0_20px_rgba(0,255,157,0.4)] cursor-pointer"
           >
             <i data-lucide="radio" class="w-4 h-4"></i>
-            <span id="btn-submit-beacon-text">ACTIVATE RADAR BEACON</span>
+            <span id="btn-submit-beacon-text">ACTIVATE BEACON</span>
           </button>
         </div>
 
       </form>
+
+    </div>
+  </div>
+
+  <!-- MODAL: INDIAN PHONE NUMBER VERIFICATION (+91 OTP) -->
+  <div id="modal-phone-auth" class="modal-overlay fixed inset-0 z-50 hidden flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
+    <div class="glass-panel w-full max-w-sm border border-emerald-500/50 shadow-[0_0_40px_rgba(0,255,157,0.25)] rounded-2xl overflow-hidden flex flex-col font-mono text-xs">
+      
+      <!-- Header -->
+      <div class="px-5 py-3.5 border-b border-slate-800 bg-slate-950/90 flex items-center justify-between">
+        <div class="flex items-center gap-2 text-emerald-400">
+          <i data-lucide="shield-check" class="w-4 h-4 text-emerald-400"></i>
+          <span class="font-bold text-white uppercase tracking-wider text-xs">Phone Verification (+91)</span>
+        </div>
+        <button id="btn-close-phone-modal" class="text-slate-400 hover:text-white transition cursor-pointer">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <!-- Body -->
+      <div class="p-5 space-y-4">
+        <div class="p-2.5 rounded-lg bg-emerald-950/40 border border-emerald-500/30 text-[11px] text-emerald-300">
+          🛡️ Get the <strong>Phone-Verified</strong> badge. Buyers &amp; sellers trust verified Indian phone numbers 4x more!
+        </div>
+
+        <!-- Phone Input Screen -->
+        <div id="phone-step-input" class="space-y-3">
+          <div>
+            <label class="block text-slate-300 font-bold mb-1 uppercase text-[10px]">Indian Mobile Number</label>
+            <div class="flex items-center rounded-lg bg-slate-900 border border-slate-700 overflow-hidden focus-within:border-emerald-400">
+              <span class="px-3 py-2 text-slate-400 font-bold bg-slate-800 border-r border-slate-700 text-xs">+91</span>
+              <input 
+                type="tel" 
+                id="phone-number-input" 
+                maxlength="10" 
+                placeholder="98765 43210" 
+                class="w-full bg-transparent px-3 py-2 text-white font-mono text-xs focus:outline-none placeholder-slate-500 tracking-wider"
+              />
+            </div>
+          </div>
+
+          <button 
+            type="button" 
+            id="btn-send-phone-otp" 
+            class="w-full py-2.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold uppercase transition flex items-center justify-center gap-1.5 shadow-[0_0_15px_rgba(0,255,157,0.3)] cursor-pointer"
+          >
+            <i data-lucide="send" class="w-3.5 h-3.5"></i>
+            <span id="btn-send-otp-text">Send 6-Digit OTP</span>
+          </button>
+        </div>
+
+        <!-- OTP Verification Screen -->
+        <div id="phone-step-verify" class="hidden space-y-3">
+          <div class="text-[11px] text-slate-400">
+            Enter the 6-digit code sent to <strong id="phone-target-display" class="text-slate-200">+91 ...</strong>
+          </div>
+
+          <div>
+            <input 
+              type="text" 
+              id="phone-otp-input" 
+              maxlength="6" 
+              placeholder="123456" 
+              class="w-full text-center tracking-[0.5em] text-lg font-bold bg-slate-900 border border-emerald-500/50 rounded-lg py-2.5 text-emerald-300 focus:outline-none focus:border-emerald-400"
+            />
+          </div>
+
+          <div id="phone-otp-debug-hint" class="hidden p-2 rounded bg-cyan-950/60 border border-cyan-500/40 text-[10px] text-cyan-300 flex items-center justify-between">
+            <span>Test Code: <strong id="phone-debug-code" class="text-white font-bold tracking-widest"></strong></span>
+            <button type="button" id="btn-phone-autofill-otp" class="underline text-emerald-400 font-bold cursor-pointer">Auto-fill</button>
+          </div>
+
+          <button 
+            type="button" 
+            id="btn-confirm-phone-otp" 
+            class="w-full py-2.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold uppercase transition flex items-center justify-center gap-1.5 shadow-[0_0_15px_rgba(0,255,157,0.3)] cursor-pointer"
+          >
+            <i data-lucide="check-circle" class="w-3.5 h-3.5"></i>
+            <span id="btn-verify-otp-text">Verify &amp; Unlock Badge</span>
+          </button>
+
+          <div class="flex items-center justify-between text-[10px] text-slate-400 pt-1">
+            <span id="phone-resend-timer">Resend code in 60s</span>
+            <button type="button" id="btn-phone-resend-otp" class="hidden text-cyan-400 hover:underline cursor-pointer">Resend OTP</button>
+            <button type="button" id="btn-phone-change-number" class="text-slate-500 hover:text-slate-300 cursor-pointer">Change number</button>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+
+  <!-- MODAL: UNIVERSAL UPI P2P CHECKOUT & SETTLEMENT -->
+  <div id="modal-upi-payment" class="modal-overlay fixed inset-0 z-50 hidden flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
+    <div class="glass-panel w-full max-w-sm border border-emerald-400/60 shadow-[0_0_40px_rgba(0,255,157,0.25)] rounded-2xl overflow-hidden flex flex-col font-mono text-xs">
+      
+      <!-- Header -->
+      <div class="px-5 py-3.5 border-b border-slate-800 bg-slate-950/90 flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <div class="w-6 h-6 rounded-md bg-emerald-500/20 text-emerald-400 flex items-center justify-center border border-emerald-500/30">
+            <i data-lucide="qr-code" class="w-3.5 h-3.5"></i>
+          </div>
+          <div>
+            <h4 class="font-bold text-white text-xs">UPI P2P DIRECT PAYMENT</h4>
+            <p class="text-[10px] text-slate-400">Zero-commission student &amp; society transfer</p>
+          </div>
+        </div>
+        <button id="btn-close-upi-modal" class="text-slate-400 hover:text-white transition cursor-pointer">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <!-- Body -->
+      <div class="p-5 space-y-4 text-center">
+        
+        <!-- Amount Banner -->
+        <div class="p-3 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between">
+          <div class="text-left min-w-0">
+            <div class="text-[10px] text-slate-400 uppercase">Amount Due</div>
+            <div id="upi-modal-title" class="text-xs text-slate-200 truncate max-w-[150px]">Item Title</div>
+          </div>
+          <div id="upi-modal-amount" class="text-xl font-extrabold text-emerald-400 font-mono">₹0</div>
+        </div>
+
+        <!-- Dynamic QR Code Box -->
+        <div class="flex flex-col items-center justify-center p-3 rounded-xl bg-slate-950 border border-emerald-500/30">
+          <img 
+            id="upi-modal-qr-img" 
+            src="" 
+            alt="UPI QR Code" 
+            class="w-44 h-44 rounded-lg border border-emerald-400/40 bg-white p-2 shadow-inner"
+          />
+          <div class="mt-2 text-[10px] text-slate-400 flex items-center gap-1">
+            <span>Scan with any UPI App: GPay, PhonePe, Paytm, BHIM</span>
+          </div>
+        </div>
+
+        <!-- VPA & Copy Action -->
+        <div class="flex items-center justify-between p-2 rounded-lg bg-slate-900 border border-slate-800 text-[11px]">
+          <div class="text-left truncate min-w-0 mr-2">
+            <span class="text-[9px] text-slate-500 block uppercase">Seller UPI ID:</span>
+            <span id="upi-modal-vpa" class="text-cyan-300 font-bold truncate">seller@upi</span>
+          </div>
+          <button 
+            type="button" 
+            id="btn-copy-upi-vpa" 
+            class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-[10px] font-bold transition shrink-0 flex items-center gap-1 cursor-pointer"
+          >
+            <i data-lucide="copy" class="w-3 h-3"></i>
+            <span id="btn-copy-upi-text">Copy</span>
+          </button>
+        </div>
+
+        <!-- Direct App Deep Link (Mobile) -->
+        <a 
+          id="btn-upi-deeplink" 
+          href="#" 
+          class="w-full py-2.5 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-bold uppercase transition flex items-center justify-center gap-1.5 shadow-[0_0_15px_rgba(0,255,157,0.3)]"
+        >
+          <i data-lucide="smartphone" class="w-3.5 h-3.5"></i>
+          <span>Pay via Installed UPI App</span>
+        </a>
+
+        <!-- 2-Step Payment Declaration -->
+        <div class="pt-2 border-t border-slate-800 text-left space-y-2">
+          <div class="text-[10px] uppercase text-slate-400 font-bold">Step 2: Declare Transfer Completed</div>
+          <input 
+            type="text" 
+            id="upi-buyer-utr-input" 
+            maxlength="16" 
+            placeholder="Enter 12-digit UTR / UPI Ref ID (optional)" 
+            class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-400 text-[11px]"
+          />
+          <button 
+            type="button" 
+            id="btn-declare-upi-paid" 
+            class="w-full py-2 rounded-lg bg-cyan-950 hover:bg-cyan-900 border border-cyan-400 text-cyan-300 font-bold transition flex items-center justify-center gap-1 text-[11px] cursor-pointer"
+          >
+            <i data-lucide="check" class="w-3.5 h-3.5"></i>
+            <span>I Have Completed UPI Payment</span>
+          </button>
+        </div>
+
+      </div>
 
     </div>
   </div>
@@ -1867,6 +2263,12 @@
               </div>
             </div>
           </div>
+
+          <!-- Phone Verification CTA -->
+          <button type="button" id="btn-auth-verify-phone" class="w-full py-2.5 px-3 rounded-lg bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-500/50 text-emerald-300 font-bold transition flex items-center justify-center gap-1.5 cursor-pointer">
+            <i data-lucide="shield-check" class="w-4 h-4 text-emerald-400"></i>
+            <span id="btn-auth-verify-phone-text">🛡️ Verify Phone (+91) for Trust Badge</span>
+          </button>
 
           <!-- Quick Actions for Authenticated User -->
           <div class="grid grid-cols-2 gap-2 pt-1">
@@ -2711,12 +3113,12 @@
   </div>
 
   <!-- SCRIPTS -->
-  <script src="js/data.js?v=3.8.7"></script>
-  <script src="js/campuses.js?v=3.8.7"></script>
-  <script src="js/algorithm.js?v=3.8.7"></script>
-  <script src="js/radar.js?v=3.8.7"></script>
-  <script src="js/api.js?v=3.8.7"></script>
-  <script src="js/app.js?v=3.8.7"></script>
+  <script src="js/data.js?v=3.0.3"></script>
+  <script src="js/campuses.js?v=3.0.3"></script>
+  <script src="js/algorithm.js?v=3.0.3"></script>
+  <script src="js/radar.js?v=3.0.3"></script>
+  <script src="js/api.js?v=3.0.3"></script>
+  <script src="js/app.js?v=3.0.3"></script>
 
   <script>
     // Initialize Lucide icons on page load

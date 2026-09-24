@@ -2,10 +2,12 @@
  * RadarMarket - HTML5 Canvas 60 FPS Real-time Radar Engine & Audio Sonar
  */
 
+const getNow = () => (typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now());
+
 class RadarEngine {
   constructor(canvasElement, options = {}) {
     this.canvas = canvasElement;
-    this.ctx = canvasElement.getContext("2d");
+    this.ctx = canvasElement && typeof canvasElement.getContext === "function" ? canvasElement.getContext("2d") : null;
     this.options = Object.assign(
       {
         rpm: 24, // Rotations per minute
@@ -25,7 +27,7 @@ class RadarEngine {
     this.hoveredTarget = null;
     this.selectedTargetId = null;
     this.isRunning = false;
-    this.lastFrameTime = performance.now();
+    this.lastFrameTime = getNow();
 
     // Audio context (lazy init on user interaction)
     this.audioCtx = null;
@@ -37,9 +39,11 @@ class RadarEngine {
     this.centerY = 0;
     this.radius = 0;
 
-    this.initCanvas();
-    this.setupListeners();
-    this.start();
+    if (this.canvas && this.ctx) {
+      this.initCanvas();
+      this.setupListeners();
+      this.start();
+    }
   }
 
   initCanvas() {
@@ -187,11 +191,12 @@ class RadarEngine {
 
   start() {
     this.isRunning = true;
+    const rAF = typeof requestAnimationFrame !== "undefined" ? requestAnimationFrame : (cb) => setTimeout(cb, 1000 / 60);
     const loop = (now) => {
       if (!this.isRunning) return;
-      if (document.hidden) {
+      if (typeof document !== "undefined" && document.hidden) {
         this.lastFrameTime = now;
-        requestAnimationFrame(loop);
+        rAF(loop);
         return;
       }
       const delta = (now - this.lastFrameTime) / 1000;
@@ -200,9 +205,9 @@ class RadarEngine {
       this.update(delta);
       this.draw();
 
-      requestAnimationFrame(loop);
+      rAF(loop);
     };
-    requestAnimationFrame(loop);
+    rAF(loop);
   }
 
   stop() {
@@ -233,7 +238,7 @@ class RadarEngine {
 
       if (swept) {
         let state = this.blipStates.get(target.item.id) || { lastSwept: 0, pingWaveRadius: 0 };
-        state.lastSwept = performance.now();
+        state.lastSwept = getNow();
         state.pingWaveRadius = 1;
         this.blipStates.set(target.item.id, state);
 
@@ -250,6 +255,7 @@ class RadarEngine {
   }
 
   draw() {
+    if (!this.ctx) return;
     const ctx = this.ctx;
     ctx.clearRect(0, 0, this.width, this.height);
 
@@ -420,7 +426,7 @@ class RadarEngine {
 
   drawTargets() {
     const ctx = this.ctx;
-    const now = performance.now();
+    const now = getNow();
 
     for (const target of this.targets) {
       // Targets beyond maxRadius are clamped to boundary perimeter ring
@@ -435,35 +441,42 @@ class RadarEngine {
       const sweepGlow = Math.max(0, 1 - timeSinceSwept / 2.5);
 
       // Color based on category, beacon type, and algorithm score
-      let blipColor = "#00e5ff"; // Cyan for books
-      let glowColor = "rgba(0, 229, 255, 0.8)";
+      let blipColor = "#00f0ff"; // Default Cyan
+      let glowColor = "rgba(0, 240, 255, 0.8)";
 
       const isWanted = target.item.beacon_type === "wanted";
       const isSold = target.item.status === "sold";
+      const cat = (target.item.category || "").toLowerCase();
 
       if (isSold) {
         blipColor = "#64748b"; // Dim slate for completed deals
         glowColor = "rgba(100, 116, 139, 0.4)";
       } else if (isWanted) {
-        blipColor = "#ff0077"; // Neon Magenta for "Wanted / Request" beacons
-        glowColor = "rgba(255, 0, 119, 0.9)";
-      } else if (target.item.category === "stationery") {
-        blipColor = "#00ff9d"; // Emerald for stationery
-        glowColor = "rgba(0, 255, 157, 0.8)";
-      } else if (target.item.category === "hostel") {
-        blipColor = "#f59e0b"; // Warm Amber for hostel essentials
-        glowColor = "rgba(245, 158, 11, 0.8)";
-      } else if (target.item.category === "lab") {
-        blipColor = "#a855f7"; // Purple for lab gear & drafters
-        glowColor = "rgba(168, 85, 247, 0.8)";
-      } else if (target.item.category === "tech") {
-        blipColor = "#3b82f6"; // Electric Blue for tech & gadgets
-        glowColor = "rgba(59, 130, 246, 0.8)";
+        blipColor = "#ff0055"; // Neon Crimson for "Wanted / ISO" beacons
+        glowColor = "rgba(255, 0, 85, 0.9)";
+      } else if (cat === "electronics" || cat === "tech") {
+        blipColor = "#00f0ff"; // Cyan for electronics & gadgets
+        glowColor = "rgba(0, 240, 255, 0.85)";
+      } else if (cat === "books") {
+        blipColor = "#ffe600"; // Yellow for books & exam prep
+        glowColor = "rgba(255, 230, 0, 0.85)";
+      } else if (cat === "hostel") {
+        blipColor = "#ff007f"; // Neon Magenta for hostel & PG living
+        glowColor = "rgba(255, 0, 127, 0.85)";
+      } else if (cat === "stationery" || cat === "lab") {
+        blipColor = "#00ff88"; // Emerald Green for stationery & art
+        glowColor = "rgba(0, 255, 136, 0.85)";
+      } else if (cat === "sports") {
+        blipColor = "#ff8c00"; // Neon Orange for sports & fitness
+        glowColor = "rgba(255, 140, 0, 0.85)";
+      } else if (cat === "fashion") {
+        blipColor = "#a855f7"; // Electric Purple for fashion & campus merch
+        glowColor = "rgba(168, 85, 247, 0.85)";
       }
       
       if (!isWanted && !isSold && target.algorithmScore >= 85) {
         blipColor = "#ffb700"; // Amber/gold for high-match algorithm picks
-        glowColor = "rgba(255, 183, 0, 0.8)";
+        glowColor = "rgba(255, 183, 0, 0.85)";
       }
 
       ctx.save();
@@ -584,7 +597,7 @@ class RadarEngine {
     ctx.save();
 
     // Pulsing user location beacon
-    const time = performance.now() / 1000;
+    const time = getNow() / 1000;
     const pulseRadius = 6 + Math.sin(time * 3) * 3;
 
     ctx.strokeStyle = "rgba(0, 229, 255, 0.5)";

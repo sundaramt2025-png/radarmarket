@@ -899,4 +899,101 @@ input[type=range]::-webkit-slider-thumb {
   }
 }
 
+/* =======================================================
+   RADAR MARKET v3.0 — UNIVERSAL P2P UI COMPONENTS
+   ======================================================= */
+
+/* 5-Step Universal Wizard Tabs */
+.wizard-tab-btn {
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+}
+.wizard-tab-btn.active {
+  background: rgba(0, 229, 255, 0.15) !important;
+  color: #00e5ff !important;
+  border-color: rgba(0, 229, 255, 0.6) !important;
+  box-shadow: 0 0 15px rgba(0, 229, 255, 0.15);
+}
+.wizard-tab-btn.completed {
+  color: #00ff9d !important;
+}
+
+/* 6 India-Centric Category Choice Cards */
+.category-card-choice {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  user-select: none;
+}
+.category-card-choice:hover {
+  transform: translateY(-2px);
+  background-color: rgba(15, 23, 42, 0.95);
+}
+.category-card-choice.active {
+  border-color: #00e5ff !important;
+  background: rgba(0, 229, 255, 0.12) !important;
+  box-shadow: 0 0 20px rgba(0, 229, 255, 0.25);
+  transform: translateY(-2px);
+}
+.category-card-choice[data-cat="books"].active {
+  border-color: #ffe600 !important;
+  background: rgba(255, 230, 0, 0.1) !important;
+  box-shadow: 0 0 20px rgba(255, 230, 0, 0.2);
+}
+.category-card-choice[data-cat="hostel"].active {
+  border-color: #ff007f !important;
+  background: rgba(255, 0, 127, 0.1) !important;
+  box-shadow: 0 0 20px rgba(255, 0, 127, 0.2);
+}
+.category-card-choice[data-cat="stationery"].active {
+  border-color: #00ff88 !important;
+  background: rgba(0, 255, 136, 0.1) !important;
+  box-shadow: 0 0 20px rgba(0, 255, 136, 0.2);
+}
+.category-card-choice[data-cat="sports"].active {
+  border-color: #ff8c00 !important;
+  background: rgba(255, 140, 0, 0.1) !important;
+  box-shadow: 0 0 20px rgba(255, 140, 0, 0.2);
+}
+.category-card-choice[data-cat="fashion"].active {
+  border-color: #a855f7 !important;
+  background: rgba(168, 85, 247, 0.1) !important;
+  box-shadow: 0 0 20px rgba(168, 85, 247, 0.2);
+}
+
+/* Proximity Tier Mode Buttons */
+.proximity-tier-btn {
+  transition: all 0.2s ease;
+}
+.proximity-tier-btn.active {
+  background: rgba(0, 229, 255, 0.15) !important;
+  color: #00e5ff !important;
+  border-color: rgba(0, 229, 255, 0.5) !important;
+  box-shadow: 0 0 12px rgba(0, 229, 255, 0.2);
+}
+
+/* Dynamic Spec Input Fields */
+.dynamic-spec-input {
+  background-color: #020617;
+  border: 1px solid rgba(51, 65, 85, 0.8);
+  border-radius: 8px;
+  padding: 6px 12px;
+  color: #f8fafc;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.dynamic-spec-input:focus {
+  border-color: #00e5ff;
+  box-shadow: 0 0 10px rgba(0, 229, 255, 0.2);
+}
+
+/* Phone Verified Badge Pulsing Glow */
+.badge-phone-verified {
+  background: rgba(0, 229, 255, 0.12);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  text-shadow: 0 0 8px rgba(56, 189, 248, 0.4);
+}
+
+
 

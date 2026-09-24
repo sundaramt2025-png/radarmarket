@@ -173,7 +173,18 @@
     { id: "goa-university", name: "Goa University", shortName: "Goa University (Taleigao Plateau)", acronyms: ["gu goa", "goa university"], city: "Taleigao", state: "Goa", lat: 15.4578, lng: 73.8344, category: "Mumbai & Pune", tags: ["university", "goa"] },
     { id: "iim-ahmedabad", name: "Indian Institute of Management Ahmedabad", shortName: "IIM Ahmedabad (Vastrapur)", acronyms: ["iima", "iim ahmedabad"], city: "Ahmedabad", state: "Gujarat", lat: 23.0336, lng: 72.5323, category: "IIT / Premier", tags: ["management", "iim"] },
     { id: "iim-bangalore", name: "Indian Institute of Management Bangalore", shortName: "IIM Bangalore (Bannerghatta)", acronyms: ["iimb", "iim bangalore"], city: "Bengaluru", state: "Karnataka", lat: 12.8984, lng: 77.5996, category: "IIT / Premier", tags: ["management", "iim"] },
-    { id: "iim-calcutta", name: "Indian Institute of Management Calcutta", shortName: "IIM Calcutta (Joka)", acronyms: ["iimc", "iim calcutta", "joka"], city: "Kolkata", state: "West Bengal", lat: 22.4414, lng: 88.3075, category: "IIT / Premier", tags: ["management", "iim"] }
+    { id: "iim-calcutta", name: "Indian Institute of Management Calcutta", shortName: "IIM Calcutta (Joka)", acronyms: ["iimc", "iim calcutta", "joka"], city: "Kolkata", state: "West Bengal", lat: 22.4414, lng: 88.3075, category: "IIT / Premier", tags: ["management", "iim"] },
+
+    // === COACHING HUBS & STUDENT/PG RESIDENTIAL DISTRICTS ===
+    { id: "hub-kota-indraprastha", name: "Kota Coaching Hub (Indraprastha & Mahaveer Nagar)", shortName: "Kota Coaching Hub", acronyms: ["kota", "allen kota", "resonance", "indraprastha"], city: "Kota", state: "Rajasthan", lat: 25.1388, lng: 75.8407, category: "Coaching & Student Hubs", tags: ["jee", "neet", "coaching", "hostel", "pg", "kota"] },
+    { id: "hub-delhi-mukherjee-nagar", name: "Mukherjee Nagar UPSC & Student District", shortName: "Mukherjee Nagar (Delhi)", acronyms: ["mukherjee nagar", "drishti ias", "upsc hub"], city: "New Delhi", state: "Delhi NCR", lat: 28.7118, lng: 77.2155, category: "Coaching & Student Hubs", tags: ["upsc", "ssc", "delhi", "pg", "student hub"] },
+    { id: "hub-delhi-rajinder-nagar", name: "Old Rajinder Nagar Civil Services Hub", shortName: "Rajinder Nagar (Delhi)", acronyms: ["rajinder nagar", "vajiram", "upsc delhi"], city: "New Delhi", state: "Delhi NCR", lat: 28.6415, lng: 77.1825, category: "Coaching & Student Hubs", tags: ["upsc", "civil services", "delhi", "pg"] },
+    { id: "hub-delhi-kalu-sarai", name: "Kalu Sarai & Hauz Khas IIT-JEE Coaching Hub", shortName: "Kalu Sarai (IIT Hub)", acronyms: ["kalu sarai", "fiitjee", "hauz khas"], city: "New Delhi", state: "Delhi NCR", lat: 28.5444, lng: 77.2026, category: "Coaching & Student Hubs", tags: ["jee", "coaching", "delhi", "pg"] },
+    { id: "hub-blr-koramangala", name: "Koramangala Student & Tech Neighborhood", shortName: "Koramangala (Bengaluru)", acronyms: ["koramangala", "sony world", "blr pg"], city: "Bengaluru", state: "Karnataka", lat: 12.9352, lng: 77.6245, category: "Coaching & Student Hubs", tags: ["bangalore", "pg", "students", "tech"] },
+    { id: "hub-blr-btm", name: "BTM Layout Student & PG Cluster", shortName: "BTM Layout (Bengaluru)", acronyms: ["btm", "btm layout"], city: "Bengaluru", state: "Karnataka", lat: 12.9166, lng: 77.6101, category: "Coaching & Student Hubs", tags: ["bangalore", "pg", "students"] },
+    { id: "hub-pune-kothrud", name: "Kothrud Student & College Neighborhood", shortName: "Kothrud (Pune)", acronyms: ["kothrud", "mit kothrud"], city: "Pune", state: "Maharashtra", lat: 18.5074, lng: 73.8077, category: "Coaching & Student Hubs", tags: ["pune", "hostel", "pg", "students"] },
+    { id: "hub-hyd-ameerpet", name: "Ameerpet IT Training & Student District", shortName: "Ameerpet (Hyderabad)", acronyms: ["ameerpet", "ameerpet hub"], city: "Hyderabad", state: "Telangana", lat: 17.4375, lng: 78.4482, category: "Coaching & Student Hubs", tags: ["it coaching", "hyderabad", "pg"] },
+    { id: "hub-patna-boring-rd", name: "Boring Road Coaching & Student District", shortName: "Boring Road (Patna)", acronyms: ["boring road", "patna coaching"], city: "Patna", state: "Bihar", lat: 25.6178, lng: 85.1206, category: "Coaching & Student Hubs", tags: ["patna", "coaching", "bihar"] }
   ];
 
   /**
@@ -256,6 +267,9 @@
       }
       if (category === "south") {
         return c.category === "Bangalore & South" || ["Karnataka", "Tamil Nadu", "Telangana", "Kerala", "Andhra Pradesh"].includes(c.state);
+      }
+      if (category === "hubs" || category === "coaching") {
+        return c.category === "Coaching & Student Hubs";
       }
       return (c.category || "").toLowerCase().includes(category.toLowerCase());
     }).slice(0, limit);

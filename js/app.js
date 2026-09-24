@@ -120,11 +120,10 @@
 
   // Preset fallback photos for quick posting
   const PRESET_PHOTOS = {
-    stationery: [
-      "https://images.unsplash.com/photo-1583485088034-697b5bc54ccd?auto=format&fit=crop&w=600&q=80",
-      "https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?auto=format&fit=crop&w=600&q=80",
-      "https://images.unsplash.com/photo-1581291518857-4e27b48ff24e?auto=format&fit=crop&w=600&q=80",
-      "https://images.unsplash.com/photo-1513364776144-60967b0f800f?auto=format&fit=crop&w=600&q=80"
+    electronics: [
+      "https://images.unsplash.com/photo-1588508065123-287b28e013da?auto=format&fit=crop&w=600&q=80",
+      "https://images.unsplash.com/photo-1527443224154-c4a3942d3acf?auto=format&fit=crop&w=600&q=80",
+      "https://images.unsplash.com/photo-1541807084-5c52b6b3adef?auto=format&fit=crop&w=600&q=80"
     ],
     books: [
       "https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=600&q=80",
@@ -137,15 +136,27 @@
       "https://images.unsplash.com/photo-1507473885765-e6ed057f782c?auto=format&fit=crop&w=600&q=80",
       "https://images.unsplash.com/photo-1540518614846-7ede433c4ef0?auto=format&fit=crop&w=600&q=80"
     ],
-    lab: [
-      "https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=600&q=80",
-      "https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=600&q=80",
-      "https://images.unsplash.com/photo-1581092335397-9583fe92d232?auto=format&fit=crop&w=600&q=80"
+    stationery: [
+      "https://images.unsplash.com/photo-1583485088034-697b5bc54ccd?auto=format&fit=crop&w=600&q=80",
+      "https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?auto=format&fit=crop&w=600&q=80",
+      "https://images.unsplash.com/photo-1581291518857-4e27b48ff24e?auto=format&fit=crop&w=600&q=80",
+      "https://images.unsplash.com/photo-1513364776144-60967b0f800f?auto=format&fit=crop&w=600&q=80"
+    ],
+    sports: [
+      "https://images.unsplash.com/photo-1531415074868-036b107e7752?auto=format&fit=crop&w=600&q=80",
+      "https://images.unsplash.com/photo-1521537634581-0dced2fed2a8?auto=format&fit=crop&w=600&q=80",
+      "https://images.unsplash.com/photo-1584735935682-2f2b69dff9d2?auto=format&fit=crop&w=600&q=80"
+    ],
+    fashion: [
+      "https://images.unsplash.com/photo-1556905055-8f358a7a47b2?auto=format&fit=crop&w=600&q=80",
+      "https://images.unsplash.com/photo-1576995853123-5a10305d93c0?auto=format&fit=crop&w=600&q=80",
+      "https://images.unsplash.com/photo-1523381210434-271e8be1f52b?auto=format&fit=crop&w=600&q=80"
     ],
     tech: [
-      "https://images.unsplash.com/photo-1588508065123-287b28e013da?auto=format&fit=crop&w=600&q=80",
-      "https://images.unsplash.com/photo-1527443224154-c4a3942d3acf?auto=format&fit=crop&w=600&q=80",
-      "https://images.unsplash.com/photo-1541807084-5c52b6b3adef?auto=format&fit=crop&w=600&q=80"
+      "https://images.unsplash.com/photo-1588508065123-287b28e013da?auto=format&fit=crop&w=600&q=80"
+    ],
+    lab: [
+      "https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=600&q=80"
     ]
   };
 
@@ -153,60 +164,93 @@
    * Initialize App on DOM ready
    */
   document.addEventListener("DOMContentLoaded", async () => {
-    initRadarEngine();
-    setupEventListeners();
+    try {
+      initRadarEngine();
+    } catch (e) {
+      console.warn("initRadarEngine warning:", e);
+    }
+
+    try {
+      setupEventListeners();
+    } catch (e) {
+      console.error("setupEventListeners error:", e);
+    }
 
     // Initialize Pan-India Campus display
-    if (state.activeCampus) {
-      updateCampusUI(state.activeCampus);
-    } else {
-      updateCampusUI(null);
-    }
+    try {
+      if (state.activeCampus) {
+        updateCampusUI(state.activeCampus);
+      } else {
+        updateCampusUI(null);
+      }
+    } catch (e) {}
 
     // Fast 0ms instant paint from local feed cache before network fetch
-    if (window.MarketAPI && typeof MarketAPI.getCachedFeed === "function") {
-      const cached = MarketAPI.getCachedFeed();
-      if (cached && Array.isArray(cached) && cached.length > 0) {
-        state.rawItems = cached;
-        recalculateAndRender();
+    try {
+      if (window.MarketAPI && typeof MarketAPI.getCachedFeed === "function") {
+        const cached = MarketAPI.getCachedFeed();
+        if (cached && Array.isArray(cached) && cached.length > 0) {
+          state.rawItems = cached;
+          recalculateAndRender();
+        }
       }
-    }
+    } catch (e) {}
 
     // 1. Initialize user profile & network
-    if (window.MarketAPI) {
-      const user = await MarketAPI.initUser();
-      updateProfileUI(user);
-      setupSyncListeners();
-      MarketAPI.startSyncLoop(1500);
-    }
+    try {
+      if (window.MarketAPI) {
+        const user = await MarketAPI.initUser();
+        updateProfileUI(user);
+        setupSyncListeners();
+        MarketAPI.startSyncLoop(1500);
+      }
+    } catch (e) {}
 
     // 2. Auto-acquire live user GPS position
-    initLiveLocationTracking();
+    try {
+      initLiveLocationTracking();
+    } catch (e) {}
 
     // 3. Initial market load
-    await refreshMarket();
+    try {
+      await refreshMarket();
+    } catch (e) {}
 
-    // 3. Setup PWA & Service Worker
-    setupPWA();
+    // 4. Setup PWA & Service Worker
+    try {
+      setupPWA();
+    } catch (e) {}
   });
 
   /**
    * Setup Radar Engine Canvas
    */
   function initRadarEngine() {
-    const canvas = document.getElementById("radar-canvas");
-    radarEngine = new RadarEngine(canvas, {
-      rpm: 24,
-      rings: 4,
-      maxRadiusMeters: state.maxRadiusMeters,
-      audioEnabled: state.audioEnabled,
-      onSelectTarget: (target) => {
-        selectTarget(target);
-      },
-      onHoverTarget: (target) => {
-        handleRadarHover(target);
+    try {
+      const canvas = document.getElementById("radar-canvas");
+      if (!canvas) {
+        console.warn("Radar canvas element (#radar-canvas) not found in DOM");
+        return;
       }
-    });
+      if (typeof canvas.getContext !== "function") {
+        console.warn("Radar canvas.getContext is not a function");
+        return;
+      }
+      radarEngine = new RadarEngine(canvas, {
+        rpm: 24,
+        rings: 4,
+        maxRadiusMeters: state.maxRadiusMeters,
+        audioEnabled: state.audioEnabled,
+        onSelectTarget: (target) => {
+          selectTarget(target);
+        },
+        onHoverTarget: (target) => {
+          handleRadarHover(target);
+        }
+      });
+    } catch (err) {
+      console.warn("Failed to initialize RadarEngine:", err);
+    }
   }
 
   /**
@@ -444,7 +488,7 @@
       // Strict Campus Perimeter Fence: 500m to 5000m (5 km)
       // When a campus is selected, products within the selected radar radius are displayed
       if (state.activeCampus) {
-        const campusMaxRadius = Math.min(5000, Math.max(500, state.maxRadiusMeters || 500));
+        const campusMaxRadius = Math.max(500, state.maxRadiusMeters || 1000);
         if (entry.distance > campusMaxRadius) {
           return false; // Strictly exclude items outside the selected college/campus perimeter!
         }
@@ -717,15 +761,24 @@
     if (item.beacon_type === "wanted") {
       catBadge.className = "text-[10px] font-mono px-2 py-0.5 rounded font-bold uppercase bg-pink-950 text-pink-300 border border-pink-500/40";
       catBadge.textContent = "🚨 WANTED REQUEST";
+    } else if (item.category === "electronics") {
+      catBadge.className = "text-[10px] font-mono px-2 py-0.5 rounded font-bold uppercase bg-cyan-950 text-cyan-300 border border-cyan-500/40";
+      catBadge.textContent = "📱 " + (item.sub_category || item.subCategory || "Electronics");
+    } else if (item.category === "books") {
+      catBadge.className = "text-[10px] font-mono px-2 py-0.5 rounded font-bold uppercase badge-book";
+      catBadge.textContent = "📚 " + (item.sub_category || item.subCategory || "Book");
+    } else if (item.category === "hostel") {
+      catBadge.className = "text-[10px] font-mono px-2 py-0.5 rounded font-bold uppercase badge-hostel";
+      catBadge.textContent = "🛏️ " + (item.sub_category || item.subCategory || "Hostel & PG");
     } else if (item.category === "stationery") {
       catBadge.className = "text-[10px] font-mono px-2 py-0.5 rounded font-bold uppercase badge-stationery";
       catBadge.textContent = "✏️ " + (item.sub_category || item.subCategory || "Stationery");
-    } else if (item.category === "books") {
-      catBadge.className = "text-[10px] font-mono px-2 py-0.5 rounded font-bold uppercase badge-book";
-      catBadge.textContent = "📖 " + (item.sub_category || item.subCategory || "Book");
-    } else if (item.category === "hostel") {
-      catBadge.className = "text-[10px] font-mono px-2 py-0.5 rounded font-bold uppercase badge-hostel";
-      catBadge.textContent = "🛏️ " + (item.sub_category || item.subCategory || "Hostel");
+    } else if (item.category === "sports") {
+      catBadge.className = "text-[10px] font-mono px-2 py-0.5 rounded font-bold uppercase bg-orange-950 text-orange-300 border border-orange-500/40";
+      catBadge.textContent = "🏏 " + (item.sub_category || item.subCategory || "Sports");
+    } else if (item.category === "fashion") {
+      catBadge.className = "text-[10px] font-mono px-2 py-0.5 rounded font-bold uppercase bg-purple-950 text-purple-300 border border-purple-500/40";
+      catBadge.textContent = "👕 " + (item.sub_category || item.subCategory || "Fashion");
     } else if (item.category === "lab") {
       catBadge.className = "text-[10px] font-mono px-2 py-0.5 rounded font-bold uppercase badge-lab";
       catBadge.textContent = "🔬 " + (item.sub_category || item.subCategory || "Lab Gear");
@@ -866,6 +919,31 @@
         campusTag.classList.remove("hidden");
       } else {
         campusTag.classList.add("hidden");
+      }
+    }
+
+    const phoneTag = document.getElementById("target-seller-phone-tag");
+    if (phoneTag) {
+      if (item.seller_phone_verified || item.phone_verified || item.seller?.phone_verified) {
+        phoneTag.classList.remove("hidden");
+      } else {
+        phoneTag.classList.add("hidden");
+      }
+    }
+
+    // Direct UPI Payment Button in Spotlight
+    const targetUpiBtn = document.getElementById("btn-target-upi-pay");
+    if (targetUpiBtn) {
+      const hasUpi = !!(item.upi_vpa || item.upi_id || item.upi_qr_image);
+      if (hasUpi && item.beacon_type !== "wanted") {
+        targetUpiBtn.classList.remove("hidden");
+        targetUpiBtn.onclick = () => {
+          if (window.openUpiPaymentModal) {
+            window.openUpiPaymentModal(item);
+          }
+        };
+      } else {
+        targetUpiBtn.classList.add("hidden");
       }
     }
 
@@ -1213,24 +1291,40 @@
                 <i data-lucide="zoom-in" class="w-3.5 h-3.5"></i> Inspect
               </span>
             </div>
-            <div class="absolute top-2 left-2 flex items-center gap-1.5">
+            <div class="absolute top-2 left-2 flex items-center gap-1.5 flex-wrap">
               <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase ${
                 item.beacon_type === 'wanted' ? 'bg-pink-950 text-pink-300 border border-pink-500/40' :
+                item.category === 'electronics' ? 'bg-cyan-950 text-cyan-300 border border-cyan-500/40' :
                 item.category === 'stationery' ? 'badge-stationery' :
                 item.category === 'books' ? 'badge-book' :
                 item.category === 'hostel' ? 'badge-hostel' :
+                item.category === 'sports' ? 'bg-orange-950 text-orange-300 border border-orange-500/40' :
+                item.category === 'fashion' ? 'bg-purple-950 text-purple-300 border border-purple-500/40' :
                 item.category === 'lab' ? 'badge-lab' :
                 item.category === 'tech' ? 'badge-tech' : 'badge-stationery'
               }">
                 ${
                   item.beacon_type === 'wanted' ? '🚨 Wanted' :
+                  item.category === 'electronics' ? '📱 Gadget' :
                   item.category === 'stationery' ? '✏️ Stationery' :
-                  item.category === 'books' ? '📖 Books' :
+                  item.category === 'books' ? '📖 Book' :
                   item.category === 'hostel' ? '🛏️ Hostel' :
+                  item.category === 'sports' ? '🏏 Sports' :
+                  item.category === 'fashion' ? '👕 Fashion' :
                   item.category === 'lab' ? '🔬 Lab Gear' :
                   item.category === 'tech' ? '🔌 Tech' : '📦 Item'
                 }
               </span>
+              ${
+                item.seller_phone_verified || item.phone_verified || item.seller?.phone_verified
+                  ? `<span class="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-cyan-950/90 text-cyan-300 border border-cyan-400/50">🛡️ Verified</span>`
+                  : ''
+              }
+              ${
+                item.upi_vpa || item.upi_id || item.upi_qr_image
+                  ? `<span class="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-emerald-950/90 text-emerald-300 border border-emerald-500/50">⚡ UPI</span>`
+                  : ''
+              }
             </div>
             <div class="absolute top-2 right-2">
               <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-950/80 border border-cyan-400/50 text-cyan-300">
@@ -1337,12 +1431,30 @@
     document.getElementById("tip-score-badge").textContent = `⚡ ${target.algorithmScore}`;
 
     const catBadge = document.getElementById("tip-category-badge");
-    if (item.category === "stationery") {
+    if (item.beacon_type === "wanted") {
+      catBadge.className = "px-1.5 py-0.5 rounded text-[10px] font-bold bg-pink-950 text-pink-300 border border-pink-500/40";
+      catBadge.textContent = "🚨 Wanted";
+    } else if (item.category === "electronics") {
+      catBadge.className = "px-1.5 py-0.5 rounded text-[10px] font-bold bg-cyan-950 text-cyan-300 border border-cyan-500/40";
+      catBadge.textContent = "📱 Electronics";
+    } else if (item.category === "books") {
+      catBadge.className = "px-1.5 py-0.5 rounded text-[10px] font-bold badge-book";
+      catBadge.textContent = "📚 Book";
+    } else if (item.category === "hostel") {
+      catBadge.className = "px-1.5 py-0.5 rounded text-[10px] font-bold badge-hostel";
+      catBadge.textContent = "🛏️ Hostel & PG";
+    } else if (item.category === "stationery") {
       catBadge.className = "px-1.5 py-0.5 rounded text-[10px] font-bold badge-stationery";
       catBadge.textContent = "✏️ Stationery";
+    } else if (item.category === "sports") {
+      catBadge.className = "px-1.5 py-0.5 rounded text-[10px] font-bold bg-orange-950 text-orange-300 border border-orange-500/40";
+      catBadge.textContent = "🏏 Sports";
+    } else if (item.category === "fashion") {
+      catBadge.className = "px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-950 text-purple-300 border border-purple-500/40";
+      catBadge.textContent = "👕 Fashion";
     } else {
-      catBadge.className = "px-1.5 py-0.5 rounded text-[10px] font-bold badge-book";
-      catBadge.textContent = "📖 Book";
+      catBadge.className = "px-1.5 py-0.5 rounded text-[10px] font-bold badge-stationery";
+      catBadge.textContent = "📦 " + (item.category || "Item");
     }
 
     const offsetX = coords.x > radarEngine.width / 2 ? -215 : 15;
@@ -1357,40 +1469,61 @@
    * Setup UI Event Listeners
    */
   function setupEventListeners() {
-    // 1. Radar Range Slider & 500m Zone Quick Filter
+    // 1. Proximity Mode Tiers (Campus 1km / Society 5km / City 25km) & Slider
     const rangeSlider = document.getElementById("range-slider");
     const rangeDisplay = document.getElementById("range-value-display");
     const quick500Btn = document.getElementById("btn-quick-500m");
+    const proximityTierBtns = document.querySelectorAll(".proximity-tier-btn");
 
-    if (quick500Btn) {
-      quick500Btn.addEventListener("click", () => {
-        state.maxRadiusMeters = 500;
-        if (rangeSlider) rangeSlider.value = 500;
-        if (rangeDisplay) {
-          rangeDisplay.textContent = "500 m";
-          rangeDisplay.className = "text-emerald-400 font-bold min-w-[46px] text-right";
-        }
-        if (radarEngine) radarEngine.setMaxRadius(500);
-        recalculateAndRender();
-        showToast("500M ZONE LOCKED", "Radar locked to 500m campus walking perimeter.");
-      });
-    }
-
-    rangeSlider.addEventListener("input", (e) => {
-      const val = parseInt(e.target.value, 10);
+    function applyRadiusChange(val, showNotification = true) {
       state.maxRadiusMeters = val;
-      rangeDisplay.textContent = val >= 1000 ? `${(val / 1000).toFixed(1)} km` : `${val} m`;
-      // Keep emerald color when locked to 500m zone, otherwise revert to normal cyan
-      rangeDisplay.className = val === 500
-        ? "text-emerald-400 font-bold min-w-[46px] text-right"
-        : "text-cyan-400 font-bold min-w-[46px] text-right";
+      if (rangeSlider) rangeSlider.value = val;
+      if (rangeDisplay) {
+        rangeDisplay.textContent = val >= 1000 ? `${(val / 1000).toFixed(1)} km` : `${val} m`;
+        rangeDisplay.className = val === 500
+          ? "text-emerald-400 font-bold min-w-[46px] text-right"
+          : "text-cyan-400 font-bold min-w-[46px] text-right";
+      }
       if (radarEngine) {
         radarEngine.setMaxRadius(val);
       }
       recalculateAndRender();
-    });
+    }
 
-    // 2. Category Filter Pills
+    if (proximityTierBtns.length > 0) {
+      proximityTierBtns.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          proximityTierBtns.forEach((b) => {
+            b.classList.remove("active", "bg-cyan-950", "text-cyan-300", "border-cyan-500/50");
+            b.classList.add("text-slate-400", "border-transparent");
+          });
+          btn.classList.add("active", "bg-cyan-950", "text-cyan-300", "border-cyan-500/50");
+          btn.classList.remove("text-slate-400", "border-transparent");
+
+          const tier = btn.dataset.tier;
+          const tierRadius = { campus: 1000, society: 5000, city: 25000 }[tier] || 1000;
+          applyRadiusChange(tierRadius);
+          const tierLabel = tier === "campus" ? "1 KM Campus Walking Zone" : tier === "society" ? "5 KM Society & PG District" : "25 KM City Cluster";
+          showToast("PROXIMITY TIER LOCKED", `Radar range updated to ${tierLabel}.`);
+        });
+      });
+    }
+
+    if (quick500Btn) {
+      quick500Btn.addEventListener("click", () => {
+        applyRadiusChange(500);
+        showToast("500M ZONE LOCKED", "Radar locked to 500m campus walking perimeter.");
+      });
+    }
+
+    if (rangeSlider) {
+      rangeSlider.addEventListener("input", (e) => {
+        const val = parseInt(e.target.value, 10);
+        applyRadiusChange(val, false);
+      });
+    }
+
+    // 2. Category Filter Pills (6 Core Categories + Wanted + All)
     const filterBtns = document.querySelectorAll(".filter-category-btn");
     filterBtns.forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -1400,12 +1533,18 @@
         const cat = btn.dataset.category;
         if (cat === "wanted") {
           btn.className = "filter-category-btn px-3 py-1.5 rounded-md text-pink-300 bg-pink-950/80 border border-pink-500/40 transition shrink-0";
-        } else if (cat === "hostel") {
+        } else if (cat === "electronics") {
+          btn.className = "filter-category-btn px-3 py-1.5 rounded-md text-cyan-300 bg-cyan-950/80 border border-cyan-500/40 transition shrink-0";
+        } else if (cat === "books") {
           btn.className = "filter-category-btn px-3 py-1.5 rounded-md text-amber-300 bg-amber-950/80 border border-amber-500/40 transition shrink-0";
-        } else if (cat === "lab") {
+        } else if (cat === "hostel") {
+          btn.className = "filter-category-btn px-3 py-1.5 rounded-md text-pink-400 bg-pink-950/80 border border-pink-500/40 transition shrink-0";
+        } else if (cat === "stationery") {
+          btn.className = "filter-category-btn px-3 py-1.5 rounded-md text-emerald-300 bg-emerald-950/80 border border-emerald-500/40 transition shrink-0";
+        } else if (cat === "sports") {
+          btn.className = "filter-category-btn px-3 py-1.5 rounded-md text-orange-300 bg-orange-950/80 border border-orange-500/40 transition shrink-0";
+        } else if (cat === "fashion") {
           btn.className = "filter-category-btn px-3 py-1.5 rounded-md text-purple-300 bg-purple-950/80 border border-purple-500/40 transition shrink-0";
-        } else if (cat === "tech") {
-          btn.className = "filter-category-btn px-3 py-1.5 rounded-md text-blue-300 bg-blue-950/80 border border-blue-500/40 transition shrink-0";
         } else {
           btn.className = "filter-category-btn px-3 py-1.5 rounded-md text-cyan-400 bg-cyan-950/80 border border-cyan-500/30 transition shrink-0";
         }
@@ -1596,21 +1735,23 @@
       });
     }
 
-    setupCampusSearchModal();
+    try { setupCampusSearchModal(); } catch (e) { console.warn("setupCampusSearchModal error:", e); }
 
     // 8. Modals
-    setupSellModal();
-    setupPhotoLightbox();
-    setupAlgorithmModal();
-    setupChatModal();
-    handshakeModal = setupHandshakeModal();
-    setupMobileModal();
-    setupGoogleAuthModal();
-    setupMyBeaconsModal();
-    updateMyBeaconsBadge();
-    setupBountyBoardModal();
-    updateBountyBadge();
-    arCompassModalInstance = setupARCompassModal();
+    try { setupSellModal(); } catch (e) { console.error("setupSellModal error:", e); }
+    try { setupPhoneAuthModal(); } catch (e) { console.error("setupPhoneAuthModal error:", e); }
+    try { setupUpiPaymentModal(); } catch (e) { console.error("setupUpiPaymentModal error:", e); }
+    try { setupPhotoLightbox(); } catch (e) { console.error("setupPhotoLightbox error:", e); }
+    try { setupAlgorithmModal(); } catch (e) { console.error("setupAlgorithmModal error:", e); }
+    try { setupChatModal(); } catch (e) { console.error("setupChatModal error:", e); }
+    try { handshakeModal = setupHandshakeModal(); } catch (e) { console.error("setupHandshakeModal error:", e); }
+    try { setupMobileModal(); } catch (e) { console.error("setupMobileModal error:", e); }
+    try { setupGoogleAuthModal(); } catch (e) { console.error("setupGoogleAuthModal error:", e); }
+    try { setupMyBeaconsModal(); } catch (e) { console.error("setupMyBeaconsModal error:", e); }
+    try { updateMyBeaconsBadge(); } catch (e) {}
+    try { setupBountyBoardModal(); } catch (e) { console.error("setupBountyBoardModal error:", e); }
+    try { updateBountyBadge(); } catch (e) {}
+    try { arCompassModalInstance = setupARCompassModal(); } catch (e) { console.error("setupARCompassModal error:", e); }
 
     // AR Live Finder Button in Spotlight Panel
     const arFinderBtn = document.getElementById("btn-open-ar-compass");
@@ -1647,30 +1788,38 @@
       }
     });
 
-    // 10. Floating Mobile Dual-View Switcher (HUD vs Feed List)
+    // 10. Floating Mobile Dual-View Switcher (HUD vs Feed List + Broadcast)
     const mobileToggleRadar = document.getElementById("mobile-toggle-radar");
     const mobileToggleFeed = document.getElementById("mobile-toggle-feed");
+    const mobileToggleBroadcast = document.getElementById("mobile-toggle-broadcast");
     const radarScopeCard = document.getElementById("radar-scope-card");
     const nearbyTargetsPanel = document.getElementById("selected-target-panel");
 
     if (mobileToggleRadar && mobileToggleFeed) {
       mobileToggleRadar.addEventListener("click", () => {
-        mobileToggleRadar.className = "px-3.5 py-1.5 rounded-full text-xs font-mono font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-400/40 flex items-center gap-1.5 transition cursor-pointer";
-        mobileToggleFeed.className = "px-3.5 py-1.5 rounded-full text-xs font-mono font-bold text-slate-400 hover:text-slate-200 flex items-center gap-1.5 transition cursor-pointer";
+        mobileToggleRadar.className = "px-3 py-1.5 rounded-full text-[11px] font-mono font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-400/40 flex items-center gap-1 transition cursor-pointer";
+        mobileToggleFeed.className = "px-3 py-1.5 rounded-full text-[11px] font-mono font-bold text-slate-400 hover:text-slate-200 flex items-center gap-1 transition cursor-pointer";
         if (radarScopeCard) {
           radarScopeCard.scrollIntoView({ behavior: "smooth", block: "start" });
         }
       });
 
       mobileToggleFeed.addEventListener("click", () => {
-        mobileToggleFeed.className = "px-3.5 py-1.5 rounded-full text-xs font-mono font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-400/40 flex items-center gap-1.5 transition cursor-pointer";
-        mobileToggleRadar.className = "px-3.5 py-1.5 rounded-full text-xs font-mono font-bold text-slate-400 hover:text-slate-200 flex items-center gap-1.5 transition cursor-pointer";
+        mobileToggleFeed.className = "px-3 py-1.5 rounded-full text-[11px] font-mono font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-400/40 flex items-center gap-1 transition cursor-pointer";
+        mobileToggleRadar.className = "px-3 py-1.5 rounded-full text-[11px] font-mono font-bold text-slate-400 hover:text-slate-200 flex items-center gap-1 transition cursor-pointer";
         const feedList = document.getElementById("radar-feed-list");
         if (feedList) {
           feedList.scrollIntoView({ behavior: "smooth", block: "start" });
         } else if (nearbyTargetsPanel) {
           nearbyTargetsPanel.scrollIntoView({ behavior: "smooth", block: "start" });
         }
+      });
+    }
+
+    if (mobileToggleBroadcast) {
+      mobileToggleBroadcast.addEventListener("click", () => {
+        const sellBtn = document.getElementById("btn-open-sell-modal");
+        if (sellBtn) sellBtn.click();
       });
     }
 
@@ -2608,8 +2757,8 @@
         await stopScanner();
       }
 
-      viewportPanel.classList.remove("hidden");
-      manualPanel.classList.add("hidden");
+      if (viewportPanel) viewportPanel.classList.remove("hidden");
+      if (manualPanel) manualPanel.classList.add("hidden");
       if (statusText) statusText.textContent = "ALIGN EAN-13 BARCODE HERE";
       if (statusText) statusText.className = "text-[10px] text-cyan-300 font-mono tracking-wider bg-slate-950/85 px-2 py-0.5 rounded border border-cyan-500/40 text-center shadow";
 
@@ -2711,17 +2860,17 @@
       }
       isScannerRunning = false;
       html5QrScanner = null;
-      viewportPanel.classList.add("hidden");
+      if (viewportPanel) viewportPanel.classList.add("hidden");
     }
 
     function openManualPanel() {
-      manualPanel.classList.remove("hidden");
-      viewportPanel.classList.add("hidden");
+      if (manualPanel) manualPanel.classList.remove("hidden");
+      if (viewportPanel) viewportPanel.classList.add("hidden");
       if (manualInput) manualInput.focus();
     }
 
     function closeManualPanel() {
-      manualPanel.classList.add("hidden");
+      if (manualPanel) manualPanel.classList.add("hidden");
     }
 
     // Barcode detected by camera
@@ -3062,7 +3211,7 @@
         }
 
         // Auto-fill Subcategory
-        const subcatField = document.getElementById("sell-subcategory");
+        const subcatField = document.getElementById("sell-subcategory") || document.getElementById("sell-subcategory-select");
         if (subcatField) {
           subcatField.value = book.suggested_subcategory || (book.subjects && book.subjects[0]) || "Textbook";
         }
@@ -3520,7 +3669,7 @@
 
     // Generate 360 degree compass ribbon ticks: 0° to 360° + repeat to 720° for continuous scroll
     function initCompassRibbon() {
-      if (!compassTape || compassTape.children.length > 0) return;
+      if (!compassTape || (compassTape.children && compassTape.children.length > 0)) return;
       const cardinals = { 0: "N", 45: "NE", 90: "E", 135: "SE", 180: "S", 225: "SW", 270: "W", 315: "NW" };
       let html = "";
       for (let cycle = 0; cycle < 2; cycle++) {
@@ -4629,20 +4778,341 @@
     const form = document.getElementById("sell-item-form");
 
     let uploadedPhotoBase64 = null;
+    let uploadedUpiQrBase64 = null;
+    let currentWizardStep = 1;
 
-    // Initialize ISBN Scanner Subsystem
-    const isbnScanner = setupIsbnScanner();
+    // Initialize ISBN Scanner Subsystem safely
+    let isbnScanner = null;
+    try {
+      isbnScanner = setupIsbnScanner();
+    } catch (e) {
+      console.warn("setupIsbnScanner warning:", e);
+    }
 
-    // Initialize Interactive Pinpoint Picker Subsystem
-    if (!pinpointPicker) pinpointPicker = setupPinpointPickerModal();
+    // Initialize Interactive Pinpoint Picker Subsystem safely
+    try {
+      if (!pinpointPicker) pinpointPicker = setupPinpointPickerModal();
+    } catch (e) {
+      console.warn("setupPinpointPickerModal warning:", e);
+    }
 
-    // Camera & Gallery File Input Hooks
+    // Wizard Controls
+    const wizardPanes = [
+      document.getElementById("sell-step-pane-1"),
+      document.getElementById("sell-step-pane-2"),
+      document.getElementById("sell-step-pane-3"),
+      document.getElementById("sell-step-pane-4"),
+      document.getElementById("sell-step-pane-5")
+    ];
+    const wizardTabs = modal ? modal.querySelectorAll(".wizard-tab-btn") : [];
+    const wizardDots = modal ? modal.querySelectorAll(".wizard-dot") : [];
+    const wizardBadge = document.getElementById("wizard-step-badge");
+    const wizardSubtitle = document.getElementById("wizard-step-subtitle");
+    const btnPrev = document.getElementById("btn-sell-wizard-prev");
+    const btnNext = document.getElementById("btn-sell-wizard-next");
+    const btnSubmit = document.getElementById("btn-submit-beacon");
+    const dynamicSpecsBox = document.getElementById("wizard-dynamic-specs");
+    const subcatSelect = document.getElementById("sell-subcategory-select");
+    const landmarkSelect = document.getElementById("sell-safe-landmark-select");
+    const customLandmarkInput = document.getElementById("sell-custom-landmark");
+    const discountBadge = document.getElementById("sell-discount-badge");
+    const priceInput = document.getElementById("sell-price");
+    const origPriceInput = document.getElementById("sell-original-price");
+    const conditionRadios = form ? form.querySelectorAll("input[name='sell-condition']") : [];
+    const conditionSlider = document.getElementById("sell-condition-score");
+    const conditionScoreDisplay = document.getElementById("condition-score-display");
+
+    // Populate Safe Landmarks from window.MarketData
+    if (landmarkSelect && window.MarketData && window.MarketData.SAFE_LANDMARKS) {
+      landmarkSelect.innerHTML = "";
+      window.MarketData.SAFE_LANDMARKS.forEach((lm) => {
+        const opt = document.createElement("option");
+        opt.value = lm;
+        opt.textContent = `📍 ${lm}`;
+        landmarkSelect.appendChild(opt);
+      });
+      const customOpt = document.createElement("option");
+      customOpt.value = "custom";
+      customOpt.textContent = "✏️ Custom Specific Spot (Type below)";
+      landmarkSelect.appendChild(customOpt);
+    }
+
+    // Dynamic Specs Renderer per Category
+    function renderDynamicSpecs(category) {
+      if (!dynamicSpecsBox) return;
+      dynamicSpecsBox.innerHTML = "";
+      const taxonomy = (window.MarketData && window.MarketData.CATEGORIES_TAXONOMY)
+        ? window.MarketData.CATEGORIES_TAXONOMY[category]
+        : null;
+
+      if (!taxonomy || !taxonomy.dynamicFields || taxonomy.dynamicFields.length === 0) {
+        dynamicSpecsBox.innerHTML = `<div class="text-[11px] text-slate-500 italic">No extra specifications required for this category.</div>`;
+        return;
+      }
+
+      const grid = document.createElement("div");
+      grid.className = "grid grid-cols-1 sm:grid-cols-2 gap-2.5";
+
+      taxonomy.dynamicFields.forEach((field) => {
+        const fieldWrap = document.createElement("div");
+        fieldWrap.className = "flex flex-col gap-1";
+
+        const label = document.createElement("label");
+        label.className = "text-[10px] text-slate-300 font-bold uppercase tracking-wider";
+        label.textContent = field.label;
+
+        let input;
+        if (field.type === "select" && field.options) {
+          input = document.createElement("select");
+          input.className = "dynamic-spec-input w-full cursor-pointer";
+          field.options.forEach((optVal) => {
+            const opt = document.createElement("option");
+            opt.value = optVal;
+            opt.textContent = optVal;
+            input.appendChild(opt);
+          });
+        } else {
+          input = document.createElement("input");
+          input.type = field.type === "number" ? "number" : "text";
+          input.placeholder = field.placeholder || "";
+          input.className = "dynamic-spec-input w-full";
+        }
+        input.id = `spec-field-${field.key}`;
+        input.dataset.specKey = field.key;
+        input.dataset.specLabel = field.label;
+
+        fieldWrap.appendChild(label);
+        fieldWrap.appendChild(input);
+        grid.appendChild(fieldWrap);
+      });
+
+      dynamicSpecsBox.appendChild(grid);
+    }
+
+    // Populate Subcategories Dropdown
+    function populateSubcategories(category) {
+      if (!subcatSelect) return;
+      subcatSelect.innerHTML = "";
+      const taxonomy = (window.MarketData && window.MarketData.CATEGORIES_TAXONOMY)
+        ? window.MarketData.CATEGORIES_TAXONOMY[category]
+        : null;
+      const subcats = taxonomy ? taxonomy.subcategories : ["Standard Item"];
+
+      subcats.forEach((sc) => {
+        const opt = document.createElement("option");
+        opt.value = sc;
+        opt.textContent = sc;
+        subcatSelect.appendChild(opt);
+      });
+    }
+
+    // Category Card Choices in Step 1
+    const categoryCards = modal ? modal.querySelectorAll(".category-card-choice") : [];
+    function setSelectedCategory(cat) {
+      categoryCards.forEach((card) => {
+        if (card.dataset.cat === cat) {
+          card.classList.add("active");
+          const radio = card.querySelector("input[type='radio']");
+          if (radio) radio.checked = true;
+        } else {
+          card.classList.remove("active");
+        }
+      });
+      populateSubcategories(cat);
+      renderDynamicSpecs(cat);
+
+      // Toggle ISBN scanner
+      const isbnWrapper = document.getElementById("isbn-scanner-wrapper");
+      if (isbnWrapper) {
+        if (cat === "books") {
+          isbnWrapper.classList.remove("hidden");
+        } else {
+          isbnWrapper.classList.add("hidden");
+        }
+      }
+    }
+
+    categoryCards.forEach((card) => {
+      card.addEventListener("click", () => {
+        const cat = card.dataset.cat;
+        if (cat) setSelectedCategory(cat);
+      });
+    });
+
+    // Initialize with electronics
+    setSelectedCategory("electronics");
+
+    // Wizard Navigation Step Handler
+    const subtitles = [
+      "1. Select Visual Category & Signal Type",
+      "2. Basic Details & Price Breakdown",
+      "3. Dynamic Specifications & Condition",
+      "4. Item Photos & UPI Checkout Setup",
+      "5. Safe Meetup Landmark & GPS Triangulation"
+    ];
+
+    function validateStep(step) {
+      if (step === 1) {
+        let checkedCat = form.querySelector("input[name='sell-category']:checked");
+        if (!checkedCat) {
+          setSelectedCategory("electronics");
+        }
+        return true;
+      }
+      if (step === 2) {
+        const titleVal = document.getElementById("sell-title")?.value?.trim();
+        const priceInputEl = document.getElementById("sell-price");
+        const priceVal = parseFloat(priceInputEl?.value);
+        if (!titleVal) {
+          showToast("TITLE REQUIRED", "Please enter a title for your beacon.");
+          document.getElementById("sell-title")?.focus();
+          return false;
+        }
+        if (priceInputEl?.value === "" || isNaN(priceVal) || priceVal < 0) {
+          showToast("PRICE REQUIRED", "Please specify a valid selling price in ₹.");
+          priceInputEl?.focus();
+          return false;
+        }
+        return true;
+      }
+      return true;
+    }
+
+    function goToWizardStep(targetStep) {
+      if (targetStep < 1 || targetStep > 5) return;
+      if (targetStep > currentWizardStep) {
+        for (let s = currentWizardStep; s < targetStep; s++) {
+          if (!validateStep(s)) return;
+        }
+      }
+
+      currentWizardStep = targetStep;
+
+      // Panes visibility
+      wizardPanes.forEach((pane, idx) => {
+        if (pane) {
+          if (idx === currentWizardStep - 1) {
+            pane.classList.remove("hidden");
+          } else {
+            pane.classList.add("hidden");
+          }
+        }
+      });
+
+      // Tabs styling
+      wizardTabs.forEach((tab, idx) => {
+        const stepNum = idx + 1;
+        if (stepNum === currentWizardStep) {
+          tab.className = "wizard-tab-btn active flex items-center gap-1 px-2.5 py-1 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/50 shrink-0 transition";
+        } else if (stepNum < currentWizardStep) {
+          tab.className = "wizard-tab-btn completed flex items-center gap-1 px-2.5 py-1 rounded text-emerald-400 hover:text-emerald-300 border border-transparent shrink-0 transition";
+        } else {
+          tab.className = "wizard-tab-btn flex items-center gap-1 px-2.5 py-1 rounded text-slate-400 hover:text-slate-200 border border-transparent shrink-0 transition";
+        }
+      });
+
+      // Progress dots
+      wizardDots.forEach((dot, idx) => {
+        const stepNum = idx + 1;
+        if (stepNum === currentWizardStep) {
+          dot.className = "wizard-dot w-2 h-2 rounded-full bg-cyan-400 shadow-[0_0_8px_rgba(0,229,255,0.8)]";
+        } else if (stepNum < currentWizardStep) {
+          dot.className = "wizard-dot w-2 h-2 rounded-full bg-emerald-400";
+        } else {
+          dot.className = "wizard-dot w-2 h-2 rounded-full bg-slate-800";
+        }
+      });
+
+      // Header step badge & subtitle
+      if (wizardBadge) wizardBadge.textContent = `STEP ${currentWizardStep} OF 5`;
+      if (wizardSubtitle) wizardSubtitle.textContent = subtitles[currentWizardStep - 1] || "";
+
+      // Navigation footer buttons
+      if (btnPrev) {
+        if (currentWizardStep === 1) {
+          btnPrev.classList.add("opacity-50", "pointer-events-none");
+        } else {
+          btnPrev.classList.remove("opacity-50", "pointer-events-none");
+        }
+      }
+
+      if (currentWizardStep === 5) {
+        if (btnNext) btnNext.classList.add("hidden");
+        if (btnSubmit) btnSubmit.classList.remove("hidden");
+        updateSellCoordsUI();
+      } else {
+        if (btnNext) btnNext.classList.remove("hidden");
+        if (btnSubmit) btnSubmit.classList.add("hidden");
+      }
+
+      if (window.lucide) lucide.createIcons();
+    }
+
+    if (btnPrev) {
+      btnPrev.addEventListener("click", () => goToWizardStep(currentWizardStep - 1));
+    }
+    if (btnNext) {
+      btnNext.addEventListener("click", () => goToWizardStep(currentWizardStep + 1));
+    }
+    wizardTabs.forEach((tab) => {
+      tab.addEventListener("click", () => {
+        const stepNum = parseInt(tab.dataset.step, 10);
+        if (stepNum) goToWizardStep(stepNum);
+      });
+    });
+
+    // Live Discount Calculation
+    function updateDiscountCalc() {
+      if (!priceInput || !origPriceInput || !discountBadge) return;
+      const p = parseFloat(priceInput.value) || 0;
+      const op = parseFloat(origPriceInput.value) || 0;
+      if (op > p && p > 0) {
+        const pct = Math.round(((op - p) / op) * 100);
+        discountBadge.textContent = `${pct}% OFF`;
+        discountBadge.classList.remove("hidden");
+      } else {
+        discountBadge.classList.add("hidden");
+      }
+    }
+    if (priceInput) priceInput.addEventListener("input", updateDiscountCalc);
+    if (origPriceInput) origPriceInput.addEventListener("input", updateDiscountCalc);
+
+    // Condition Slider & Radios Sync
+    const conditionScores = {
+      "Brand New": 1.0,
+      "Like New": 0.95,
+      "Good": 0.85,
+      "Fair": 0.70
+    };
+    conditionRadios.forEach((radio) => {
+      radio.addEventListener("change", () => {
+        const sc = conditionScores[radio.value] || 0.85;
+        if (conditionSlider) conditionSlider.value = sc;
+        if (conditionScoreDisplay) conditionScoreDisplay.textContent = `${Math.round(sc * 100)}% (${radio.value})`;
+      });
+    });
+    if (conditionSlider) {
+      conditionSlider.addEventListener("input", (e) => {
+        const val = parseFloat(e.target.value);
+        let condName = "Good";
+        if (val >= 0.98) condName = "Brand New";
+        else if (val >= 0.90) condName = "Like New";
+        else if (val >= 0.80) condName = "Good";
+        else condName = "Fair";
+
+        conditionRadios.forEach((r) => {
+          r.checked = (r.value === condName);
+        });
+        if (conditionScoreDisplay) conditionScoreDisplay.textContent = `${Math.round(val * 100)}% (${condName})`;
+      });
+    }
+
+    // Photo Capture & Gallery Hooks
     const cameraInput = document.getElementById("sell-camera-input");
     const galleryInput = document.getElementById("sell-gallery-input");
     const triggerCameraBtn = document.getElementById("btn-trigger-camera");
     const triggerGalleryBtn = document.getElementById("btn-trigger-gallery");
     const photoActions = document.getElementById("photo-upload-actions");
-    const spinner = document.getElementById("image-compressing-spinner");
     const previewBox = document.getElementById("image-preview-box");
     const previewThumb = document.getElementById("image-preview-thumb");
     const compressionBadge = document.getElementById("image-compression-badge");
@@ -4651,7 +5121,6 @@
 
     function processSelectedImage(file) {
       if (!file) return;
-      if (spinner) spinner.classList.remove("hidden");
       if (photoActions) photoActions.classList.add("opacity-50", "pointer-events-none");
 
       compressImageFile(
@@ -4663,16 +5132,14 @@
             compressionBadge.textContent = `${stats.compressedKb} KB (${stats.reductionPct}% smaller)`;
           }
           if (previewBox) previewBox.classList.remove("hidden");
-          if (spinner) spinner.classList.add("hidden");
           if (photoActions) {
             photoActions.classList.remove("opacity-50", "pointer-events-none");
             photoActions.classList.add("hidden");
           }
-          lucide.createIcons();
+          if (window.lucide) lucide.createIcons();
           showToast("PHOTO OPTIMIZED", `Item photo compressed to ${stats.compressedKb} KB (${stats.reductionPct}% smaller). Ready to broadcast!`);
         },
         (err) => {
-          if (spinner) spinner.classList.add("hidden");
           if (photoActions) photoActions.classList.remove("opacity-50", "pointer-events-none");
           showToast("IMAGE ERROR", err.message || "Failed to process photo.");
         }
@@ -4685,17 +5152,21 @@
       if (galleryInput) galleryInput.value = "";
       if (previewThumb) previewThumb.src = "";
       if (previewBox) previewBox.classList.add("hidden");
-      if (spinner) spinner.classList.add("hidden");
       if (photoActions) {
         photoActions.classList.remove("opacity-50", "pointer-events-none", "hidden");
       }
     }
 
-    const liveCamera = setupLiveCameraModal();
+    let liveCamera = null;
+    try {
+      liveCamera = setupLiveCameraModal();
+    } catch (e) {
+      console.warn("setupLiveCameraModal warning:", e);
+    }
 
     if (triggerCameraBtn) {
       triggerCameraBtn.addEventListener("click", () => {
-        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        if (liveCamera && typeof liveCamera.open === "function" && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
           liveCamera.open((rawBase64) => {
             processSelectedImage(rawBase64);
           });
@@ -4723,7 +5194,7 @@
     if (retakeBtn) {
       retakeBtn.addEventListener("click", () => {
         clearUploadedPhoto();
-        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        if (liveCamera && typeof liveCamera.open === "function" && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
           liveCamera.open((rawBase64) => {
             processSelectedImage(rawBase64);
           });
@@ -4739,25 +5210,52 @@
       });
     }
 
-    // Beacon Type Tab Switcher (Sell vs Wanted)
-    const typeRadios = form.querySelectorAll("input[name='sell-beacon-type']");
-    const titleLabel = document.getElementById("title-label");
-    const priceLabel = document.getElementById("price-label");
-    const submitBtnText = document.getElementById("btn-submit-beacon-text");
-    const titleInput = document.getElementById("sell-title");
+    // UPI QR Upload Handling
+    const upiQrInput = document.getElementById("sell-upi-qr-input");
+    const btnUploadUpiQr = document.getElementById("btn-upload-upi-qr");
+    const btnUploadUpiQrText = document.getElementById("btn-upload-upi-qr-text");
+    const upiQrPreviewBox = document.getElementById("upi-qr-preview-thumb-box");
+    const upiQrPreviewImg = document.getElementById("upi-qr-preview-img");
+    const btnRemoveUpiQr = document.getElementById("btn-remove-upi-qr");
 
+    if (btnUploadUpiQr && upiQrInput) {
+      btnUploadUpiQr.addEventListener("click", () => upiQrInput.click());
+      upiQrInput.addEventListener("change", (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        compressImageFile(
+          file,
+          (base64) => {
+            uploadedUpiQrBase64 = base64;
+            if (upiQrPreviewImg) upiQrPreviewImg.src = base64;
+            if (upiQrPreviewBox) upiQrPreviewBox.classList.remove("hidden");
+            if (btnUploadUpiQrText) btnUploadUpiQrText.textContent = "Replace UPI QR Image";
+            showToast("UPI QR ATTACHED", "Buyers will be able to scan your static UPI QR code directly.");
+          },
+          () => {
+            showToast("QR ERROR", "Could not process UPI QR image.");
+          }
+        );
+      });
+    }
+
+    if (btnRemoveUpiQr) {
+      btnRemoveUpiQr.addEventListener("click", () => {
+        uploadedUpiQrBase64 = null;
+        if (upiQrInput) upiQrInput.value = "";
+        if (upiQrPreviewImg) upiQrPreviewImg.src = "";
+        if (upiQrPreviewBox) upiQrPreviewBox.classList.add("hidden");
+        if (btnUploadUpiQrText) btnUploadUpiQrText.textContent = "Attach Static UPI QR Image";
+      });
+    }
+
+    // Beacon Type Tab Switcher (Sell vs Wanted)
+    const typeRadios = form ? form.querySelectorAll("input[name='sell-beacon-type']") : [];
+    const submitBtnText = document.getElementById("btn-submit-beacon-text");
     typeRadios.forEach((radio) => {
       radio.addEventListener("change", () => {
-        if (radio.value === "wanted") {
-          titleLabel.textContent = "What are you looking for? *";
-          titleInput.placeholder = "e.g. Casio fx-991CW or HC Verma Physics Vol 1";
-          priceLabel.textContent = "Max Budget (₹) *";
-          submitBtnText.textContent = "BROADCAST WANTED REQUEST BEACON";
-        } else {
-          titleLabel.textContent = "Item Title / Model / Author *";
-          titleInput.placeholder = "e.g. Casio Scientific Calculator or Kreyszig Engineering Math";
-          priceLabel.textContent = "Asking Price (₹) *";
-          submitBtnText.textContent = "ACTIVATE RADAR BEACON";
+        if (submitBtnText) {
+          submitBtnText.textContent = radio.value === "wanted" ? "BROADCAST WANTED REQUEST" : "ACTIVATE RADAR BEACON";
         }
       });
     });
@@ -4767,42 +5265,35 @@
     const pickPinBtn = document.getElementById("btn-sell-pick-pin");
     const previewMapsBtn = document.getElementById("btn-sell-preview-maps");
     const coordsDisplay = document.getElementById("sell-coords-display");
-    const gpsAccuracyBadge = document.getElementById("sell-gps-accuracy-badge");
-    const landmarkInput = document.getElementById("sell-landmark");
     const sellPingGpsBtn = document.getElementById("btn-sell-ping-gps");
     const sellLiveGpsTelemetry = document.getElementById("sell-live-gps-telemetry");
 
     function updateSellCoordsUI() {
-      const lat = (state.selectedPickupCoords && state.selectedPickupCoords.lat) || state.userLocation.lat;
-      const lng = (state.selectedPickupCoords && state.selectedPickupCoords.lng) || state.userLocation.lng;
+      const lat = Number(
+        (state.selectedPickupCoords && typeof state.selectedPickupCoords.lat === "number" ? state.selectedPickupCoords.lat : null) ??
+        (state.userLocation && typeof state.userLocation.lat === "number" ? state.userLocation.lat : null) ??
+        (state.activeCampus && typeof state.activeCampus.lat === "number" ? state.activeCampus.lat : null) ??
+        19.1334
+      );
+      const lng = Number(
+        (state.selectedPickupCoords && typeof state.selectedPickupCoords.lng === "number" ? state.selectedPickupCoords.lng : null) ??
+        (state.userLocation && typeof state.userLocation.lng === "number" ? state.userLocation.lng : null) ??
+        (state.activeCampus && typeof state.activeCampus.lng === "number" ? state.activeCampus.lng : null) ??
+        72.9133
+      );
       if (coordsDisplay) {
         coordsDisplay.textContent = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-      }
-      if (gpsAccuracyBadge) {
-        if (state.selectedPickupCoords?.isCustom) {
-          gpsAccuracyBadge.textContent = "📍 Custom Pin Picked";
-          gpsAccuracyBadge.className = "text-[10px] font-mono font-bold text-cyan-400 bg-cyan-950/80 px-2 py-0.5 rounded border border-cyan-500/40";
-          gpsAccuracyBadge.classList.remove("hidden");
-        } else if (state.userLocation.isLiveGPS) {
-          gpsAccuracyBadge.textContent = `±${state.userLocation.accuracy || 10}m Live GPS`;
-          gpsAccuracyBadge.className = "text-[10px] font-mono font-bold text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-500/40";
-          gpsAccuracyBadge.classList.remove("hidden");
-        } else {
-          gpsAccuracyBadge.textContent = "Acquiring Live GPS...";
-          gpsAccuracyBadge.className = "text-[10px] font-mono font-bold text-amber-400 bg-amber-950/80 px-2 py-0.5 rounded border border-amber-500/40 animate-pulse";
-          gpsAccuracyBadge.classList.remove("hidden");
-        }
       }
       if (sellLiveGpsTelemetry) {
         if (state.selectedPickupCoords?.isCustom) {
           sellLiveGpsTelemetry.textContent = `📍 Custom Map Pin: ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-          sellLiveGpsTelemetry.className = "text-cyan-300 font-bold";
-        } else if (state.userLocation.isLiveGPS) {
+          sellLiveGpsTelemetry.className = "text-cyan-300 font-bold truncate";
+        } else if (state.userLocation && state.userLocation.isLiveGPS) {
           sellLiveGpsTelemetry.textContent = `📍 Locked to Live GPS: ${lat.toFixed(5)}, ${lng.toFixed(5)} (±${state.userLocation.accuracy || 8}m fix)`;
-          sellLiveGpsTelemetry.className = "text-emerald-300 font-bold";
+          sellLiveGpsTelemetry.className = "text-emerald-300 font-bold truncate";
         } else {
-          sellLiveGpsTelemetry.textContent = "⚠️ Acquiring Satellites... (Tap REFRESH GPS)";
-          sellLiveGpsTelemetry.className = "text-amber-400 font-bold animate-pulse";
+          sellLiveGpsTelemetry.textContent = `📍 Coordinates: ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+          sellLiveGpsTelemetry.className = "text-cyan-400 font-bold truncate";
         }
       }
     }
@@ -4823,13 +5314,13 @@
         }
 
         const spanText = gpsExactBtn.querySelector("span");
-        if (spanText) spanText.textContent = "ACQUIRING GPS...";
+        if (spanText) spanText.textContent = "ACQUIRING...";
         gpsExactBtn.classList.add("animate-pulse");
 
         navigator.geolocation.getCurrentPosition(
           (pos) => {
             gpsExactBtn.classList.remove("animate-pulse");
-            if (spanText) spanText.textContent = "📍 USE EXACT GPS";
+            if (spanText) spanText.textContent = "Live GPS";
             const lat = pos.coords.latitude;
             const lng = pos.coords.longitude;
             const acc = Math.round(pos.coords.accuracy || 8);
@@ -4838,7 +5329,7 @@
               lat,
               lng,
               accuracy: acc,
-              landmark: (landmarkInput ? landmarkInput.value.trim() : "") || `Live Spot (GPS ±${acc}m)`,
+              landmark: (landmarkSelect ? landmarkSelect.value : "") || `Live Spot (GPS ±${acc}m)`,
               isCustom: false,
               isLiveGPS: true
             };
@@ -4855,16 +5346,13 @@
               localStorage.setItem("radarmarket_last_known_gps", JSON.stringify({ lat, lng, accuracy: acc, timestamp: Date.now() }));
             } catch (e) {}
 
-            if (landmarkInput && !landmarkInput.value.trim()) {
-              landmarkInput.value = `Live Spot (GPS ±${acc}m)`;
-            }
             updateSellCoordsUI();
             showToast("GPS FIX ACQUIRED", `Pinned exact location: ${lat.toFixed(5)}, ${lng.toFixed(5)} (±${acc}m accuracy).`);
           },
-          (err) => {
+          () => {
             gpsExactBtn.classList.remove("animate-pulse");
-            if (spanText) spanText.textContent = "📍 USE EXACT GPS";
-            showToast("GPS TIMEOUT", "Unable to acquire high-accuracy GPS. Please tap 'MARK ON MAP'.");
+            if (spanText) spanText.textContent = "Live GPS";
+            showToast("GPS TIMEOUT", "Unable to acquire high-accuracy GPS. Please tap 'Mark on Map'.");
           },
           { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
         );
@@ -4873,17 +5361,26 @@
 
     if (pickPinBtn && pinpointPicker) {
       pickPinBtn.addEventListener("click", () => {
+        const pLat = Number(
+          (state.selectedPickupCoords && typeof state.selectedPickupCoords.lat === "number" ? state.selectedPickupCoords.lat : null) ??
+          (state.userLocation && typeof state.userLocation.lat === "number" ? state.userLocation.lat : null) ??
+          (state.activeCampus && typeof state.activeCampus.lat === "number" ? state.activeCampus.lat : null) ??
+          19.1334
+        );
+        const pLng = Number(
+          (state.selectedPickupCoords && typeof state.selectedPickupCoords.lng === "number" ? state.selectedPickupCoords.lng : null) ??
+          (state.userLocation && typeof state.userLocation.lng === "number" ? state.userLocation.lng : null) ??
+          (state.activeCampus && typeof state.activeCampus.lng === "number" ? state.activeCampus.lng : null) ??
+          72.9133
+        );
         pinpointPicker.open(
           {
-            lat: state.selectedPickupCoords?.lat || state.userLocation.lat,
-            lng: state.selectedPickupCoords?.lng || state.userLocation.lng,
-            landmark: landmarkInput ? landmarkInput.value.trim() : ""
+            lat: pLat,
+            lng: pLng,
+            landmark: landmarkSelect ? landmarkSelect.value : ""
           },
           (selected) => {
             state.selectedPickupCoords = { ...selected, isCustom: true };
-            if (landmarkInput && selected.landmark) {
-              landmarkInput.value = selected.landmark;
-            }
             updateSellCoordsUI();
           }
         );
@@ -4892,222 +5389,550 @@
 
     if (previewMapsBtn) {
       previewMapsBtn.addEventListener("click", () => {
-        const lat = state.selectedPickupCoords?.lat || state.userLocation.lat;
-        const lng = state.selectedPickupCoords?.lng || state.userLocation.lng;
-        const landmark = (landmarkInput ? landmarkInput.value.trim() : "") || state.selectedPickupCoords?.landmark || "Pickup Spot";
-        openGoogleMapsModal(lat, lng, landmark);
+        const lat = Number(
+          (state.selectedPickupCoords && typeof state.selectedPickupCoords.lat === "number" ? state.selectedPickupCoords.lat : null) ??
+          (state.userLocation && typeof state.userLocation.lat === "number" ? state.userLocation.lat : null) ??
+          (state.activeCampus && typeof state.activeCampus.lat === "number" ? state.activeCampus.lat : null) ??
+          19.1334
+        );
+        const lng = Number(
+          (state.selectedPickupCoords && typeof state.selectedPickupCoords.lng === "number" ? state.selectedPickupCoords.lng : null) ??
+          (state.userLocation && typeof state.userLocation.lng === "number" ? state.userLocation.lng : null) ??
+          (state.activeCampus && typeof state.activeCampus.lng === "number" ? state.activeCampus.lng : null) ??
+          72.9133
+        );
+        const lm = (landmarkSelect ? landmarkSelect.value : "") || "Pickup Spot";
+        openGoogleMapsModal(lat, lng, lm);
       });
     }
 
-    const presetChips = modal.querySelectorAll(".btn-landmark-preset");
-    presetChips.forEach((chip) => {
-      chip.addEventListener("click", () => {
-        const landmark = chip.dataset.landmark;
-        if (landmarkInput) landmarkInput.value = landmark;
-        // Preserve actual device live GPS coordinates! Only update the meeting spot name
-        if (state.selectedPickupCoords) {
-          state.selectedPickupCoords.landmark = landmark;
-        }
-        updateSellCoordsUI();
-        showToast("LANDMARK SET", `Meeting spot set to: ${landmark}`);
-      });
-    });
-
-    openBtn.addEventListener("click", () => {
+    function openSellModalDirectly() {
+      if (!modal) return;
       modal.classList.remove("hidden");
-      // If user hasn't explicitly picked a custom pin on the map, sync to current user location
+      goToWizardStep(1);
+      const fallbackLat = Number(
+        (state.userLocation && typeof state.userLocation.lat === "number" ? state.userLocation.lat : null) ??
+        (state.activeCampus && typeof state.activeCampus.lat === "number" ? state.activeCampus.lat : null) ??
+        19.1334
+      );
+      const fallbackLng = Number(
+        (state.userLocation && typeof state.userLocation.lng === "number" ? state.userLocation.lng : null) ??
+        (state.activeCampus && typeof state.activeCampus.lng === "number" ? state.activeCampus.lng : null) ??
+        72.9133
+      );
       if (!state.selectedPickupCoords || !state.selectedPickupCoords.isCustom) {
         state.selectedPickupCoords = {
-          lat: state.userLocation.lat,
-          lng: state.userLocation.lng,
-          accuracy: state.userLocation.accuracy || 10,
-          landmark: state.selectedPickupCoords?.landmark || (state.userLocation.isLiveGPS ? "Live GPS Location" : "Campus Location"),
+          lat: fallbackLat,
+          lng: fallbackLng,
+          accuracy: state.userLocation?.accuracy || 10,
+          landmark: state.selectedPickupCoords?.landmark || (state.userLocation?.isLiveGPS ? "Live GPS Location" : (state.activeCampus?.name || "Campus Location")),
           isCustom: false,
-          isLiveGPS: !!state.userLocation.isLiveGPS
+          isLiveGPS: !!state.userLocation?.isLiveGPS
         };
       }
       updateSellCoordsUI();
+      if (window.lucide) lucide.createIcons();
+    }
 
-      // Proactively acquire live GPS immediately if not yet locked
-      if (!state.userLocation.isLiveGPS && ("geolocation" in navigator)) {
-        navigator.geolocation.getCurrentPosition(
-          (pos) => {
-            const lat = pos.coords.latitude;
-            const lng = pos.coords.longitude;
-            const accuracy = Math.round(pos.coords.accuracy || 8);
-            state.userLocation = {
-              lat,
-              lng,
-              accuracy,
-              name: `📍 Live GPS (±${accuracy}m)`,
-              isLiveGPS: true
-            };
-            try {
-              localStorage.setItem("radarmarket_last_known_gps", JSON.stringify({ lat, lng, accuracy, timestamp: Date.now() }));
-            } catch (e) {}
-            if (!state.selectedPickupCoords || !state.selectedPickupCoords.isCustom) {
-              state.selectedPickupCoords = {
-                lat,
-                lng,
-                accuracy,
-                landmark: "Live GPS Location",
-                isCustom: false,
-                isLiveGPS: true
-              };
-            }
-            updateSellCoordsUI();
-          },
-          () => {},
-          { enableHighAccuracy: true, timeout: 8000 }
-        );
-      }
-    });
-    closeBtn.addEventListener("click", () => {
-      modal.classList.add("hidden");
+    if (openBtn) {
+      openBtn.addEventListener("click", openSellModalDirectly);
+      openBtn.onclick = openSellModalDirectly;
+    }
+    window.openBroadcastBeaconModal = openSellModalDirectly;
+
+    function closeSellModalDirectly() {
+      if (modal) modal.classList.add("hidden");
       clearUploadedPhoto();
-      liveCamera.close();
-      if (isbnScanner) isbnScanner.reset();
-    });
+      if (liveCamera && typeof liveCamera.close === "function") {
+        try { liveCamera.close(); } catch (e) {}
+      }
+      if (isbnScanner && typeof isbnScanner.reset === "function") {
+        try { isbnScanner.reset(); } catch (e) {}
+      }
+    }
+
+    if (closeBtn) {
+      closeBtn.addEventListener("click", closeSellModalDirectly);
+      closeBtn.onclick = closeSellModalDirectly;
+    }
+
     modal.addEventListener("click", (e) => {
       if (e.target === modal) {
-        modal.classList.add("hidden");
-        clearUploadedPhoto();
-        liveCamera.close();
-        if (isbnScanner) isbnScanner.reset();
+        closeSellModalDirectly();
       }
     });
 
-    form.addEventListener("submit", async (e) => {
-      e.preventDefault();
+    // Form Submit & Button Click Handler
+    let isBroadcasting = false;
+    async function submitBroadcastBeacon(e) {
+      if (e && e.preventDefault) e.preventDefault();
+      if (isBroadcasting) return;
 
-      const category = form.querySelector("input[name='sell-category']:checked").value;
-      const beaconType = form.querySelector("input[name='sell-beacon-type']:checked")?.value || "sell";
-      const defaultSubcat = 
-        category === "books" ? "Textbook" :
-        category === "hostel" ? "Hostel Essential" :
-        category === "lab" ? "Lab Gear" :
-        category === "tech" ? "Tech Gadget" : "Stationery";
-      const subCategory = document.getElementById("sell-subcategory").value.trim() || defaultSubcat;
-      const condition = document.getElementById("sell-condition").value;
-      const price = parseFloat(document.getElementById("sell-price").value);
-      const origPriceVal = document.getElementById("sell-orig-price").value;
-      const originalPrice = origPriceVal ? parseFloat(origPriceVal) : Math.round(price * 1.6);
-      const upiId = document.getElementById("sell-upi-id") ? document.getElementById("sell-upi-id").value.trim() : "";
-      const landmark = document.getElementById("sell-landmark").value.trim();
-      const description = document.getElementById("sell-desc").value.trim();
-      
-      let image = uploadedPhotoBase64 || document.getElementById("sell-image").value.trim();
+      const title = document.getElementById("sell-title")?.value?.trim() || "";
+      const priceInputEl = document.getElementById("sell-price");
+      const priceRaw = priceInputEl?.value;
+      const price = parseFloat(priceRaw || "0");
 
-      if (!image) {
-        const presets = PRESET_PHOTOS[category] || PRESET_PHOTOS.stationery;
-        image = presets[Math.floor(Math.random() * presets.length)];
-      }
-
-      // Ensure we acquire live GPS coordinates before broadcasting if not yet locked
-      if (!state.userLocation.isLiveGPS && (!state.selectedPickupCoords || !state.selectedPickupCoords.isCustom) && ("geolocation" in navigator)) {
-        await new Promise((resolve) => {
-          navigator.geolocation.getCurrentPosition(
-            (pos) => {
-              const lat = pos.coords.latitude;
-              const lng = pos.coords.longitude;
-              const acc = Math.round(pos.coords.accuracy || 8);
-              state.userLocation = {
-                lat,
-                lng,
-                accuracy: acc,
-                name: `📍 Live GPS (±${acc}m)`,
-                isLiveGPS: true
-              };
-              try {
-                localStorage.setItem("radarmarket_last_known_gps", JSON.stringify({ lat, lng, accuracy: acc, timestamp: Date.now() }));
-              } catch (e) {}
-              state.selectedPickupCoords = {
-                lat,
-                lng,
-                accuracy: acc,
-                landmark: state.selectedPickupCoords?.landmark || "Live Location",
-                isCustom: false,
-                isLiveGPS: true
-              };
-              resolve();
-            },
-            () => resolve(),
-            { enableHighAccuracy: true, timeout: 2500 }
-          );
-        });
-      }
-
-      // Determine final coordinates:
-      // ALWAYS prioritize verified device live GPS coordinates!
-      let finalLat, finalLng;
-      if (state.userLocation && state.userLocation.isLiveGPS && typeof state.userLocation.lat === "number") {
-        finalLat = state.userLocation.lat;
-        finalLng = state.userLocation.lng;
-      } else if (state.selectedPickupCoords && typeof state.selectedPickupCoords.lat === "number") {
-        finalLat = state.selectedPickupCoords.lat;
-        finalLng = state.selectedPickupCoords.lng;
-      } else if (state.userLocation && typeof state.userLocation.lat === "number") {
-        finalLat = state.userLocation.lat;
-        finalLng = state.userLocation.lng;
-      } else {
-        showToast("GPS REQUIRED", "Acquiring satellites... Please tap 'USE EXACT GPS' or allow location.");
+      // Validate title & price with wizard step redirection
+      if (!title) {
+        showToast("TITLE REQUIRED", "Please enter a title for your beacon.");
+        goToWizardStep(2);
+        const titleEl = document.getElementById("sell-title");
+        if (titleEl) {
+          titleEl.focus();
+          titleEl.classList.add("border-amber-400");
+          setTimeout(() => titleEl.classList.remove("border-amber-400"), 2000);
+        }
         return;
       }
 
-      const itemPayload = {
-        title,
-        category,
-        sub_category: subCategory,
-        subCategory,
-        price,
-        original_price: originalPrice,
-        originalPrice,
-        condition,
-        condition_score: condition === "Like New" ? 0.95 : condition === "Good" ? 0.85 : 0.7,
-        conditionScore: condition === "Like New" ? 0.95 : condition === "Good" ? 0.85 : 0.7,
-        lat: finalLat,
-        lng: finalLng,
-        landmark,
-        description,
-        image,
-        beacon_type: beaconType,
-        upi_id: upiId,
-        tags: [category, condition.toLowerCase(), beaconType, ...title.toLowerCase().split(" ")].slice(0, 6)
-      };
-
-      let newItem = null;
-      if (window.MarketAPI) {
-        newItem = await MarketAPI.createItem(itemPayload);
-      } else {
-        newItem = MarketData.addNewListing(itemPayload);
+      if (priceRaw === "" || priceRaw === undefined || priceRaw === null || isNaN(price) || price < 0) {
+        showToast("PRICE REQUIRED", "Please specify a valid selling price in ₹.");
+        goToWizardStep(2);
+        if (priceInputEl) {
+          priceInputEl.focus();
+          priceInputEl.classList.add("border-amber-400");
+          setTimeout(() => priceInputEl.classList.remove("border-amber-400"), 2000);
+        }
+        return;
       }
 
-      // Reset & close
-      form.reset();
-      if (isbnScanner) isbnScanner.reset();
-      clearUploadedPhoto();
-      modal.classList.add("hidden");
+      isBroadcasting = true;
+      if (btnSubmit) {
+        btnSubmit.disabled = true;
+        btnSubmit.innerHTML = `<span class="inline-block w-4 h-4 border-2 border-slate-950 border-t-transparent rounded-full animate-spin"></span><span>Broadcasting...</span>`;
+      }
 
-      // Refresh market and select new item
-      await refreshMarket();
-      updateMyBeaconsBadge();
+      try {
+        const category = form.querySelector("input[name='sell-category']:checked")?.value || "electronics";
+        const beaconType = form.querySelector("input[name='sell-beacon-type']:checked")?.value || "sell";
+        const subCategory = (subcatSelect ? subcatSelect.value.trim() : "") || "Item";
+        const conditionRadio = form.querySelector("input[name='sell-condition']:checked");
+        const condition = conditionRadio ? conditionRadio.value : "Good";
+        const conditionScore = parseFloat(conditionSlider ? conditionSlider.value : "0.85") || 0.85;
+        const origPriceVal = document.getElementById("sell-original-price")?.value;
+        const originalPrice = origPriceVal ? parseFloat(origPriceVal) : Math.round(price * 1.5);
+        const upiId = document.getElementById("sell-upi-id") ? document.getElementById("sell-upi-id").value.trim() : "";
+        const description = document.getElementById("sell-desc")?.value?.trim() || "";
 
-      if (newItem) {
-        const newTarget = state.filteredItems.find((t) => t.item.id === newItem.id);
-        if (newTarget) {
-          selectTarget(newTarget);
+        // Safe Landmark Resolution
+        let safeLandmark = landmarkSelect ? landmarkSelect.value : "";
+        if (safeLandmark === "custom" || customLandmarkInput?.value?.trim()) {
+          safeLandmark = customLandmarkInput?.value?.trim() || safeLandmark;
+        }
+        if (!safeLandmark || safeLandmark === "custom") {
+          safeLandmark = state.activeCampus?.name || "Campus Location";
+        }
+
+        // Collect Dynamic Spec Attributes
+        const itemAttributes = {};
+        if (dynamicSpecsBox) {
+          const specInputs = dynamicSpecsBox.querySelectorAll("[data-spec-key]");
+          specInputs.forEach((inp) => {
+            const val = (inp.value || "").trim();
+            if (val) {
+              itemAttributes[inp.dataset.specKey] = val;
+            }
+          });
+        }
+
+        let image = uploadedPhotoBase64 || document.getElementById("sell-image")?.value?.trim();
+        if (!image) {
+          const presets = PRESET_PHOTOS[category] || PRESET_PHOTOS.electronics;
+          image = presets[Math.floor(Math.random() * presets.length)];
+        }
+
+        let finalLat = Number(
+          (state.selectedPickupCoords && typeof state.selectedPickupCoords.lat === "number" ? state.selectedPickupCoords.lat : null) ??
+          (state.activeCampus && typeof state.activeCampus.lat === "number" ? state.activeCampus.lat : null) ??
+          (state.userLocation && typeof state.userLocation.lat === "number" ? state.userLocation.lat : null) ??
+          19.1334
+        );
+        let finalLng = Number(
+          (state.selectedPickupCoords && typeof state.selectedPickupCoords.lng === "number" ? state.selectedPickupCoords.lng : null) ??
+          (state.activeCampus && typeof state.activeCampus.lng === "number" ? state.activeCampus.lng : null) ??
+          (state.userLocation && typeof state.userLocation.lng === "number" ? state.userLocation.lng : null) ??
+          72.9133
+        );
+        if (isNaN(finalLat) || !isFinite(finalLat)) finalLat = 19.1334;
+        if (isNaN(finalLng) || !isFinite(finalLng)) finalLng = 72.9133;
+
+        const itemPayload = {
+          title,
+          category,
+          sub_category: subCategory,
+          subCategory,
+          price,
+          original_price: originalPrice,
+          originalPrice,
+          condition,
+          condition_score: conditionScore,
+          conditionScore,
+          lat: finalLat,
+          lng: finalLng,
+          landmark: safeLandmark,
+          safe_landmark: safeLandmark,
+          description,
+          image,
+          beacon_type: beaconType,
+          upi_id: upiId,
+          upi_vpa: upiId,
+          upi_qr_image: uploadedUpiQrBase64,
+          item_attributes: itemAttributes,
+          tags: [category, condition.toLowerCase(), beaconType, ...title.toLowerCase().split(" ")].slice(0, 6)
+        };
+
+        let newItem = null;
+        if (window.MarketAPI) {
+          newItem = await MarketAPI.createItem(itemPayload);
+        } else {
+          newItem = MarketData.addNewListing(itemPayload);
+        }
+
+        // Reset & close
+        if (form) form.reset();
+        clearUploadedPhoto();
+        uploadedUpiQrBase64 = null;
+        if (upiQrPreviewBox) upiQrPreviewBox.classList.add("hidden");
+        if (isbnScanner && typeof isbnScanner.reset === "function") {
+          try { isbnScanner.reset(); } catch (e) {}
+        }
+        if (modal) modal.classList.add("hidden");
+        goToWizardStep(1);
+
+        // Reset category filter & search query so the newly broadcasted beacon is guaranteed visible on the radar
+        state.searchQuery = "";
+        const searchInput = document.getElementById("search-input");
+        if (searchInput) searchInput.value = "";
+
+        state.selectedCategory = beaconType === "wanted" ? "wanted" : "all";
+        const filterBtns = document.querySelectorAll(".filter-category-btn");
+        filterBtns.forEach((btn) => {
+          if (btn.dataset.category === state.selectedCategory) {
+            btn.className = "filter-category-btn active px-3 py-1.5 rounded-md bg-cyan-950 text-cyan-300 font-bold border border-cyan-500/50 shadow-[0_0_10px_rgba(0,229,255,0.2)] transition shrink-0";
+          } else {
+            btn.className = "filter-category-btn px-3 py-1.5 rounded-md text-slate-400 hover:text-slate-200 transition shrink-0";
+          }
+        });
+
+        // Refresh market and select new item
+        await refreshMarket();
+        updateMyBeaconsBadge();
+
+        if (newItem) {
+          const newTarget = state.filteredItems.find((t) => t.item.id === newItem.id);
+          if (newTarget) {
+            selectTarget(newTarget);
+          }
+        }
+
+        const alertMsg = beaconType === "wanted" 
+          ? `Wanted Request for "${title}" is pulsing on all nearby radars!` 
+          : `"${title}" is now active on all nearby radargrams!`;
+        showToast(beaconType === "wanted" ? "WANTED BEACON ACTIVE" : "BEACON BROADCASTED", alertMsg);
+
+        if (radarEngine && state.audioEnabled) {
+          radarEngine.playSonarPing(beaconType === "wanted" ? 1400 : 1200, 0.1);
+        }
+      } catch (err) {
+        console.error("Broadcast submission error:", err);
+        showToast("BROADCAST FAILED", err.message || "Could not publish listing.");
+      } finally {
+        isBroadcasting = false;
+        if (btnSubmit) {
+          btnSubmit.disabled = false;
+          const currentType = form?.querySelector("input[name='sell-beacon-type']:checked")?.value;
+          const label = currentType === "wanted" ? "BROADCAST WANTED REQUEST" : "ACTIVATE BEACON";
+          btnSubmit.innerHTML = `<i data-lucide="radio" class="w-4 h-4"></i><span id="btn-submit-beacon-text">${label}</span>`;
+          if (window.lucide) lucide.createIcons();
+        }
+      }
+    }
+
+    if (form) form.addEventListener("submit", submitBroadcastBeacon);
+    if (btnSubmit) {
+      btnSubmit.addEventListener("click", submitBroadcastBeacon);
+      btnSubmit.onclick = submitBroadcastBeacon;
+    }
+    window.submitBroadcastBeacon = submitBroadcastBeacon;
+  }
+
+  /**
+   * Setup Phone Auth Modal (+91 OTP Verification Flow)
+   */
+  function setupPhoneAuthModal() {
+    const modal = document.getElementById("modal-phone-auth");
+    const closeBtn = document.getElementById("btn-close-phone-modal");
+    const stepInput = document.getElementById("phone-step-input");
+    const stepVerify = document.getElementById("phone-step-verify");
+    const phoneInput = document.getElementById("phone-number-input");
+    const btnSendOtp = document.getElementById("btn-send-phone-otp");
+    const btnSendOtpText = document.getElementById("btn-send-otp-text");
+    const targetDisplay = document.getElementById("phone-target-display");
+    const otpInput = document.getElementById("phone-otp-input");
+    const btnConfirmOtp = document.getElementById("btn-confirm-phone-otp");
+    const btnVerifyOtpText = document.getElementById("btn-verify-otp-text");
+    const debugHint = document.getElementById("phone-otp-debug-hint");
+    const debugCodeEl = document.getElementById("phone-debug-code");
+    const btnAutofill = document.getElementById("btn-phone-autofill-otp");
+    const resendTimer = document.getElementById("phone-resend-timer");
+    const btnResend = document.getElementById("btn-phone-resend-otp");
+    const btnChangeNum = document.getElementById("btn-phone-change-number");
+
+    if (!modal) return;
+
+    let countdownInterval = null;
+    let activePhone = "";
+
+    function openPhoneModal() {
+      modal.classList.remove("hidden");
+      if (stepInput) stepInput.classList.remove("hidden");
+      if (stepVerify) stepVerify.classList.add("hidden");
+      if (phoneInput) {
+        phoneInput.focus();
+      }
+      if (window.lucide) lucide.createIcons();
+    }
+    window.openPhoneAuthModal = openPhoneModal;
+
+    if (closeBtn) closeBtn.addEventListener("click", () => modal.classList.add("hidden"));
+    modal.addEventListener("click", (e) => {
+      if (e.target === modal) modal.classList.add("hidden");
+    });
+
+    function startTimer(durationSecs) {
+      if (countdownInterval) clearInterval(countdownInterval);
+      let remaining = durationSecs;
+      if (btnResend) btnResend.classList.add("hidden");
+      if (resendTimer) {
+        resendTimer.classList.remove("hidden");
+        resendTimer.textContent = `Resend code in ${remaining}s`;
+      }
+
+      countdownInterval = setInterval(() => {
+        remaining--;
+        if (remaining <= 0) {
+          clearInterval(countdownInterval);
+          if (resendTimer) resendTimer.classList.add("hidden");
+          if (btnResend) btnResend.classList.remove("hidden");
+        } else {
+          if (resendTimer) resendTimer.textContent = `Resend code in ${remaining}s`;
+        }
+      }, 1000);
+    }
+
+    // Only allow digits in phone input
+    if (phoneInput) {
+      phoneInput.addEventListener("input", (e) => {
+        e.target.value = e.target.value.replace(/\D/g, "").slice(0, 10);
+      });
+    }
+
+    async function handleSendOtp() {
+      const num = phoneInput ? phoneInput.value.trim() : "";
+      if (!num || num.length !== 10) {
+        showToast("INVALID NUMBER", "Please enter a valid 10-digit Indian mobile number.");
+        phoneInput?.focus();
+        return;
+      }
+
+      activePhone = num;
+      if (btnSendOtp) btnSendOtp.disabled = true;
+      if (btnSendOtpText) btnSendOtpText.textContent = "Sending OTP...";
+
+      try {
+        const res = await MarketAPI.sendPhoneOtp(num);
+        if (res.success) {
+          if (stepInput) stepInput.classList.add("hidden");
+          if (stepVerify) stepVerify.classList.remove("hidden");
+          if (targetDisplay) targetDisplay.textContent = `+91 ${num}`;
+          if (otpInput) {
+            otpInput.value = "";
+            otpInput.focus();
+          }
+
+          if (res.debug_otp && debugHint && debugCodeEl) {
+            debugCodeEl.textContent = res.debug_otp;
+            debugHint.classList.remove("hidden");
+          }
+
+          startTimer(60);
+          showToast("OTP SENT", `Verification code dispatched to +91 ${num}`);
+        } else {
+          showToast("OTP ERROR", res.error || "Could not send OTP.");
+        }
+      } catch (err) {
+        showToast("OTP ERROR", err.message || "Failed to send OTP.");
+      } finally {
+        if (btnSendOtp) btnSendOtp.disabled = false;
+        if (btnSendOtpText) btnSendOtpText.textContent = "Send 6-Digit OTP";
+      }
+    }
+
+    if (btnSendOtp) btnSendOtp.addEventListener("click", handleSendOtp);
+    if (btnResend) btnResend.addEventListener("click", handleSendOtp);
+
+    if (btnAutofill && debugCodeEl && otpInput) {
+      btnAutofill.addEventListener("click", () => {
+        otpInput.value = debugCodeEl.textContent;
+      });
+    }
+
+    if (btnChangeNum) {
+      btnChangeNum.addEventListener("click", () => {
+        if (stepVerify) stepVerify.classList.add("hidden");
+        if (stepInput) stepInput.classList.remove("hidden");
+        if (countdownInterval) clearInterval(countdownInterval);
+      });
+    }
+
+    if (btnConfirmOtp) {
+      btnConfirmOtp.addEventListener("click", async () => {
+        const otp = otpInput ? otpInput.value.trim() : "";
+        if (!otp || otp.length !== 6) {
+          showToast("INVALID OTP", "Please enter the 6-digit code.");
+          otpInput?.focus();
+          return;
+        }
+
+        btnConfirmOtp.disabled = true;
+        if (btnVerifyOtpText) btnVerifyOtpText.textContent = "Verifying...";
+
+        try {
+          const res = await MarketAPI.verifyPhoneOtp(activePhone, otp);
+          if (res.success) {
+            modal.classList.add("hidden");
+            if (countdownInterval) clearInterval(countdownInterval);
+
+            // Update user state and badges
+            const user = MarketAPI.getCurrentUser();
+            if (user) {
+              user.phone_verified = true;
+              user.phone_number = res.phone_number || activePhone;
+              try {
+                localStorage.setItem("radarmarket_google_user", JSON.stringify(user));
+              } catch (e) {}
+              updateProfileUI(user);
+            }
+
+            const phoneBadge = document.getElementById("sell-poster-phone-badge");
+            if (phoneBadge) phoneBadge.classList.remove("hidden");
+
+            showToast("PHONE VERIFIED 🛡️", "Your account now displays the Phone Verified trust badge!");
+            await refreshMarket();
+          } else {
+            showToast("VERIFICATION FAILED", res.error || "Incorrect OTP.");
+          }
+        } catch (err) {
+          showToast("VERIFICATION FAILED", err.message || "Network error.");
+        } finally {
+          btnConfirmOtp.disabled = false;
+          if (btnVerifyOtpText) btnVerifyOtpText.textContent = "Verify & Unlock Badge";
+        }
+      });
+    }
+  }
+
+  /**
+   * Setup Universal UPI P2P Checkout & Settlement Modal
+   */
+  function setupUpiPaymentModal() {
+    const modal = document.getElementById("modal-upi-payment");
+    const closeBtn = document.getElementById("btn-close-upi-modal");
+    const amountEl = document.getElementById("upi-modal-amount");
+    const titleEl = document.getElementById("upi-modal-title");
+    const qrImg = document.getElementById("upi-modal-qr-img");
+    const vpaEl = document.getElementById("upi-modal-vpa");
+    const btnCopyVpa = document.getElementById("btn-copy-upi-vpa");
+    const copyText = document.getElementById("btn-copy-upi-text");
+    const deeplink = document.getElementById("btn-upi-deeplink");
+    const utrInput = document.getElementById("upi-buyer-utr-input");
+    const btnDeclarePaid = document.getElementById("btn-declare-upi-paid");
+
+    if (!modal) return;
+
+    let currentItem = null;
+    let currentAmount = 0;
+
+    function openUpiModal(item, agreedPrice) {
+      if (!item) return;
+      currentItem = item;
+      currentAmount = agreedPrice || item.price || 0;
+
+      if (titleEl) titleEl.textContent = item.title;
+      if (amountEl) amountEl.textContent = `₹${currentAmount}`;
+
+      const vpa = item.upi_vpa || item.upi_id || "radarmarket.pay@okhdfcbank";
+      if (vpaEl) vpaEl.textContent = vpa;
+
+      const sellerName = item.seller?.name || item.seller_name || "Radar Seller";
+      const cleanTitle = (item.title || "Radar Market").replace(/[^a-zA-Z0-9 ]/g, "").slice(0, 30);
+      const upiUrl = `upi://pay?pa=${encodeURIComponent(vpa)}&pn=${encodeURIComponent(sellerName)}&am=${currentAmount}&cu=INR&tn=${encodeURIComponent(cleanTitle)}`;
+
+      if (deeplink) {
+        deeplink.href = upiUrl;
+      }
+
+      // If seller uploaded a static custom UPI QR screenshot, prioritize it!
+      if (item.upi_qr_image) {
+        if (qrImg) qrImg.src = item.upi_qr_image;
+      } else {
+        if (qrImg) {
+          qrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(upiUrl)}&bgcolor=ffffff&color=070b12`;
         }
       }
 
-      const alertMsg = beaconType === "wanted" 
-        ? `Wanted Request for "${title}" is pulsing on all nearby radars!` 
-        : `"${title}" is now active on all nearby radargrams!`;
-      showToast(beaconType === "wanted" ? "WANTED BEACON ACTIVE" : "BEACON BROADCASTED", alertMsg);
+      if (utrInput) utrInput.value = "";
+      modal.classList.remove("hidden");
+      if (window.lucide) lucide.createIcons();
+    }
+    window.openUpiPaymentModal = openUpiModal;
 
-      if (radarEngine && state.audioEnabled) {
-        radarEngine.playSonarPing(beaconType === "wanted" ? 1400 : 1200, 0.1);
-      }
+    if (closeBtn) closeBtn.addEventListener("click", () => modal.classList.add("hidden"));
+    modal.addEventListener("click", (e) => {
+      if (e.target === modal) modal.classList.add("hidden");
     });
+
+    if (btnCopyVpa) {
+      btnCopyVpa.addEventListener("click", () => {
+        const vpa = vpaEl ? vpaEl.textContent : "";
+        if (navigator.clipboard && vpa) {
+          navigator.clipboard.writeText(vpa);
+          if (copyText) copyText.textContent = "Copied!";
+          setTimeout(() => {
+            if (copyText) copyText.textContent = "Copy";
+          }, 2000);
+          showToast("UPI ID COPIED", `${vpa} copied to clipboard.`);
+        }
+      });
+    }
+
+    if (btnDeclarePaid) {
+      btnDeclarePaid.addEventListener("click", async () => {
+        if (!currentItem) return;
+        const utr = utrInput ? utrInput.value.trim() : "";
+        btnDeclarePaid.disabled = true;
+        btnDeclarePaid.innerHTML = `<span class="inline-block w-3.5 h-3.5 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin"></span><span>Declaring...</span>`;
+
+        try {
+          if (window.MarketAPI) {
+            await MarketAPI.declareUpiPayment({
+              item_id: currentItem.id,
+              utr,
+              amount: currentAmount
+            });
+          }
+
+          modal.classList.add("hidden");
+          showToast("PAYMENT DECLARED ✓", "The seller has been notified. They can acknowledge receipt in chat.");
+        } catch (err) {
+          showToast("DECLARATION ERROR", err.message || "Could not record payment declaration.");
+        } finally {
+          btnDeclarePaid.disabled = false;
+          btnDeclarePaid.innerHTML = `<i data-lucide="check" class="w-3.5 h-3.5"></i><span>I Have Completed UPI Payment</span>`;
+        }
+      });
+    }
   }
 
   /**
@@ -5256,6 +6081,18 @@
         }
       }
 
+      const phoneBtnText = document.getElementById("btn-auth-verify-phone-text");
+      const phoneBtn = document.getElementById("btn-auth-verify-phone");
+      if (phoneBtnText && phoneBtn) {
+        if (user && user.phone_verified) {
+          phoneBtnText.textContent = `✓ Phone Verified (+91 ${user.phone_number || 'Linked'})`;
+          phoneBtn.className = "w-full py-2.5 px-3 rounded-lg bg-cyan-950/60 border border-cyan-500/50 text-cyan-300 font-bold transition flex items-center justify-center gap-1.5 cursor-default";
+        } else {
+          phoneBtnText.textContent = "🛡️ Verify Phone (+91) for Trust Badge";
+          phoneBtn.className = "w-full py-2.5 px-3 rounded-lg bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-500/50 text-emerald-300 font-bold transition flex items-center justify-center gap-1.5 cursor-pointer";
+        }
+      }
+
       if (bonusText) {
         bonusText.textContent = isCampus ? "Trust Index Boost: +30 Points (Campus Verified)" : "Trust Index Boost: +20 Points (Google Verified)";
       }
@@ -5278,6 +6115,7 @@
     const openBtn = document.getElementById("btn-open-google-auth");
     const openBtnFromSell = document.getElementById("btn-sell-switch-google");
     const closeBtn = document.getElementById("btn-close-google-auth-modal");
+    const verifyPhoneBtn = document.getElementById("btn-auth-verify-phone");
     const signoutBtn = document.getElementById("btn-google-signout");
     const myBeaconsBtn = document.getElementById("btn-auth-my-beacons");
     const clientIdInput = document.getElementById("input-google-client-id");
@@ -5289,8 +6127,20 @@
     const domainChips = modal.querySelectorAll(".btn-domain-chip");
     const gisStatusFeedback = document.getElementById("gis-status-feedback");
     const gisPromptText = document.getElementById("btn-trigger-gis-text");
+    const triggerGisBtn = document.getElementById("btn-trigger-gis-prompt") || document.getElementById("btn-trigger-gis");
+    const editGoogleNicknameForm = document.getElementById("form-edit-google-nickname");
+    const guestNicknameForm = document.getElementById("form-guest-nickname");
 
     if (!modal) return;
+
+    if (verifyPhoneBtn) {
+      verifyPhoneBtn.addEventListener("click", () => {
+        modal.classList.add("hidden");
+        if (window.openPhoneAuthModal) {
+          window.openPhoneAuthModal();
+        }
+      });
+    }
 
     // Load saved client ID into input
     if (clientIdInput && window.MarketAPI) {
@@ -5702,7 +6552,7 @@
     const upiIdDisplay = document.getElementById("chat-upi-id-display");
     const upiQrImg = document.getElementById("chat-upi-qr-img");
 
-    if (upiPayBtn && upiSheet) {
+    if (upiPayBtn) {
       upiPayBtn.addEventListener("click", () => {
         let target = state.selectedTarget;
         if (!target && state.activeChatId) {
@@ -5710,23 +6560,12 @@
         }
         if (!target) return;
         const item = target.item;
-        const upiId = item.upi_id || "campus-trade@okhdfcbank";
-        const sellerName = item.seller?.name || item.seller_name || "Campus Seller";
         const effectivePrice = state.activeChatAgreedPrice || item.agreed_price || item.price;
-        const upiUrl = `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(sellerName)}&am=${effectivePrice}&tn=${encodeURIComponent(item.title)}`;
-
-        if (upiAmount) {
-          if (effectivePrice < item.price) {
-            upiAmount.innerHTML = `<span class="line-through text-slate-500 text-xs mr-1">₹${item.price}</span>₹${effectivePrice} <span class="text-[9px] text-emerald-400 bg-emerald-950 px-1.5 py-0.5 rounded border border-emerald-500/40 font-bold">BARGAIN DEAL</span>`;
-          } else {
-            upiAmount.textContent = `₹${effectivePrice}`;
-          }
+        if (window.openUpiPaymentModal) {
+          window.openUpiPaymentModal(item, effectivePrice);
+        } else if (upiSheet) {
+          upiSheet.classList.remove("hidden");
         }
-        if (upiIdDisplay) upiIdDisplay.textContent = upiId;
-        if (upiQrImg) {
-          upiQrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(upiUrl)}&bgcolor=0d1522&color=00ff9d`;
-        }
-        upiSheet.classList.remove("hidden");
       });
 
       if (closeUpiBtn) {
@@ -7245,7 +8084,7 @@
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => {
         navigator.serviceWorker
-          .register("/sw.js?v=3.8.2")
+          .register("/sw.js?v=3.0.2")
           .then((reg) => {
             console.log("[PWA] Service Worker registered with scope:", reg.scope);
             // Force active update check on every load
@@ -7274,7 +8113,7 @@
     const bannerDismissBtn = document.getElementById("btn-pwa-banner-dismiss");
 
     // Check if already running in standalone PWA mode
-    const isStandalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+    const isStandalone = (typeof window.matchMedia === "function" && window.matchMedia("(display-mode: standalone)")?.matches) || window.navigator?.standalone === true;
     if (isStandalone) {
       console.log("[PWA] Running in standalone mode");
       if (headerInstallBtn) headerInstallBtn.classList.add("hidden");
