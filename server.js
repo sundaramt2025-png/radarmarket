@@ -4,13 +4,22 @@
  */
 
 require('dotenv').config();
+const http = require('http');
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const crypto = require('crypto');
+const { Server } = require('socket.io');
 const db = require('./db');
 
 const app = express();
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: '*',
+    methods: ['GET', 'POST', 'PATCH', 'DELETE']
+  }
+});
 const PORT = process.env.PORT || 5000;
 
 // Middleware
@@ -47,6 +56,25 @@ function haversineMeters(lat1, lon1, lat2, lon2) {
       Math.sin(dLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
+}
+
+// Helper: extract authenticated user from Authorization header or X-Device-Id
+async function getAuthUser(req) {
+  try {
+    const authHeader = req.headers.authorization;
+    const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    const deviceId = req.headers['x-device-id'];
+
+    if (token) {
+      const resToken = await db.query('SELECT * FROM users WHERE session_token = $1', [token]);
+      if (resToken.rows.length > 0) return resToken.rows[0];
+    }
+    if (deviceId) {
+      const resDev = await db.query('SELECT * FROM users WHERE id = $1', [deviceId]);
+      if (resDev.rows.length > 0) return resDev.rows[0];
+    }
+  } catch (e) {}
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -810,14 +838,188 @@ app.post('/api/offers/:offer_id/respond', async (req, res) => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// 5. SECURE PRIVATE REAL-TIME CHAT & MESSAGING (SOCKET.IO & REST)
+// Strict Room Scoping (chat_${listingId}_${buyerId}) to Prevent Global Data Leaks
+// ---------------------------------------------------------------------------
+
+// Helper: Authorize listing participant (buyer or seller)
+async function authorizeChatParticipant(listingId, userId, requestedBuyerId = null) {
+  if (!listingId || !userId) return { authorized: false, reason: 'Missing listingId or userId' };
+
+  const itemRes = await db.query('SELECT * FROM beacons WHERE id = $1', [listingId]);
+  if (itemRes.rows.length === 0) {
+    return { authorized: false, reason: 'Listing not found' };
+  }
+
+  const item = itemRes.rows[0];
+  const isSeller = (userId === item.seller_id || userId === item.seller_google_id);
+
+  if (isSeller) {
+    return {
+      authorized: true,
+      role: 'seller',
+      item,
+      sellerId: item.seller_id,
+      buyerId: requestedBuyerId || null
+    };
+  }
+
+  // If not seller, user is a buyer
+  return {
+    authorized: true,
+    role: 'buyer',
+    item,
+    sellerId: item.seller_id,
+    buyerId: userId
+  };
+}
+
+// Socket.io Connection & Scoped Room Events
+io.on('connection', (socket) => {
+  // 1. Join a strictly scoped private room: chat_${listingId}_${buyerId}
+  socket.on('join_room', async (data) => {
+    try {
+      const { listing_id, buyer_id, user_id } = data || {};
+      if (!listing_id || !buyer_id || !user_id) {
+        return socket.emit('error', { message: 'listing_id, buyer_id, and user_id are required' });
+      }
+
+      const auth = await authorizeChatParticipant(listing_id, user_id, buyer_id);
+      if (!auth.authorized) {
+        return socket.emit('error', { message: auth.reason });
+      }
+
+      // Verify that if caller is buyer, buyer_id matches their own ID
+      if (auth.role === 'buyer' && buyer_id !== user_id) {
+        return socket.emit('error', { message: 'Unauthorized: Buyers cannot access other buyers rooms' });
+      }
+
+      const roomId = `chat_${listing_id}_${buyer_id}`;
+      socket.join(roomId);
+      socket.emit('joined_room', { roomId, listing_id, buyer_id });
+    } catch (err) {
+      socket.emit('error', { message: err.message });
+    }
+  });
+
+  // 2. Leave room
+  socket.on('leave_room', (data) => {
+    const { roomId } = data || {};
+    if (roomId) socket.leave(roomId);
+  });
+
+  // 3. Send message through WebSocket with strict room emission
+  socket.on('send_message', async (data) => {
+    try {
+      const { listing_id, buyer_id, sender_id, text, sender_name, sender_email, sender_avatar } = data || {};
+      if (!listing_id || !buyer_id || !sender_id || !text || !text.trim()) {
+        return socket.emit('error', { message: 'Missing required message parameters' });
+      }
+
+      const auth = await authorizeChatParticipant(listing_id, sender_id, buyer_id);
+      if (!auth.authorized) {
+        return socket.emit('error', { message: auth.reason });
+      }
+
+      if (auth.role === 'buyer' && buyer_id !== sender_id) {
+        return socket.emit('error', { message: 'Unauthorized sender for this room' });
+      }
+
+      const receiverId = auth.role === 'seller' ? buyer_id : auth.sellerId;
+      const roomId = `chat_${listing_id}_${buyer_id}`;
+      const now = nowSec();
+
+      // Database-backed chat storage in PostgreSQL
+      const insertQuery = `
+        INSERT INTO messages (
+          listing_id, item_id, room_id, sender_id, receiver_id, buyer_id,
+          sender_name, sender_email, sender_avatar, message_text, text, created_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        RETURNING *;
+      `;
+      const result = await db.query(insertQuery, [
+        listing_id,
+        listing_id,
+        roomId,
+        sender_id,
+        receiverId,
+        buyer_id,
+        sender_name || 'Student',
+        sender_email || '',
+        sender_avatar || '',
+        text.trim(),
+        text.trim(),
+        now
+      ]);
+
+      const savedMsg = result.rows[0];
+
+      // CRITICAL: Emit ONLY to the private room. No global broadcast!
+      io.to(roomId).emit('new_message', savedMsg);
+      io.to(roomId).emit('newChatMessage', savedMsg);
+    } catch (err) {
+      socket.emit('error', { message: err.message });
+    }
+  });
+});
+
 app.get('/api/chat/:item_id', async (req, res) => {
   try {
     const { item_id } = req.params;
-    const result = await db.query(
-      'SELECT * FROM messages WHERE item_id = $1 ORDER BY created_at ASC',
-      [item_id]
-    );
-    res.json({ messages: result.rows });
+    const authUser = await getAuthUser(req);
+    const callerId = req.headers['x-device-id'] || (authUser && authUser.id) || req.query.user_id || 'guest';
+    const callerGoogleId = authUser && authUser.google_id;
+    const requestedBuyerId = req.query.buyer_id;
+
+    // Check listing
+    const itemRes = await db.query('SELECT * FROM beacons WHERE id = $1', [item_id]);
+    if (itemRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Listing not found', messages: [] });
+    }
+    const item = itemRes.rows[0];
+    const isSeller = (callerId === item.seller_id || (callerGoogleId && callerGoogleId === item.seller_google_id));
+
+    let messages = [];
+
+    if (isSeller) {
+      // Seller can view a specific buyer's thread or all threads for their own listing
+      if (requestedBuyerId) {
+        const roomId = `chat_${item_id}_${requestedBuyerId}`;
+        const result = await db.query(
+          `SELECT * FROM messages 
+           WHERE (listing_id = $1 OR item_id = $1) 
+             AND (room_id = $2 OR buyer_id = $3 OR sender_id = $3 OR receiver_id = $3) 
+           ORDER BY created_at ASC`,
+          [item_id, roomId, requestedBuyerId]
+        );
+        messages = result.rows;
+      } else {
+        const result = await db.query(
+          `SELECT * FROM messages 
+           WHERE (listing_id = $1 OR item_id = $1) 
+           ORDER BY created_at ASC`,
+          [item_id]
+        );
+        messages = result.rows;
+      }
+    } else {
+      // Caller is a buyer: PRIVACY ENFORCEMENT
+      // A buyer can ONLY access their own thread with the seller
+      const buyerId = callerId;
+      const roomId = `chat_${item_id}_${buyerId}`;
+      const result = await db.query(
+        `SELECT * FROM messages 
+         WHERE (listing_id = $1 OR item_id = $1) 
+           AND (room_id = $2 OR buyer_id = $3 OR sender_id = $3 OR receiver_id = $3) 
+         ORDER BY created_at ASC`,
+        [item_id, roomId, buyerId]
+      );
+      messages = result.rows;
+    }
+
+    res.json({ success: true, messages });
   } catch (err) {
     res.status(500).json({ error: err.message, messages: [] });
   }
@@ -826,45 +1028,120 @@ app.get('/api/chat/:item_id', async (req, res) => {
 app.post('/api/chat/:item_id', async (req, res) => {
   try {
     const { item_id } = req.params;
-    const { text, sender_name, sender_id, sender_avatar, sender_email } = req.body;
+    const { text, sender_name, sender_id, sender_avatar, sender_email, buyer_id: reqBuyerId, receiver_id: reqReceiverId } = req.body;
+    const authUser = await getAuthUser(req);
+    const callerId = sender_id || req.headers['x-device-id'] || (authUser && authUser.id) || 'guest';
+    const callerGoogleId = authUser && authUser.google_id;
 
     if (!text || !text.trim()) {
       return res.status(400).json({ error: 'Message text required' });
     }
 
+    // Check listing
+    const itemRes = await db.query('SELECT * FROM beacons WHERE id = $1', [item_id]);
+    if (itemRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Listing not found' });
+    }
+    const item = itemRes.rows[0];
+    const isSeller = (callerId === item.seller_id || (callerGoogleId && callerGoogleId === item.seller_google_id));
+
+    let buyerId = null;
+    let receiverId = null;
+
+    if (isSeller) {
+      // Seller is messaging a buyer
+      buyerId = reqBuyerId || reqReceiverId;
+      if (!buyerId) {
+        // Fallback: lookup the most recent buyer who messaged this listing
+        const recent = await db.query(
+          `SELECT buyer_id, sender_id FROM messages 
+           WHERE (listing_id = $1 OR item_id = $1) AND sender_id != $2 
+           ORDER BY created_at DESC LIMIT 1`,
+          [item_id, callerId]
+        );
+        buyerId = recent.rows.length > 0 ? (recent.rows[0].buyer_id || recent.rows[0].sender_id) : 'buyer';
+      }
+      receiverId = buyerId;
+    } else {
+      // Caller is buyer messaging the seller
+      buyerId = callerId;
+      receiverId = item.seller_id;
+    }
+
+    const roomId = `chat_${item_id}_${buyerId}`;
     const now = nowSec();
-    const queryText = `
-      INSERT INTO messages (item_id, sender_id, sender_name, sender_email, sender_avatar, text, created_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
+
+    // Database-backed storage in PostgreSQL
+    const insertQuery = `
+      INSERT INTO messages (
+        listing_id, item_id, room_id, sender_id, receiver_id, buyer_id,
+        sender_name, sender_email, sender_avatar, message_text, text, created_at
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
       RETURNING *;
     `;
-    const result = await db.query(queryText, [
+    const result = await db.query(insertQuery, [
       item_id,
-      sender_id || req.headers['x-device-id'] || 'user',
-      sender_name || 'Student',
-      sender_email || '',
-      sender_avatar || '',
+      item_id,
+      roomId,
+      callerId,
+      receiverId,
+      buyerId,
+      sender_name || (authUser && authUser.nickname) || 'Student',
+      sender_email || (authUser && authUser.email) || '',
+      sender_avatar || (authUser && authUser.picture) || '',
+      text.trim(),
       text.trim(),
       now
     ]);
 
-    res.json({ success: true, message: result.rows[0] });
+    const savedMsg = result.rows[0];
+
+    // CRITICAL: Emit strictly to private room. Never emit globally.
+    io.to(roomId).emit('new_message', savedMsg);
+    io.to(roomId).emit('newChatMessage', savedMsg);
+
+    res.json({ success: true, message: savedMsg });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// Real-time synchronization event polling
+// Real-time synchronization event polling with strict caller message scoping
 app.get('/api/sync', async (req, res) => {
   try {
     const since = parseFloat(req.query.since || 0);
+    const authUser = await getAuthUser(req);
+    const callerId = req.headers['x-device-id'] || (authUser && authUser.id) || req.query.device_id || '';
+    const callerGoogleId = authUser && authUser.google_id;
+
+    // Filter sync events (general item updates)
     const result = await db.query(
       'SELECT * FROM sync_events WHERE created_at > $1 ORDER BY created_at ASC LIMIT 100',
       [since]
     );
-    res.json({ events: result.rows, timestamp: nowSec() });
+
+    // Filter chat messages STRICTLY to the caller (buyer or seller) to eliminate global leakage
+    let newMessages = [];
+    if (callerId || callerGoogleId) {
+      const msgRes = await db.query(
+        `SELECT * FROM messages 
+         WHERE created_at > $1 
+           AND (sender_id = $2 OR receiver_id = $2 OR buyer_id = $2 OR sender_id = $3 OR receiver_id = $3)
+         ORDER BY created_at ASC LIMIT 50`,
+        [since, callerId, callerGoogleId || callerId]
+      );
+      newMessages = msgRes.rows;
+    }
+
+    res.json({
+      success: true,
+      events: result.rows,
+      new_messages: newMessages,
+      timestamp: nowSec()
+    });
   } catch (err) {
-    res.status(500).json({ error: err.message, events: [] });
+    res.status(500).json({ error: err.message, events: [], new_messages: [] });
   }
 });
 
@@ -902,11 +1179,12 @@ async function startServer() {
     // 1. Initialize persistent PostgreSQL schema
     await db.initDatabase();
 
-    // 2. Start Express listener
-    app.listen(PORT, '0.0.0.0', () => {
+    // 2. Start HTTP + Socket.io listener
+    server.listen(PORT, '0.0.0.0', () => {
       console.log(`\n======================================================`);
       console.log(`🚀 RadarMarket Node.js server running on port ${PORT}`);
       console.log(`📡 Persistent Database: ${process.env.DATABASE_URL ? 'PostgreSQL Active (Render Cloud)' : 'Local Fallback'}`);
+      console.log(`💬 Private Socket.io Chat Engine: Active`);
       console.log(`🌐 Local URL: http://localhost:${PORT}`);
       console.log(`======================================================\n`);
     });

@@ -82,6 +82,61 @@
     }
   } catch (e) {}
 
+  // Private Socket.io connection instance
+  let socket = null;
+  let activeChatRoom = null;
+
+  function initSocketClient() {
+    if (typeof window.io === "function" && !socket) {
+      try {
+        socket = window.io();
+        socket.on("connect", () => {
+          if (activeChatRoom) {
+            socket.emit("join_room", activeChatRoom);
+          }
+        });
+
+        socket.on("newChatMessage", (msg) => {
+          emit("newChatMessage", msg);
+        });
+
+        socket.on("new_message", (msg) => {
+          emit("newChatMessage", msg);
+        });
+      } catch (e) {
+        console.warn("[SOCKET NOTICE] Socket client setup:", e.message);
+      }
+    }
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initSocketClient);
+  } else {
+    initSocketClient();
+  }
+
+  function joinChatRoom(listingId, buyerId) {
+    initSocketClient();
+    activeChatRoom = {
+      listing_id: listingId,
+      buyer_id: buyerId || state.deviceId,
+      user_id: state.deviceId
+    };
+    if (socket && socket.connected) {
+      socket.emit("join_room", activeChatRoom);
+    }
+  }
+
+  function leaveChatRoom(listingId, buyerId) {
+    const roomId = `chat_${listingId}_${buyerId || state.deviceId}`;
+    if (socket && socket.connected) {
+      socket.emit("leave_room", { roomId });
+    }
+    if (activeChatRoom && activeChatRoom.listing_id === listingId) {
+      activeChatRoom = null;
+    }
+  }
+
   /**
    * Internal HTTP fetch helper with device and authorization headers
    */
@@ -529,11 +584,12 @@
   }
 
   /**
-   * Get chat messages for an item
+   * Get chat messages for an item with strict buyer/seller privacy
    */
-  async function getChatMessages(itemId) {
+  async function getChatMessages(itemId, buyerId) {
     try {
-      const data = await request(`/api/chat/${itemId}`);
+      const qBuyer = buyerId || state.deviceId;
+      const data = await request(`/api/chat/${itemId}?buyer_id=${encodeURIComponent(qBuyer)}`);
       if (data && data.messages) {
         return data.messages;
       }
@@ -544,19 +600,30 @@
   }
 
   /**
-   * Send a chat message
+   * Send a chat message scoped strictly to the private room
    */
-  async function sendChatMessage(itemId, text) {
+  async function sendChatMessage(itemId, text, buyerId) {
+    const activeBuyer = buyerId || state.deviceId;
     try {
       const data = await request(`/api/chat/${itemId}`, {
         method: "POST",
         body: JSON.stringify({
           sender_id: state.deviceId,
           sender_name: state.currentUser?.nickname || "Student",
+          buyer_id: activeBuyer,
           text
         })
       });
       if (data && data.message) {
+        if (socket && socket.connected) {
+          socket.emit("send_message", {
+            listing_id: itemId,
+            buyer_id: activeBuyer,
+            sender_id: state.deviceId,
+            sender_name: state.currentUser?.nickname || "Student",
+            text
+          });
+        }
         return data.message;
       }
     } catch (err) {
@@ -564,9 +631,14 @@
     }
     return {
       id: Date.now(),
+      listing_id: itemId,
       item_id: itemId,
+      room_id: `chat_${itemId}_${activeBuyer}`,
       sender_id: state.deviceId,
+      receiver_id: "seller",
+      buyer_id: activeBuyer,
       sender_name: state.currentUser?.nickname || "You",
+      message_text: text,
       text,
       created_at: Date.now() / 1000
     };
@@ -716,10 +788,20 @@
           }
         }
 
-        // If new chat messages arrived
+        // If new chat messages arrived (strictly verified for this user)
         if (data.new_messages && data.new_messages.length > 0) {
           data.new_messages.forEach((msg) => {
-            emit("newChatMessage", msg);
+            const myId = state.deviceId;
+            const myGoogle = state.googleUser?.google_id;
+            const isParticipant = (
+              msg.sender_id === myId ||
+              msg.receiver_id === myId ||
+              msg.buyer_id === myId ||
+              (myGoogle && (msg.seller_id === myGoogle || msg.sender_id === myGoogle || msg.receiver_id === myGoogle))
+            );
+            if (isParticipant) {
+              emit("newChatMessage", msg);
+            }
           });
         }
 
@@ -953,6 +1035,8 @@
     updateItemStatus,
     getChatMessages,
     sendChatMessage,
+    joinChatRoom,
+    leaveChatRoom,
     getHandshakeStatus,
     verifyHandshake,
     createOffer,

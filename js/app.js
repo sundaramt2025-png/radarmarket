@@ -6636,13 +6636,21 @@
     closeBtn.addEventListener("click", () => {
       modal.classList.add("hidden");
       if (upiSheet) upiSheet.classList.add("hidden");
+      if (window.MarketAPI && MarketAPI.leaveChatRoom && state.activeChatId) {
+        MarketAPI.leaveChatRoom(state.activeChatId, state.activeChatBuyerId);
+      }
       state.activeChatId = null;
+      state.activeChatBuyerId = null;
     });
     modal.addEventListener("click", (e) => {
       if (e.target === modal) {
         modal.classList.add("hidden");
         if (upiSheet) upiSheet.classList.add("hidden");
+        if (window.MarketAPI && MarketAPI.leaveChatRoom && state.activeChatId) {
+          MarketAPI.leaveChatRoom(state.activeChatId, state.activeChatBuyerId);
+        }
         state.activeChatId = null;
+        state.activeChatBuyerId = null;
       }
     });
 
@@ -7166,7 +7174,7 @@
     }
   }
 
-  async function openChatModal(target) {
+  async function openChatModal(target, specificBuyerId = null) {
     if (!target || !target.item) return;
     if (typeof hideCommunicationAlert === "function") hideCommunicationAlert();
     state.unreadInboxCount = 0;
@@ -7174,8 +7182,17 @@
 
     const modal = document.getElementById("modal-chat");
     const item = target.item;
+    const currentDeviceId = window.MarketAPI ? MarketAPI.getDeviceId() : null;
+    const isSeller = (item.seller_id === currentDeviceId);
+    const buyerId = specificBuyerId || (isSeller ? (item.buyer_id || null) : currentDeviceId);
+
     state.activeChatId = item.id;
+    state.activeChatBuyerId = buyerId;
     state.activeChatAgreedPrice = item.agreed_price || null;
+
+    if (window.MarketAPI && MarketAPI.joinChatRoom) {
+      MarketAPI.joinChatRoom(item.id, buyerId);
+    }
 
     document.getElementById("chat-seller-avatar").src =
       item.seller?.avatar || item.seller_avatar || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80";
@@ -7226,7 +7243,7 @@
 
     let messages = [];
     if (window.MarketAPI) {
-      messages = await MarketAPI.getChatMessages(item.id);
+      messages = await MarketAPI.getChatMessages(item.id, buyerId);
     }
 
     container.innerHTML = "";
@@ -7580,9 +7597,10 @@
   async function sendChatMessage(text) {
     if (!state.selectedTarget) return;
     const item = state.selectedTarget.item;
+    const buyerId = state.activeChatBuyerId;
 
     if (window.MarketAPI) {
-      const msg = await MarketAPI.sendChatMessage(item.id, text);
+      const msg = await MarketAPI.sendChatMessage(item.id, text, buyerId);
       appendMessageBubble(msg);
     } else {
       appendMessageBubble({ sender: "me", text });

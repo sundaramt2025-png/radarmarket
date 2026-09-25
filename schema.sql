@@ -137,19 +137,35 @@ CREATE INDEX IF NOT EXISTS idx_offers_item ON offers(item_id);
 CREATE INDEX IF NOT EXISTS idx_offers_buyer ON offers(buyer_id);
 CREATE INDEX IF NOT EXISTS idx_offers_seller ON offers(seller_id);
 
--- 6. REAL-TIME CHAT MESSAGES
+-- 6. PRIVATE REAL-TIME CHAT MESSAGES (SECURE ROOM SCOPING)
+-- Persistent database storage ensuring buyer/seller privacy without data leaks
 CREATE TABLE IF NOT EXISTS messages (
     id SERIAL PRIMARY KEY,
+    listing_id VARCHAR(64) NOT NULL,
     item_id VARCHAR(64) NOT NULL,
+    room_id VARCHAR(256) NOT NULL,
     sender_id VARCHAR(128) NOT NULL,
+    receiver_id VARCHAR(128) NOT NULL,
+    buyer_id VARCHAR(128) NOT NULL,
     sender_name VARCHAR(100) NOT NULL,
     sender_email VARCHAR(255),
     sender_avatar TEXT,
+    message_text TEXT NOT NULL,
     text TEXT NOT NULL,
     created_at DOUBLE PRECISION NOT NULL
 );
 
+-- Schema migration helpers for existing cloud databases
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS listing_id VARCHAR(64);
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS room_id VARCHAR(256);
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS receiver_id VARCHAR(128);
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS buyer_id VARCHAR(128);
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS message_text TEXT;
+
+CREATE INDEX IF NOT EXISTS idx_messages_listing_id ON messages(listing_id);
 CREATE INDEX IF NOT EXISTS idx_messages_item ON messages(item_id);
+CREATE INDEX IF NOT EXISTS idx_messages_room_id ON messages(room_id);
+CREATE INDEX IF NOT EXISTS idx_messages_participants ON messages(sender_id, receiver_id);
 CREATE INDEX IF NOT EXISTS idx_messages_created ON messages(created_at);
 
 -- 7. MULTI-DEVICE REAL-TIME SYNC EVENTS

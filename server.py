@@ -2011,20 +2011,50 @@ def confirm_upi_payment():
 
 @app.route('/api/chat/<item_id>', methods=['GET'])
 def get_chat(item_id):
-    """Get all conversation messages for an item."""
+    """Get all conversation messages for an item with strict privacy authorization."""
     db = get_db()
     cur = db.cursor()
-    cur.execute("""
-        SELECT * FROM messages 
-        WHERE item_id = ? 
-        ORDER BY created_at ASC
-    """, (item_id,))
+    auth_user = get_authenticated_user(db)
+    caller_id = request.headers.get('X-Device-Id') or (auth_user and auth_user.get('id')) or request.args.get('user_id') or "guest"
+    caller_google_id = (auth_user and auth_user.get('google_id')) or ""
+
+    # Verify listing
+    cur.execute("SELECT id, seller_id, seller_google_id FROM items WHERE id = ?", (item_id,))
+    item = cur.fetchone()
+    if not item:
+        return jsonify({"success": False, "error": "Listing not found", "messages": []}), 404
+
+    is_seller = (caller_id == item['seller_id'] or (caller_google_id and caller_google_id == item['seller_google_id']))
+    requested_buyer = request.args.get('buyer_id')
+
+    if is_seller:
+        if requested_buyer:
+            cur.execute("""
+                SELECT * FROM messages 
+                WHERE item_id = ? AND (sender_id = ? OR receiver_id = ? OR buyer_id = ?)
+                ORDER BY created_at ASC
+            """, (item_id, requested_buyer, requested_buyer, requested_buyer))
+        else:
+            cur.execute("""
+                SELECT * FROM messages 
+                WHERE item_id = ? 
+                ORDER BY created_at ASC
+            """, (item_id,))
+    else:
+        # Caller is buyer: strictly view only their own thread
+        buyer_id = caller_id
+        cur.execute("""
+            SELECT * FROM messages 
+            WHERE item_id = ? AND (sender_id = ? OR receiver_id = ? OR buyer_id = ?)
+            ORDER BY created_at ASC
+        """, (item_id, buyer_id, buyer_id, buyer_id))
+
     messages = [dict(r) for r in cur.fetchall()]
     return jsonify({"success": True, "messages": messages})
 
 @app.route('/api/chat/<item_id>', methods=['POST'])
 def send_chat(item_id):
-    """Send a real-time message between buyer and seller."""
+    """Send a real-time message with strictly scoped room and participant verification."""
     db = get_db()
     data = request.get_json() or {}
     auth_user = get_authenticated_user(db)
@@ -2046,40 +2076,58 @@ def send_chat(item_id):
         return jsonify({"success": False, "error": "Message cannot be empty"}), 400
 
     cur = db.cursor()
+    cur.execute("SELECT id, title, seller_id, seller_name, seller_google_id FROM items WHERE id = ?", (item_id,))
+    item_row = cur.fetchone()
+    if not item_row:
+        return jsonify({"success": False, "error": "Listing not found"}), 404
+
+    seller_id = item_row['seller_id'] or ""
+    seller_name_val = item_row['seller_name'] or "Seller"
+    is_seller = (device_id == seller_id or (auth_user and auth_user.get('google_id') == item_row['seller_google_id']))
+
+    if is_seller:
+        buyer_id = data.get('buyer_id') or data.get('receiver_id') or "buyer"
+        receiver_id = buyer_id
+    else:
+        buyer_id = device_id
+        receiver_id = seller_id
+
+    room_id = f"chat_{item_id}_{buyer_id}"
+
+    # Auto-add columns if needed
+    for col, col_def in [('listing_id', 'TEXT'), ('room_id', 'TEXT'), ('receiver_id', 'TEXT'), ('buyer_id', 'TEXT'), ('message_text', 'TEXT')]:
+        try:
+            cur.execute(f"ALTER TABLE messages ADD COLUMN {col} {col_def}")
+        except Exception:
+            pass
+
     cur.execute("""
-        INSERT INTO messages (item_id, sender_id, sender_name, text, created_at, sender_email, sender_avatar)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    """, (item_id, device_id, sender_name, text, now, sender_email, sender_avatar))
+        INSERT INTO messages (
+            item_id, listing_id, room_id, sender_id, receiver_id, buyer_id,
+            sender_name, text, message_text, created_at, sender_email, sender_avatar
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (item_id, item_id, room_id, device_id, receiver_id, buyer_id, sender_name, text, text, now, sender_email, sender_avatar))
 
     msg_id = cur.lastrowid
+    db.commit()
+    save_data_backup()
 
-    cur.execute("SELECT title, seller_id, seller_name FROM items WHERE id = ?", (item_id,))
-    item_row = cur.fetchone()
-    item_title = item_row['title'] if item_row else "Campus Listing"
-    seller_id = item_row['seller_id'] if item_row else ""
-    seller_name_val = item_row['seller_name'] if item_row else "Seller"
-
-    # Emit event
     msg_payload = {
         "id": msg_id,
         "item_id": item_id,
-        "item_title": item_title,
-        "seller_id": seller_id,
-        "seller_name": seller_name_val,
+        "listing_id": item_id,
+        "room_id": room_id,
         "sender_id": device_id,
+        "receiver_id": receiver_id,
+        "buyer_id": buyer_id,
         "sender_name": sender_name,
         "sender_avatar": sender_avatar,
         "sender_email": sender_email,
+        "message_text": text,
         "text": text,
         "created_at": now
     }
-    cur.execute("""
-        INSERT INTO sync_events (event_type, item_id, payload, created_at)
-        VALUES ('new_message', ?, ?, ?)
-    """, (item_id, json.dumps(msg_payload), now))
-
-    db.commit()
-    save_data_backup()
 
     return jsonify({
         "success": True,
@@ -2254,15 +2302,27 @@ def delta_sync():
             item["upi_id"] = item.get("upi_id") or ""
             items.append(item)
 
-    # Any new messages
-    cur.execute("""
-        SELECT m.*, i.title as item_title, i.seller_id as seller_id, i.seller_name as seller_name
-        FROM messages m
-        LEFT JOIN items i ON m.item_id = i.id
-        WHERE m.created_at > ?
-        ORDER BY m.created_at ASC
-    """, (since,))
-    new_messages = [dict(r) for r in cur.fetchall()]
+    # Any new messages - STRICTLY FILTERED to caller (buyer or seller) to eliminate global leakage
+    device_id = request.headers.get('X-Device-Id') or request.args.get('device_id') or ''
+    auth_user = get_authenticated_user(db)
+    caller_ids = [device_id]
+    if auth_user:
+        if auth_user.get('id'): caller_ids.append(auth_user['id'])
+        if auth_user.get('google_id'): caller_ids.append(auth_user['google_id'])
+    caller_ids = [c for c in caller_ids if c]
+
+    new_messages = []
+    if caller_ids:
+        placeholders = ','.join('?' * len(caller_ids))
+        cur.execute(f"""
+            SELECT m.*, i.title as item_title, i.seller_id as seller_id, i.seller_name as seller_name
+            FROM messages m
+            LEFT JOIN items i ON m.item_id = i.id
+            WHERE m.created_at > ?
+              AND (m.sender_id IN ({placeholders}) OR m.receiver_id IN ({placeholders}) OR i.seller_id IN ({placeholders}))
+            ORDER BY m.created_at ASC
+        """, [since] + caller_ids + caller_ids + caller_ids)
+        new_messages = [dict(r) for r in cur.fetchall()]
 
     return jsonify({
         "success": True,

@@ -317,25 +317,54 @@ async function query(text, params = []) {
     return { rows: [], rowCount: 0 };
   }
 
-  // MESSAGES
+  // MESSAGES (DATABASE-BACKED CHAT STORAGE WITH ROOM PRIVACY)
   if (upper.startsWith('INSERT INTO MESSAGES')) {
-    const msg = {
-      id: localStore.messages.length + 1,
-      item_id: params[0],
-      sender_id: params[1],
-      sender_name: params[2],
-      sender_email: params[3] || '',
-      sender_avatar: params[4] || '',
-      text: params[5],
-      created_at: params[6] || Date.now() / 1000
-    };
+    let msg;
+    if (params.length >= 10) {
+      msg = {
+        id: localStore.messages.length + 1,
+        listing_id: params[0],
+        item_id: params[1],
+        room_id: params[2],
+        sender_id: params[3],
+        receiver_id: params[4],
+        buyer_id: params[5],
+        sender_name: params[6],
+        sender_email: params[7] || '',
+        sender_avatar: params[8] || '',
+        message_text: params[9],
+        text: params[10] || params[9],
+        created_at: params[11] || Date.now() / 1000
+      };
+    } else {
+      msg = {
+        id: localStore.messages.length + 1,
+        listing_id: params[0],
+        item_id: params[0],
+        room_id: `chat_${params[0]}_${params[1]}`,
+        sender_id: params[1],
+        receiver_id: 'seller',
+        buyer_id: params[1],
+        sender_name: params[2],
+        sender_email: params[3] || '',
+        sender_avatar: params[4] || '',
+        message_text: params[5],
+        text: params[5],
+        created_at: params[6] || Date.now() / 1000
+      };
+    }
     localStore.messages.push(msg);
     saveLocalStore(localStore);
     return { rows: [msg], rowCount: 1 };
   }
 
   if (upper.startsWith('SELECT * FROM MESSAGES')) {
-    const list = localStore.messages.filter(x => x.item_id === params[0]);
+    const itemId = params[0];
+    let list = localStore.messages.filter(x => x.item_id === itemId || x.listing_id === itemId);
+    if (params.length > 1 && params[1]) {
+      const p1 = params[1];
+      list = list.filter(x => x.room_id === p1 || x.buyer_id === p1 || x.sender_id === p1 || x.receiver_id === p1);
+    }
     return { rows: list, rowCount: list.length };
   }
 
