@@ -1,11 +1,21 @@
 services:
   - type: web
     name: radarmarket
-    env: python
-    buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn server:app
+    env: node
+    buildCommand: npm install
+    startCommand: node server.js
     autoDeploy: true
     envVars:
-      - key: PYTHON_VERSION
-        value: 3.11.0
+      - key: NODE_VERSION
+        value: 20.0.0
+      - key: DATABASE_URL
+        fromDatabase:
+          name: radarmarket-db
+          property: connectionString
+    plan: free
+
+databases:
+  - name: radarmarket-db
+    databaseName: radarmarket
+    user: radarmarket_user
     plan: free

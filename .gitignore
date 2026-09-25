@@ -9,3 +9,5 @@ test_*.html
 database.db
 database.db-wal
 database.db-shm
+node_modules/
+database_local.json
