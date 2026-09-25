@@ -231,8 +231,43 @@ def init_db():
 
 BACKUP_PATH = os.path.join(BASE_DIR, "data_backup.json")
 
+def get_pg_conn():
+    """Connect to persistent Render PostgreSQL cloud database via DATABASE_URL."""
+    db_url = os.environ.get("DATABASE_URL")
+    if not db_url or not (db_url.startswith("postgres://") or db_url.startswith("postgresql://")):
+        return None
+    try:
+        import psycopg2
+        import psycopg2.extras
+        if db_url.startswith("postgres://"):
+            db_url = db_url.replace("postgres://", "postgresql://", 1)
+        conn = psycopg2.connect(db_url, sslmode='require')
+        return conn
+    except Exception as e:
+        print("[PostgreSQL] Connection warning:", e)
+        return None
+
+def sync_pg_to_sqlite(pg_items):
+    """Mirror PostgreSQL items into local SQLite cache."""
+    if not pg_items:
+        return
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cur = conn.cursor()
+        for it in pg_items:
+            keys = [k for k in it.keys() if it[k] is not None]
+            placeholders = ", ".join(["?"] * len(keys))
+            cols = ", ".join(keys)
+            vals = [json.dumps(it[k]) if isinstance(it[k], (list, dict)) else it[k] for k in keys]
+            sql = f"INSERT OR REPLACE INTO items ({cols}) VALUES ({placeholders})"
+            cur.execute(sql, vals)
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print("[PostgreSQL->SQLite Sync Error]:", e)
+
 def save_data_backup():
-    """Mirror SQLite state to durable JSON backup file so data survives redeploys."""
+    """Mirror SQLite state to durable JSON backup file AND persistent PostgreSQL cloud database."""
     try:
         conn = sqlite3.connect(DB_PATH)
         conn.row_factory = sqlite3.Row
@@ -251,11 +286,52 @@ def save_data_backup():
         }
         with open(BACKUP_PATH, "w", encoding="utf-8") as f:
             json.dump(backup, f, indent=2)
+
+        # Mirror directly to persistent PostgreSQL cloud database
+        pg_conn = get_pg_conn()
+        if pg_conn:
+            try:
+                pg_cur = pg_conn.cursor()
+                for it in items:
+                    valid_keys = [k for k in it.keys() if it[k] is not None and k not in ('seller', 'isAvailable')]
+                    cols = ", ".join(valid_keys)
+                    placeholders = ", ".join(["%s"] * len(valid_keys))
+                    vals = [json.dumps(it[k]) if isinstance(it[k], (list, dict)) else it[k] for k in valid_keys]
+                    update_clause = ", ".join([f"{k} = EXCLUDED.{k}" for k in valid_keys])
+                    sql = f"INSERT INTO beacons ({cols}) VALUES ({placeholders}) ON CONFLICT (id) DO UPDATE SET {update_clause};"
+                    pg_cur.execute(sql, vals)
+                pg_conn.commit()
+                pg_conn.close()
+            except Exception as pg_err:
+                print("[PostgreSQL Sync Error in save_data_backup]:", pg_err)
     except Exception as e:
         print("[backup] Save error:", e)
 
 def restore_data_backup():
-    """Restore state from data_backup.json if database was newly initialized or empty."""
+    """Restore state from persistent PostgreSQL cloud database or data_backup.json."""
+    # 1. Attempt to restore from persistent PostgreSQL cloud database
+    pg_conn = get_pg_conn()
+    if pg_conn:
+        try:
+            import psycopg2.extras
+            pg_cur = pg_conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+            schema_file = os.path.join(BASE_DIR, "schema.sql")
+            if os.path.exists(schema_file):
+                with open(schema_file, "r", encoding="utf-8") as f:
+                    pg_cur.execute(f.read())
+                pg_conn.commit()
+
+            pg_cur.execute("SELECT * FROM beacons WHERE status != 'deleted'")
+            pg_items = [dict(r) for r in pg_cur.fetchall()]
+            if pg_items:
+                print(f"[PostgreSQL] Restoring {len(pg_items)} beacons from cloud database...")
+                sync_pg_to_sqlite(pg_items)
+                print("[PostgreSQL] Restored beacons successfully.")
+            pg_conn.close()
+            return
+        except Exception as pg_e:
+            print("[PostgreSQL Restore Warning]:", pg_e)
+
     if not os.path.exists(BACKUP_PATH):
         return
     try:
@@ -513,10 +589,22 @@ def lookup_isbn_api(isbn):
 @app.route('/api/ping', methods=['GET'])
 def api_ping():
     """Ultra-lightweight keep-alive heartbeat route to prevent free-tier PaaS sleep."""
+    db_status = "local_sqlite"
+    pg = get_pg_conn()
+    if pg:
+        try:
+            c = pg.cursor()
+            c.execute("SELECT 1")
+            db_status = "postgresql_connected"
+            pg.close()
+        except Exception:
+            db_status = "postgresql_error"
+
     return jsonify({
         "status": "ok",
         "timestamp": time.time(),
         "service": "radarmarket-v3.0.3",
+        "database": db_status,
         "mode": "production"
     })
 
