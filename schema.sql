@@ -1,8 +1,12 @@
 -- RadarMarket Persistent Cloud PostgreSQL Database Schema
 -- Compatible with Render PostgreSQL (PostgreSQL 14 / 15 / 16)
 
--- 1. EXTENSIONS
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+DO $$ 
+BEGIN 
+    CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+EXCEPTION WHEN OTHERS THEN 
+    NULL;
+END $$;
 
 -- 2. USERS TABLE
 -- Stores user IDs, Google Sign-In profile info, verified phone numbers (+91), and trust scores

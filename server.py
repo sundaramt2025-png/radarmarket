@@ -247,6 +247,361 @@ def get_pg_conn():
         print("[PostgreSQL] Connection warning:", e)
         return None
 
+def init_pg_schema():
+    """Ensure all required tables and indexes exist in persistent PostgreSQL cloud DB."""
+    pg = get_pg_conn()
+    if not pg:
+        return
+    try:
+        cur = pg.cursor()
+        # 1. Users table
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id VARCHAR(128) PRIMARY KEY,
+                nickname VARCHAR(100) NOT NULL,
+                avatar TEXT,
+                email VARCHAR(255) UNIQUE,
+                picture TEXT,
+                google_id VARCHAR(255) UNIQUE,
+                phone_number VARCHAR(20),
+                phone_verified INTEGER DEFAULT 0,
+                phone_otp VARCHAR(10),
+                phone_otp_expiry DOUBLE PRECISION,
+                trust_score DOUBLE PRECISION DEFAULT 50.0,
+                seller_rating DOUBLE PRECISION DEFAULT 4.9,
+                trades_completed INTEGER DEFAULT 0,
+                is_verified INTEGER DEFAULT 0,
+                is_campus_verified INTEGER DEFAULT 0,
+                auth_provider VARCHAR(50) DEFAULT 'guest',
+                upi_vpa VARCHAR(128),
+                lat DOUBLE PRECISION,
+                lng DOUBLE PRECISION,
+                session_token TEXT,
+                created_at DOUBLE PRECISION NOT NULL,
+                last_active_at DOUBLE PRECISION NOT NULL
+            );
+        """)
+        # 2. Beacons table
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS beacons (
+                id VARCHAR(64) PRIMARY KEY,
+                seller_id VARCHAR(128) NOT NULL,
+                seller_name VARCHAR(100) NOT NULL,
+                seller_rating DOUBLE PRECISION DEFAULT 4.9,
+                seller_verified INTEGER DEFAULT 1,
+                seller_avatar TEXT,
+                seller_email VARCHAR(255),
+                seller_phone_verified INTEGER DEFAULT 0,
+                seller_campus_verified INTEGER DEFAULT 0,
+                seller_google_id VARCHAR(255),
+                title VARCHAR(255) NOT NULL,
+                category VARCHAR(64) NOT NULL,
+                sub_category VARCHAR(100),
+                price DOUBLE PRECISION NOT NULL,
+                original_price DOUBLE PRECISION,
+                discount_pct INTEGER DEFAULT 0,
+                condition VARCHAR(64) NOT NULL,
+                condition_score DOUBLE PRECISION DEFAULT 0.85,
+                dsp_score DOUBLE PRECISION DEFAULT 85.0,
+                lat DOUBLE PRECISION NOT NULL,
+                lng DOUBLE PRECISION NOT NULL,
+                landmark VARCHAR(255) NOT NULL,
+                safe_landmark VARCHAR(255),
+                locality_id VARCHAR(128),
+                locality_type VARCHAR(64) DEFAULT 'campus',
+                image TEXT,
+                description TEXT,
+                tags JSONB DEFAULT '[]'::jsonb,
+                beacon_type VARCHAR(32) DEFAULT 'sell',
+                status VARCHAR(32) DEFAULT 'active',
+                is_available INTEGER DEFAULT 1,
+                reserved_by VARCHAR(128),
+                upi_id VARCHAR(128),
+                upi_qr_image TEXT,
+                item_attributes JSONB DEFAULT '{}'::jsonb,
+                handshake_code VARCHAR(10),
+                agreed_price DOUBLE PRECISION,
+                accepted_offer_id VARCHAR(64),
+                completed_by VARCHAR(128),
+                completed_at DOUBLE PRECISION,
+                created_at DOUBLE PRECISION NOT NULL
+            );
+        """)
+        # 3. Messages table
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS messages (
+                id SERIAL PRIMARY KEY,
+                listing_id VARCHAR(64) NOT NULL,
+                item_id VARCHAR(64) NOT NULL,
+                room_id VARCHAR(256) NOT NULL,
+                sender_id VARCHAR(128) NOT NULL,
+                receiver_id VARCHAR(128) NOT NULL,
+                buyer_id VARCHAR(128) NOT NULL,
+                sender_name VARCHAR(100) NOT NULL,
+                sender_email VARCHAR(255),
+                sender_avatar TEXT,
+                message_text TEXT NOT NULL,
+                text TEXT NOT NULL,
+                created_at DOUBLE PRECISION NOT NULL
+            );
+        """)
+        # 4. Offers table
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS offers (
+                id VARCHAR(64) PRIMARY KEY,
+                item_id VARCHAR(64) NOT NULL,
+                buyer_id VARCHAR(128) NOT NULL,
+                buyer_name VARCHAR(100) NOT NULL,
+                seller_id VARCHAR(128) NOT NULL,
+                original_price DOUBLE PRECISION NOT NULL,
+                offer_amount DOUBLE PRECISION NOT NULL,
+                status VARCHAR(32) DEFAULT 'pending',
+                upi_tx_ref VARCHAR(128),
+                buyer_declared_paid INTEGER DEFAULT 0,
+                seller_confirmed_paid INTEGER DEFAULT 0,
+                payment_mode VARCHAR(32) DEFAULT 'upi',
+                created_at DOUBLE PRECISION NOT NULL,
+                updated_at DOUBLE PRECISION NOT NULL
+            );
+        """)
+        # 5. Transactions table
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS transactions (
+                id VARCHAR(64) PRIMARY KEY,
+                item_id VARCHAR(64) NOT NULL,
+                buyer_id VARCHAR(128) NOT NULL,
+                buyer_name VARCHAR(100) NOT NULL,
+                seller_id VARCHAR(128) NOT NULL,
+                amount DOUBLE PRECISION NOT NULL,
+                original_price DOUBLE PRECISION,
+                upi_tx_ref VARCHAR(128),
+                payment_mode VARCHAR(32) DEFAULT 'upi',
+                order_status VARCHAR(32) DEFAULT 'pending',
+                handshake_code VARCHAR(10),
+                buyer_declared_paid INTEGER DEFAULT 0,
+                seller_confirmed_paid INTEGER DEFAULT 0,
+                created_at DOUBLE PRECISION NOT NULL,
+                updated_at DOUBLE PRECISION NOT NULL
+            );
+        """)
+        try:
+            cur.execute("CREATE OR REPLACE VIEW items AS SELECT * FROM beacons;")
+        except Exception:
+            pass
+
+        pg.commit()
+        pg.close()
+        print("[PostgreSQL] Cloud database schema initialized successfully.")
+    except Exception as e:
+        print("[PostgreSQL Schema Init Error]:", e)
+        try: pg.rollback(); pg.close()
+        except Exception: pass
+
+def save_beacon_to_pg(item_dict):
+    """Directly insert/update a single beacon in persistent PostgreSQL with proper JSONB typing."""
+    pg_conn = get_pg_conn()
+    if not pg_conn:
+        return False
+    try:
+        import psycopg2.extras
+        cur = pg_conn.cursor()
+        
+        tags = item_dict.get('tags') or []
+        if isinstance(tags, str):
+            try: tags = json.loads(tags)
+            except Exception: tags = []
+        elif not isinstance(tags, (list, tuple)):
+            tags = []
+
+        attrs = item_dict.get('item_attributes') or {}
+        if isinstance(attrs, str):
+            try: attrs = json.loads(attrs)
+            except Exception: attrs = {}
+        elif not isinstance(attrs, dict):
+            attrs = {}
+
+        sql = """
+            INSERT INTO beacons (
+                id, seller_id, seller_name, seller_rating, seller_verified, seller_avatar,
+                seller_email, seller_phone_verified, seller_campus_verified, seller_google_id,
+                title, category, sub_category, price, original_price, condition,
+                condition_score, lat, lng, landmark, safe_landmark, locality_id, locality_type,
+                image, description, tags, beacon_type, status, is_available, upi_id,
+                upi_qr_image, item_attributes, handshake_code, created_at
+            ) VALUES (
+                %s, %s, %s, %s, %s, %s,
+                %s, %s, %s, %s,
+                %s, %s, %s, %s, %s, %s,
+                %s, %s, %s, %s, %s, %s, %s,
+                %s, %s, %s, %s, %s, %s, %s,
+                %s, %s, %s, %s
+            )
+            ON CONFLICT (id) DO UPDATE SET
+                title = EXCLUDED.title,
+                category = EXCLUDED.category,
+                sub_category = EXCLUDED.sub_category,
+                price = EXCLUDED.price,
+                original_price = EXCLUDED.original_price,
+                condition = EXCLUDED.condition,
+                condition_score = EXCLUDED.condition_score,
+                lat = EXCLUDED.lat,
+                lng = EXCLUDED.lng,
+                landmark = EXCLUDED.landmark,
+                safe_landmark = EXCLUDED.safe_landmark,
+                locality_id = EXCLUDED.locality_id,
+                locality_type = EXCLUDED.locality_type,
+                image = EXCLUDED.image,
+                description = EXCLUDED.description,
+                tags = EXCLUDED.tags,
+                beacon_type = EXCLUDED.beacon_type,
+                status = EXCLUDED.status,
+                is_available = EXCLUDED.is_available,
+                upi_id = EXCLUDED.upi_id,
+                upi_qr_image = EXCLUDED.upi_qr_image,
+                item_attributes = EXCLUDED.item_attributes,
+                seller_verified = EXCLUDED.seller_verified,
+                seller_campus_verified = EXCLUDED.seller_campus_verified,
+                seller_phone_verified = EXCLUDED.seller_phone_verified;
+        """
+        cur.execute(sql, (
+            item_dict.get('id'),
+            item_dict.get('seller_id') or "guest",
+            item_dict.get('seller_name') or "Student",
+            float(item_dict.get('seller_rating') or 5.0),
+            int(item_dict.get('seller_verified') or 1),
+            item_dict.get('seller_avatar') or "",
+            item_dict.get('seller_email') or "",
+            int(item_dict.get('seller_phone_verified') or 0),
+            int(item_dict.get('seller_campus_verified') or 0),
+            item_dict.get('seller_google_id') or "",
+            item_dict.get('title') or "Listing",
+            item_dict.get('category') or "stationery",
+            item_dict.get('sub_category') or "General",
+            float(item_dict.get('price') or 0),
+            float(item_dict.get('original_price') or item_dict.get('price') or 0),
+            item_dict.get('condition') or "Good",
+            float(item_dict.get('condition_score') or 0.85),
+            float(item_dict.get('lat') or 0),
+            float(item_dict.get('lng') or 0),
+            item_dict.get('landmark') or "",
+            item_dict.get('safe_landmark') or item_dict.get('landmark') or "",
+            item_dict.get('locality_id') or "",
+            item_dict.get('locality_type') or "campus",
+            item_dict.get('image') or "",
+            item_dict.get('description') or "",
+            psycopg2.extras.Json(tags),
+            item_dict.get('beacon_type') or "sell",
+            item_dict.get('status') or "active",
+            int(item_dict.get('is_available', 1) if item_dict.get('status') != 'sold' else 0),
+            item_dict.get('upi_id') or "",
+            item_dict.get('upi_qr_image') or "",
+            psycopg2.extras.Json(attrs),
+            item_dict.get('handshake_code') or "",
+            float(item_dict.get('created_at') or time.time())
+        ))
+        pg_conn.commit()
+        pg_conn.close()
+        print(f"[PostgreSQL] Successfully saved beacon {item_dict.get('id')} to cloud DB.")
+        return True
+    except Exception as e:
+        print(f"[PostgreSQL save_beacon_to_pg Error]:", e)
+        try: pg_conn.rollback(); pg_conn.close()
+        except Exception: pass
+        return False
+
+def save_user_to_pg(user_dict):
+    """Directly insert/update user profile in persistent PostgreSQL."""
+    pg_conn = get_pg_conn()
+    if not pg_conn:
+        return False
+    try:
+        cur = pg_conn.cursor()
+        sql = """
+            INSERT INTO users (
+                id, nickname, avatar, email, picture, google_id, phone_number,
+                phone_verified, is_verified, is_campus_verified, auth_provider,
+                upi_vpa, session_token, created_at, last_active_at
+            ) VALUES (
+                %s, %s, %s, %s, %s, %s, %s,
+                %s, %s, %s, %s,
+                %s, %s, %s, %s
+            )
+            ON CONFLICT (id) DO UPDATE SET
+                nickname = EXCLUDED.nickname,
+                avatar = EXCLUDED.avatar,
+                email = EXCLUDED.email,
+                picture = EXCLUDED.picture,
+                google_id = EXCLUDED.google_id,
+                phone_number = EXCLUDED.phone_number,
+                phone_verified = EXCLUDED.phone_verified,
+                is_verified = EXCLUDED.is_verified,
+                is_campus_verified = EXCLUDED.is_campus_verified,
+                upi_vpa = EXCLUDED.upi_vpa,
+                session_token = EXCLUDED.session_token,
+                last_active_at = EXCLUDED.last_active_at;
+        """
+        cur.execute(sql, (
+            user_dict.get('id'),
+            user_dict.get('nickname') or "Student",
+            user_dict.get('avatar') or "",
+            user_dict.get('email'),
+            user_dict.get('picture') or user_dict.get('avatar') or "",
+            user_dict.get('google_id'),
+            user_dict.get('phone_number') or "",
+            int(user_dict.get('phone_verified') or 0),
+            int(user_dict.get('is_verified') or 0),
+            int(user_dict.get('is_campus_verified') or 0),
+            user_dict.get('auth_provider') or "guest",
+            user_dict.get('upi_vpa') or "",
+            user_dict.get('session_token') or "",
+            float(user_dict.get('created_at') or time.time()),
+            float(user_dict.get('last_active_at') or time.time())
+        ))
+        pg_conn.commit()
+        pg_conn.close()
+        return True
+    except Exception as e:
+        print("[PostgreSQL save_user_to_pg Error]:", e)
+        try: pg_conn.rollback(); pg_conn.close()
+        except Exception: pass
+        return False
+
+def save_message_to_pg(msg_dict):
+    """Directly insert a chat message into persistent PostgreSQL."""
+    pg_conn = get_pg_conn()
+    if not pg_conn:
+        return False
+    try:
+        cur = pg_conn.cursor()
+        sql = """
+            INSERT INTO messages (
+                item_id, listing_id, room_id, sender_id, receiver_id, buyer_id,
+                sender_name, sender_email, sender_avatar, message_text, text, created_at
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """
+        cur.execute(sql, (
+            msg_dict.get('item_id'),
+            msg_dict.get('listing_id') or msg_dict.get('item_id'),
+            msg_dict.get('room_id'),
+            msg_dict.get('sender_id'),
+            msg_dict.get('receiver_id'),
+            msg_dict.get('buyer_id'),
+            msg_dict.get('sender_name'),
+            msg_dict.get('sender_email') or "",
+            msg_dict.get('sender_avatar') or "",
+            msg_dict.get('text'),
+            msg_dict.get('text'),
+            float(msg_dict.get('created_at') or time.time())
+        ))
+        pg_conn.commit()
+        pg_conn.close()
+        return True
+    except Exception as e:
+        print("[PostgreSQL save_message_to_pg Error]:", e)
+        try: pg_conn.rollback(); pg_conn.close()
+        except Exception: pass
+        return False
+
 def sync_pg_to_sqlite(pg_items):
     """Mirror PostgreSQL items into local SQLite cache."""
     if not pg_items:
@@ -255,7 +610,7 @@ def sync_pg_to_sqlite(pg_items):
         conn = sqlite3.connect(DB_PATH)
         cur = conn.cursor()
         for it in pg_items:
-            keys = [k for k in it.keys() if it[k] is not None]
+            keys = [k for k in it.keys() if it[k] is not None and k not in ('seller', 'isAvailable', 'discount_pct', 'dsp_score')]
             placeholders = ", ".join(["?"] * len(keys))
             cols = ", ".join(keys)
             vals = [json.dumps(it[k]) if isinstance(it[k], (list, dict)) else it[k] for k in keys]
@@ -291,26 +646,137 @@ def save_data_backup():
         pg_conn = get_pg_conn()
         if pg_conn:
             try:
+                import psycopg2.extras
                 pg_cur = pg_conn.cursor()
                 # 1. Beacons
                 for it in items:
-                    valid_keys = [k for k in it.keys() if it[k] is not None and k not in ('seller', 'isAvailable')]
-                    cols = ", ".join(valid_keys)
-                    placeholders = ", ".join(["%s"] * len(valid_keys))
-                    vals = [json.dumps(it[k]) if isinstance(it[k], (list, dict)) else it[k] for k in valid_keys]
-                    update_clause = ", ".join([f"{k} = EXCLUDED.{k}" for k in valid_keys])
-                    sql = f"INSERT INTO beacons ({cols}) VALUES ({placeholders}) ON CONFLICT (id) DO UPDATE SET {update_clause};"
-                    pg_cur.execute(sql, vals)
+                    tags = it.get('tags') or []
+                    if isinstance(tags, str):
+                        try: tags = json.loads(tags)
+                        except Exception: tags = []
+                    elif not isinstance(tags, (list, tuple)):
+                        tags = []
+
+                    attrs = it.get('item_attributes') or {}
+                    if isinstance(attrs, str):
+                        try: attrs = json.loads(attrs)
+                        except Exception: attrs = {}
+                    elif not isinstance(attrs, dict):
+                        attrs = {}
+
+                    sql = """
+                        INSERT INTO beacons (
+                            id, seller_id, seller_name, seller_rating, seller_verified, seller_avatar,
+                            seller_email, seller_phone_verified, seller_campus_verified, seller_google_id,
+                            title, category, sub_category, price, original_price, condition,
+                            condition_score, lat, lng, landmark, safe_landmark, locality_id, locality_type,
+                            image, description, tags, beacon_type, status, is_available, upi_id,
+                            upi_qr_image, item_attributes, handshake_code, created_at
+                        ) VALUES (
+                            %s, %s, %s, %s, %s, %s,
+                            %s, %s, %s, %s,
+                            %s, %s, %s, %s, %s, %s,
+                            %s, %s, %s, %s, %s, %s, %s,
+                            %s, %s, %s, %s, %s, %s, %s,
+                            %s, %s, %s, %s
+                        )
+                        ON CONFLICT (id) DO UPDATE SET
+                            title = EXCLUDED.title,
+                            category = EXCLUDED.category,
+                            sub_category = EXCLUDED.sub_category,
+                            price = EXCLUDED.price,
+                            original_price = EXCLUDED.original_price,
+                            condition = EXCLUDED.condition,
+                            condition_score = EXCLUDED.condition_score,
+                            lat = EXCLUDED.lat,
+                            lng = EXCLUDED.lng,
+                            landmark = EXCLUDED.landmark,
+                            safe_landmark = EXCLUDED.safe_landmark,
+                            image = EXCLUDED.image,
+                            description = EXCLUDED.description,
+                            tags = EXCLUDED.tags,
+                            beacon_type = EXCLUDED.beacon_type,
+                            status = EXCLUDED.status,
+                            is_available = EXCLUDED.is_available,
+                            upi_id = EXCLUDED.upi_id,
+                            upi_qr_image = EXCLUDED.upi_qr_image,
+                            item_attributes = EXCLUDED.item_attributes;
+                    """
+                    pg_cur.execute(sql, (
+                        it.get('id'),
+                        it.get('seller_id') or "guest",
+                        it.get('seller_name') or "Student",
+                        float(it.get('seller_rating') or 5.0),
+                        int(it.get('seller_verified') or 1),
+                        it.get('seller_avatar') or "",
+                        it.get('seller_email') or "",
+                        int(it.get('seller_phone_verified') or 0),
+                        int(it.get('seller_campus_verified') or 0),
+                        it.get('seller_google_id') or "",
+                        it.get('title') or "Listing",
+                        it.get('category') or "stationery",
+                        it.get('sub_category') or "General",
+                        float(it.get('price') or 0),
+                        float(it.get('original_price') or it.get('price') or 0),
+                        it.get('condition') or "Good",
+                        float(it.get('condition_score') or 0.85),
+                        float(it.get('lat') or 0),
+                        float(it.get('lng') or 0),
+                        it.get('landmark') or "",
+                        it.get('safe_landmark') or it.get('landmark') or "",
+                        it.get('locality_id') or "",
+                        it.get('locality_type') or "campus",
+                        it.get('image') or "",
+                        it.get('description') or "",
+                        psycopg2.extras.Json(tags),
+                        it.get('beacon_type') or "sell",
+                        it.get('status') or "active",
+                        int(it.get('is_available', 1) if it.get('status') != 'sold' else 0),
+                        it.get('upi_id') or "",
+                        it.get('upi_qr_image') or "",
+                        psycopg2.extras.Json(attrs),
+                        it.get('handshake_code') or "",
+                        float(it.get('created_at') or time.time())
+                    ))
 
                 # 2. Users
                 for u in users:
-                    valid_keys = [k for k in u.keys() if u[k] is not None]
-                    cols = ", ".join(valid_keys)
-                    placeholders = ", ".join(["%s"] * len(valid_keys))
-                    vals = [u[k] for k in valid_keys]
-                    update_clause = ", ".join([f"{k} = EXCLUDED.{k}" for k in valid_keys])
-                    sql = f"INSERT INTO users ({cols}) VALUES ({placeholders}) ON CONFLICT (id) DO UPDATE SET {update_clause};"
-                    pg_cur.execute(sql, vals)
+                    pg_cur.execute("""
+                        INSERT INTO users (
+                            id, nickname, avatar, email, picture, google_id, phone_number,
+                            phone_verified, is_verified, is_campus_verified, auth_provider,
+                            upi_vpa, session_token, created_at, last_active_at
+                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        ON CONFLICT (id) DO UPDATE SET
+                            nickname = EXCLUDED.nickname,
+                            avatar = EXCLUDED.avatar,
+                            email = EXCLUDED.email,
+                            picture = EXCLUDED.picture,
+                            google_id = EXCLUDED.google_id,
+                            phone_number = EXCLUDED.phone_number,
+                            phone_verified = EXCLUDED.phone_verified,
+                            is_verified = EXCLUDED.is_verified,
+                            is_campus_verified = EXCLUDED.is_campus_verified,
+                            upi_vpa = EXCLUDED.upi_vpa,
+                            session_token = EXCLUDED.session_token,
+                            last_active_at = EXCLUDED.last_active_at;
+                    """, (
+                        u.get('id'),
+                        u.get('nickname') or "Student",
+                        u.get('avatar') or "",
+                        u.get('email'),
+                        u.get('picture') or u.get('avatar') or "",
+                        u.get('google_id'),
+                        u.get('phone_number') or "",
+                        int(u.get('phone_verified') or 0),
+                        int(u.get('is_verified') or 0),
+                        int(u.get('is_campus_verified') or 0),
+                        u.get('auth_provider') or "guest",
+                        u.get('upi_vpa') or "",
+                        u.get('session_token') or "",
+                        float(u.get('created_at') or time.time()),
+                        float(u.get('last_active_at') or time.time())
+                    ))
 
                 # 3. Messages
                 for m in messages:
@@ -338,6 +804,8 @@ def save_data_backup():
                 pg_conn.close()
             except Exception as pg_err:
                 print("[PostgreSQL Sync Error in save_data_backup]:", pg_err)
+                try: pg_conn.rollback(); pg_conn.close()
+                except Exception: pass
     except Exception as e:
         print("[backup] Save error:", e)
 
@@ -347,13 +815,9 @@ def restore_data_backup():
     pg_conn = get_pg_conn()
     if pg_conn:
         try:
+            init_pg_schema()
             import psycopg2.extras
             pg_cur = pg_conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-            schema_file = os.path.join(BASE_DIR, "schema.sql")
-            if os.path.exists(schema_file):
-                with open(schema_file, "r", encoding="utf-8") as f:
-                    pg_cur.execute(f.read())
-                pg_conn.commit()
 
             # Restore Beacons
             pg_cur.execute("SELECT * FROM beacons WHERE status != 'deleted'")
@@ -361,7 +825,9 @@ def restore_data_backup():
             if pg_items:
                 print(f"[PostgreSQL] Restoring {len(pg_items)} beacons from cloud database...")
                 sync_pg_to_sqlite(pg_items)
-                print("[PostgreSQL] Restored beacons successfully.")
+                print(f"[PostgreSQL] ✓ Restored {len(pg_items)} beacons successfully.")
+            else:
+                print("[PostgreSQL] No active beacons found in cloud DB.")
 
             # Restore Users
             try:
@@ -371,13 +837,14 @@ def restore_data_backup():
                     conn = sqlite3.connect(DB_PATH)
                     cur = conn.cursor()
                     for u in pg_users:
-                        keys = list(u.keys())
+                        keys = [k for k in u.keys() if u[k] is not None]
                         placeholders = ", ".join(["?"] * len(keys))
                         cols = ", ".join(keys)
                         sql = f"INSERT OR REPLACE INTO users ({cols}) VALUES ({placeholders})"
                         cur.execute(sql, [u[k] for k in keys])
                     conn.commit()
                     conn.close()
+                    print(f"[PostgreSQL] ✓ Restored {len(pg_users)} users successfully.")
             except Exception as u_err:
                 print("[PostgreSQL User Restore Error]:", u_err)
 
@@ -396,6 +863,7 @@ def restore_data_backup():
                         cur.execute(sql, [m[k] for k in keys])
                     conn.commit()
                     conn.close()
+                    print(f"[PostgreSQL] ✓ Restored {len(pg_msgs)} messages successfully.")
             except Exception as m_err:
                 print("[PostgreSQL Message Restore Error]:", m_err)
 
@@ -403,6 +871,8 @@ def restore_data_backup():
             return
         except Exception as pg_e:
             print("[PostgreSQL Restore Warning]:", pg_e)
+            try: pg_conn.close()
+            except Exception: pass
 
     if not os.path.exists(BACKUP_PATH):
         return
@@ -680,6 +1150,43 @@ def api_ping():
         "mode": "production"
     })
 
+@app.route('/api/db-status', methods=['GET'])
+def api_db_status():
+    """Verify live PostgreSQL connectivity, schema health, and table counts."""
+    pg = get_pg_conn()
+    if not pg:
+        return jsonify({
+            "database": "sqlite_fallback",
+            "connected": False,
+            "message": "DATABASE_URL not active"
+        })
+    try:
+        cur = pg.cursor()
+        cur.execute("SELECT COUNT(*) FROM beacons")
+        beacons_count = cur.fetchone()[0]
+        cur.execute("SELECT COUNT(*) FROM users")
+        users_count = cur.fetchone()[0]
+        cur.execute("SELECT COUNT(*) FROM messages")
+        msgs_count = cur.fetchone()[0]
+        pg.close()
+        return jsonify({
+            "database": "postgresql",
+            "connected": True,
+            "counts": {
+                "beacons": beacons_count,
+                "users": users_count,
+                "messages": msgs_count
+            }
+        })
+    except Exception as e:
+        try: pg.close()
+        except Exception: pass
+        return jsonify({
+            "database": "postgresql_error",
+            "connected": False,
+            "error": str(e)
+        }), 500
+
 @app.route('/api/waitlist', methods=['POST'])
 def add_campus_waitlist():
     """Register student email for new/unlisted campus expansion alerts."""
@@ -819,6 +1326,28 @@ def get_authenticated_user(db):
         row = cur.fetchone()
         if row:
             return dict(row)
+
+        # 3. Cloud PostgreSQL fallback for session_token
+        pg = get_pg_conn()
+        if pg:
+            try:
+                import psycopg2.extras
+                pg_c = pg.cursor(cursor_factory=psycopg2.extras.DictCursor)
+                pg_c.execute("SELECT * FROM users WHERE session_token = %s", (session_token,))
+                pg_u = pg_c.fetchone()
+                if pg_u:
+                    user_dict = dict(pg_u)
+                    keys = [k for k in user_dict.keys() if user_dict[k] is not None]
+                    placeholders = ", ".join(["?"] * len(keys))
+                    cols = ", ".join(keys)
+                    cur.execute(f"INSERT OR REPLACE INTO users ({cols}) VALUES ({placeholders})", [user_dict[k] for k in keys])
+                    db.commit()
+                    pg.close()
+                    return user_dict
+                pg.close()
+            except Exception:
+                try: pg.close()
+                except Exception: pass
             
     device_id = request.headers.get('X-Device-Id') or request.args.get('device_id')
     if device_id:
@@ -826,6 +1355,27 @@ def get_authenticated_user(db):
         row = cur.fetchone()
         if row:
             return dict(row)
+
+        pg = get_pg_conn()
+        if pg:
+            try:
+                import psycopg2.extras
+                pg_c = pg.cursor(cursor_factory=psycopg2.extras.DictCursor)
+                pg_c.execute("SELECT * FROM users WHERE id = %s", (device_id,))
+                pg_u = pg_c.fetchone()
+                if pg_u:
+                    user_dict = dict(pg_u)
+                    keys = [k for k in user_dict.keys() if user_dict[k] is not None]
+                    placeholders = ", ".join(["?"] * len(keys))
+                    cols = ", ".join(keys)
+                    cur.execute(f"INSERT OR REPLACE INTO users ({cols}) VALUES ({placeholders})", [user_dict[k] for k in keys])
+                    db.commit()
+                    pg.close()
+                    return user_dict
+                pg.close()
+            except Exception:
+                try: pg.close()
+                except Exception: pass
             
     return None
 
@@ -956,10 +1506,10 @@ def auth_google():
         """, (google_id, email, is_campus, name, picture, device_id, google_id))
 
     db.commit()
-    save_data_backup()
-
     cur.execute("SELECT * FROM users WHERE id = ?", (user_id,))
     updated_user = dict(cur.fetchone())
+    save_user_to_pg(updated_user)
+    save_data_backup()
     safe_user = {
         "id": updated_user["id"],
         "google_id": updated_user["google_id"],
@@ -1167,7 +1717,58 @@ def manage_me():
 
 @app.route('/api/items', methods=['GET'])
 def list_items():
-    """List all active items."""
+    """List all active items. Prioritizes persistent cloud PostgreSQL."""
+    pg = get_pg_conn()
+    if pg:
+        try:
+            import psycopg2.extras
+            cur = pg.cursor(cursor_factory=psycopg2.extras.DictCursor)
+            cur.execute("SELECT * FROM beacons WHERE status != 'deleted' ORDER BY created_at DESC")
+            rows = cur.fetchall()
+            items = []
+            for r in rows:
+                item = dict(r)
+                if isinstance(item.get("tags"), str):
+                    try: item["tags"] = json.loads(item["tags"])
+                    except Exception: item["tags"] = []
+                elif item.get("tags") is None:
+                    item["tags"] = []
+
+                if isinstance(item.get("item_attributes"), str):
+                    try: item["item_attributes"] = json.loads(item["item_attributes"])
+                    except Exception: item["item_attributes"] = {}
+                elif item.get("item_attributes") is None:
+                    item["item_attributes"] = {}
+
+                item["seller"] = {
+                    "id": item.get("seller_id"),
+                    "name": item.get("seller_name"),
+                    "rating": item.get("seller_rating", 4.9),
+                    "verified": bool(item.get("seller_verified", 1)),
+                    "campus_verified": bool(item.get("seller_campus_verified", 0)),
+                    "phone_verified": bool(item.get("seller_phone_verified", 0)),
+                    "email": item.get("seller_email") or "",
+                    "avatar": item.get("seller_avatar") or ""
+                }
+                item["upi_qr_image"] = item.get("upi_qr_image") or ""
+                item["locality_id"] = item.get("locality_id") or ""
+                item["locality_type"] = item.get("locality_type") or "campus"
+                item["safe_landmark"] = item.get("safe_landmark") or item.get("landmark") or ""
+                item["isAvailable"] = bool(item.get("is_available", 1)) and item.get("status") != "sold"
+                item["beacon_type"] = item.get("beacon_type") or "sell"
+                item["status"] = item.get("status") or "active"
+                item["upi_id"] = item.get("upi_id") or ""
+                items.append(item)
+            pg.close()
+            # Background sync to local SQLite so offline fallback has latest records
+            try: sync_pg_to_sqlite(items)
+            except Exception: pass
+            return jsonify({"success": True, "items": items, "count": len(items)})
+        except Exception as e:
+            print("[PostgreSQL list_items Error, falling back to SQLite]:", e)
+            try: pg.close()
+            except Exception: pass
+
     db = get_db()
     cur = db.cursor()
     cur.execute("SELECT * FROM items WHERE status != 'deleted' ORDER BY created_at DESC")
@@ -1176,7 +1777,6 @@ def list_items():
     items = []
     for r in rows:
         item = dict(r)
-        # Format seller object to match radar algorithm interface
         item["seller"] = {
             "id": item["seller_id"],
             "name": item["seller_name"],
@@ -1210,8 +1810,63 @@ def list_my_items():
     db = get_db()
     auth_user = get_authenticated_user(db)
     device_id = request.headers.get('X-Device-Id') or request.args.get('device_id') or "guest"
-    cur = db.cursor()
 
+    pg = get_pg_conn()
+    if pg:
+        try:
+            import psycopg2.extras
+            cur = pg.cursor(cursor_factory=psycopg2.extras.DictCursor)
+            if auth_user and auth_user.get("google_id"):
+                cur.execute("""
+                    SELECT * FROM beacons 
+                    WHERE (seller_google_id = %s OR seller_id = %s) AND status != 'deleted' 
+                    ORDER BY created_at DESC
+                """, (auth_user["google_id"], device_id))
+            else:
+                cur.execute("SELECT * FROM beacons WHERE seller_id = %s AND status != 'deleted' ORDER BY created_at DESC", (device_id,))
+            rows = cur.fetchall()
+            items = []
+            for r in rows:
+                item = dict(r)
+                if isinstance(item.get("tags"), str):
+                    try: item["tags"] = json.loads(item["tags"])
+                    except Exception: item["tags"] = []
+                elif item.get("tags") is None:
+                    item["tags"] = []
+
+                if isinstance(item.get("item_attributes"), str):
+                    try: item["item_attributes"] = json.loads(item["item_attributes"])
+                    except Exception: item["item_attributes"] = {}
+                elif item.get("item_attributes") is None:
+                    item["item_attributes"] = {}
+
+                item["seller"] = {
+                    "id": item.get("seller_id"),
+                    "name": item.get("seller_name"),
+                    "rating": item.get("seller_rating", 4.9),
+                    "verified": bool(item.get("seller_verified", 1)),
+                    "campus_verified": bool(item.get("seller_campus_verified", 0)),
+                    "phone_verified": bool(item.get("seller_phone_verified", 0)),
+                    "email": item.get("seller_email") or "",
+                    "avatar": item.get("seller_avatar") or ""
+                }
+                item["upi_qr_image"] = item.get("upi_qr_image") or ""
+                item["locality_id"] = item.get("locality_id") or ""
+                item["locality_type"] = item.get("locality_type") or "campus"
+                item["safe_landmark"] = item.get("safe_landmark") or item.get("landmark") or ""
+                item["isAvailable"] = bool(item.get("is_available", 1)) and item.get("status") != "sold"
+                item["beacon_type"] = item.get("beacon_type") or "sell"
+                item["status"] = item.get("status") or "active"
+                item["upi_id"] = item.get("upi_id") or ""
+                items.append(item)
+            pg.close()
+            return jsonify({"success": True, "items": items, "count": len(items)})
+        except Exception as e:
+            print("[PostgreSQL list_my_items Error, falling back to SQLite]:", e)
+            try: pg.close()
+            except Exception: pass
+
+    cur = db.cursor()
     if auth_user and auth_user.get("google_id"):
         cur.execute("""
             SELECT * FROM items 
@@ -1278,7 +1933,6 @@ def create_item():
         seller_google_id = ""
         seller_verified = 1
         seller_campus_verified = 0
-        # Check if device is phone verified
         cur.execute("SELECT phone_verified FROM users WHERE id = ?", (device_id,))
         p_row = cur.fetchone()
         if p_row and p_row[0]:
@@ -1292,7 +1946,6 @@ def create_item():
     safe_landmark = data.get('safe_landmark') or data.get('landmark') or "Live Location"
     handshake_code = f"{random.randint(1000, 9999)}"
 
-    # Process item_attributes
     raw_attr = data.get('item_attributes') or {}
     if isinstance(raw_attr, dict):
         item_attributes_json = json.dumps(raw_attr)
@@ -1313,7 +1966,6 @@ def create_item():
 
     item_id = "item-" + uuid.uuid4().hex[:10]
     now = time.time()
-
     tags_json = json.dumps(data.get('tags', []))
 
     cur.execute("""
@@ -1342,7 +1994,6 @@ def create_item():
         VALUES ('new_item', ?, ?, ?)
     """, (item_id, json.dumps({"item_id": item_id, "title": data.get('title'), "beacon_type": beacon_type}), now))
 
-    # If this is a Wanted/Bounty request, also emit a dedicated bounty event
     if beacon_type == "wanted":
         cur.execute("""
             INSERT INTO sync_events (event_type, item_id, payload, created_at)
@@ -1358,7 +2009,7 @@ def create_item():
 
     db.commit()
 
-    # Retrieve and return created item
+    # Retrieve created item
     cur.execute("SELECT * FROM items WHERE id = ?", (item_id,))
     created = dict(cur.fetchone())
     created["seller"] = {
@@ -1384,6 +2035,8 @@ def create_item():
     created["status"] = "active"
     created["handshake_code"] = handshake_code
 
+    # Direct persistent write to cloud PostgreSQL
+    save_beacon_to_pg(created)
     save_data_backup()
     return jsonify({"success": True, "item": created}), 201
 
@@ -1400,6 +2053,17 @@ def update_item_location(item_id):
     cur = db.cursor()
     cur.execute("UPDATE items SET lat = ?, lng = ? WHERE id = ?", (float(lat), float(lng), item_id))
     db.commit()
+
+    pg = get_pg_conn()
+    if pg:
+        try:
+            c = pg.cursor()
+            c.execute("UPDATE beacons SET lat = %s, lng = %s WHERE id = %s", (float(lat), float(lng), item_id))
+            pg.commit()
+            pg.close()
+        except Exception:
+            try: pg.close()
+            except Exception: pass
 
     save_data_backup()
     return jsonify({"success": True, "item_id": item_id, "lat": float(lat), "lng": float(lng)})
@@ -1425,8 +2089,19 @@ def update_item_status(item_id):
         VALUES ('item_status_changed', ?, ?, ?)
     """, (item_id, json.dumps({"item_id": item_id, "status": new_status}), now))
     db.commit()
-    save_data_backup()
 
+    pg = get_pg_conn()
+    if pg:
+        try:
+            c = pg.cursor()
+            c.execute("UPDATE beacons SET status = %s, is_available = %s WHERE id = %s", (new_status, is_avail, item_id))
+            pg.commit()
+            pg.close()
+        except Exception:
+            try: pg.close()
+            except Exception: pass
+
+    save_data_backup()
     return jsonify({"success": True, "item_id": item_id, "status": new_status})
 
 @app.route('/api/items/<item_id>/reserve', methods=['POST'])
@@ -1446,26 +2121,36 @@ def toggle_reserve(item_id):
     current_reserved = item.get("reserved_by")
 
     if current_reserved == device_id:
-        # Un-reserve
         new_reserved = None
+        new_avail = 1
     elif current_reserved is None:
-        # Reserve
         new_reserved = device_id
+        new_avail = 0
     else:
-        # Already reserved by another device
         return jsonify({
             "success": False,
             "error": "Item has already been reserved by another user!"
         }), 409
 
-    cur.execute("UPDATE items SET reserved_by = ? WHERE id = ?", (new_reserved, item_id))
+    cur.execute("UPDATE items SET reserved_by = ?, is_available = ? WHERE id = ?", (new_reserved, new_avail, item_id))
     cur.execute("""
         INSERT INTO sync_events (event_type, item_id, payload, created_at)
         VALUES ('reserve_toggle', ?, ?, ?)
     """, (item_id, json.dumps({"item_id": item_id, "reserved_by": new_reserved}), now))
     db.commit()
-    save_data_backup()
 
+    pg = get_pg_conn()
+    if pg:
+        try:
+            c = pg.cursor()
+            c.execute("UPDATE beacons SET reserved_by = %s, is_available = %s WHERE id = %s", (new_reserved, new_avail, item_id))
+            pg.commit()
+            pg.close()
+        except Exception:
+            try: pg.close()
+            except Exception: pass
+
+    save_data_backup()
     return jsonify({
         "success": True,
         "item_id": item_id,
@@ -2178,14 +2863,67 @@ def get_chat(item_id):
     caller_id = request.headers.get('X-Device-Id') or (auth_user and auth_user.get('id')) or request.args.get('user_id') or "guest"
     caller_google_id = (auth_user and auth_user.get('google_id')) or ""
 
-    # Verify listing
-    cur.execute("SELECT id, seller_id, seller_google_id FROM items WHERE id = ?", (item_id,))
-    item = cur.fetchone()
-    if not item:
-        return jsonify({"success": False, "error": "Listing not found", "messages": []}), 404
+    # Verify listing from PostgreSQL or SQLite
+    seller_id = ""
+    seller_google_id = ""
+    pg = get_pg_conn()
+    if pg:
+        try:
+            import psycopg2.extras
+            pg_c = pg.cursor(cursor_factory=psycopg2.extras.DictCursor)
+            pg_c.execute("SELECT id, seller_id, seller_google_id FROM beacons WHERE id = %s", (item_id,))
+            pg_item = pg_c.fetchone()
+            if pg_item:
+                seller_id = pg_item['seller_id'] or ""
+                seller_google_id = pg_item['seller_google_id'] or ""
+        except Exception:
+            pass
 
-    is_seller = (caller_id == item['seller_id'] or (caller_google_id and caller_google_id == item['seller_google_id']))
+    if not seller_id:
+        cur.execute("SELECT id, seller_id, seller_google_id FROM items WHERE id = ?", (item_id,))
+        item = cur.fetchone()
+        if not item:
+            if pg:
+                try: pg.close()
+                except Exception: pass
+            return jsonify({"success": False, "error": "Listing not found", "messages": []}), 404
+        seller_id = item['seller_id'] or ""
+        seller_google_id = item['seller_google_id'] or ""
+
+    is_seller = (caller_id == seller_id or (caller_google_id and caller_google_id == seller_google_id))
     requested_buyer = request.args.get('buyer_id')
+
+    if pg:
+        try:
+            import psycopg2.extras
+            pg_cur = pg.cursor(cursor_factory=psycopg2.extras.DictCursor)
+            if is_seller:
+                if requested_buyer:
+                    pg_cur.execute("""
+                        SELECT * FROM messages 
+                        WHERE item_id = %s AND (sender_id = %s OR receiver_id = %s OR buyer_id = %s)
+                        ORDER BY created_at ASC
+                    """, (item_id, requested_buyer, requested_buyer, requested_buyer))
+                else:
+                    pg_cur.execute("""
+                        SELECT * FROM messages 
+                        WHERE item_id = %s 
+                        ORDER BY created_at ASC
+                    """, (item_id,))
+            else:
+                buyer_id = caller_id
+                pg_cur.execute("""
+                    SELECT * FROM messages 
+                    WHERE item_id = %s AND (sender_id = %s OR receiver_id = %s OR buyer_id = %s)
+                    ORDER BY created_at ASC
+                """, (item_id, buyer_id, buyer_id, buyer_id))
+
+            messages = [dict(r) for r in pg_cur.fetchall()]
+            pg.close()
+            return jsonify({"success": True, "messages": messages})
+        except Exception as pg_err:
+            try: pg.close()
+            except Exception: pass
 
     if is_seller:
         if requested_buyer:
@@ -2201,7 +2939,6 @@ def get_chat(item_id):
                 ORDER BY created_at ASC
             """, (item_id,))
     else:
-        # Caller is buyer: strictly view only their own thread
         buyer_id = caller_id
         cur.execute("""
             SELECT * FROM messages 
@@ -2271,7 +3008,6 @@ def send_chat(item_id):
 
     msg_id = cur.lastrowid
     db.commit()
-    save_data_backup()
 
     msg_payload = {
         "id": msg_id,
@@ -2288,6 +3024,10 @@ def send_chat(item_id):
         "text": text,
         "created_at": now
     }
+
+    # Direct persistent write to cloud PostgreSQL
+    save_message_to_pg(msg_payload)
+    save_data_backup()
 
     return jsonify({
         "success": True,
