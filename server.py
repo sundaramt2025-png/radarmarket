@@ -292,6 +292,7 @@ def save_data_backup():
         if pg_conn:
             try:
                 pg_cur = pg_conn.cursor()
+                # 1. Beacons
                 for it in items:
                     valid_keys = [k for k in it.keys() if it[k] is not None and k not in ('seller', 'isAvailable')]
                     cols = ", ".join(valid_keys)
@@ -300,6 +301,39 @@ def save_data_backup():
                     update_clause = ", ".join([f"{k} = EXCLUDED.{k}" for k in valid_keys])
                     sql = f"INSERT INTO beacons ({cols}) VALUES ({placeholders}) ON CONFLICT (id) DO UPDATE SET {update_clause};"
                     pg_cur.execute(sql, vals)
+
+                # 2. Users
+                for u in users:
+                    valid_keys = [k for k in u.keys() if u[k] is not None]
+                    cols = ", ".join(valid_keys)
+                    placeholders = ", ".join(["%s"] * len(valid_keys))
+                    vals = [u[k] for k in valid_keys]
+                    update_clause = ", ".join([f"{k} = EXCLUDED.{k}" for k in valid_keys])
+                    sql = f"INSERT INTO users ({cols}) VALUES ({placeholders}) ON CONFLICT (id) DO UPDATE SET {update_clause};"
+                    pg_cur.execute(sql, vals)
+
+                # 3. Messages
+                for m in messages:
+                    room_id = m.get('room_id') or f"chat_{m.get('item_id')}_{m.get('buyer_id') or m.get('sender_id')}"
+                    item_id = m.get('item_id')
+                    sender_id = m.get('sender_id')
+                    receiver_id = m.get('receiver_id') or 'seller'
+                    buyer_id = m.get('buyer_id') or m.get('sender_id')
+                    text = m.get('text') or ''
+                    created_at = m.get('created_at') or time.time()
+                    sql = """
+                        INSERT INTO messages (item_id, listing_id, room_id, sender_id, receiver_id, buyer_id, sender_name, text, message_text, created_at, sender_email, sender_avatar)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    """
+                    try:
+                        pg_cur.execute(sql, (
+                            item_id, item_id, room_id, sender_id, receiver_id, buyer_id,
+                            m.get('sender_name') or 'Student', text, text, created_at,
+                            m.get('sender_email') or '', m.get('sender_avatar') or ''
+                        ))
+                    except Exception:
+                        pass
+
                 pg_conn.commit()
                 pg_conn.close()
             except Exception as pg_err:
@@ -321,12 +355,50 @@ def restore_data_backup():
                     pg_cur.execute(f.read())
                 pg_conn.commit()
 
+            # Restore Beacons
             pg_cur.execute("SELECT * FROM beacons WHERE status != 'deleted'")
             pg_items = [dict(r) for r in pg_cur.fetchall()]
             if pg_items:
                 print(f"[PostgreSQL] Restoring {len(pg_items)} beacons from cloud database...")
                 sync_pg_to_sqlite(pg_items)
                 print("[PostgreSQL] Restored beacons successfully.")
+
+            # Restore Users
+            try:
+                pg_cur.execute("SELECT * FROM users")
+                pg_users = [dict(r) for r in pg_cur.fetchall()]
+                if pg_users:
+                    conn = sqlite3.connect(DB_PATH)
+                    cur = conn.cursor()
+                    for u in pg_users:
+                        keys = list(u.keys())
+                        placeholders = ", ".join(["?"] * len(keys))
+                        cols = ", ".join(keys)
+                        sql = f"INSERT OR REPLACE INTO users ({cols}) VALUES ({placeholders})"
+                        cur.execute(sql, [u[k] for k in keys])
+                    conn.commit()
+                    conn.close()
+            except Exception as u_err:
+                print("[PostgreSQL User Restore Error]:", u_err)
+
+            # Restore Messages
+            try:
+                pg_cur.execute("SELECT * FROM messages ORDER BY created_at ASC")
+                pg_msgs = [dict(r) for r in pg_cur.fetchall()]
+                if pg_msgs:
+                    conn = sqlite3.connect(DB_PATH)
+                    cur = conn.cursor()
+                    for m in pg_msgs:
+                        keys = [k for k in m.keys() if k in ('id', 'item_id', 'sender_id', 'sender_name', 'text', 'created_at', 'sender_email', 'sender_avatar', 'receiver_id', 'buyer_id', 'room_id', 'listing_id', 'message_text')]
+                        placeholders = ", ".join(["?"] * len(keys))
+                        cols = ", ".join(keys)
+                        sql = f"INSERT OR REPLACE INTO messages ({cols}) VALUES ({placeholders})"
+                        cur.execute(sql, [m[k] for k in keys])
+                    conn.commit()
+                    conn.close()
+            except Exception as m_err:
+                print("[PostgreSQL Message Restore Error]:", m_err)
+
             pg_conn.close()
             return
         except Exception as pg_e:
