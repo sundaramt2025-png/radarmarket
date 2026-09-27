@@ -728,6 +728,62 @@
       const targetPrice = document.getElementById("target-price");
       if (targetPrice) targetPrice.textContent = "₹0";
 
+      // Reset category & condition badges
+      const catBadge = document.getElementById("target-category-badge");
+      if (catBadge) {
+        catBadge.className = "text-[10px] font-mono px-2 py-0.5 rounded font-bold uppercase bg-slate-900 text-slate-500 border border-slate-800";
+        catBadge.textContent = "STANDBY";
+      }
+      const condBadge = document.getElementById("target-condition-badge");
+      if (condBadge) {
+        condBadge.className = "text-[10px] font-mono px-2 py-0.5 rounded bg-slate-900 text-slate-500 border border-slate-800";
+        condBadge.textContent = "OFFLINE";
+      }
+
+      // Reset item photo to neutral radar graphic
+      const targetImg = document.getElementById("target-image");
+      if (targetImg) {
+        targetImg.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 24 24' fill='none' stroke='%23334155' stroke-width='1.5'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='m4.93 4.93 14.14 14.14'/%3E%3C/svg%3E";
+      }
+
+      // Reset coordinates & spatial badges
+      const sellerCoordsElem = document.getElementById("target-seller-coords");
+      if (sellerCoordsElem) {
+        sellerCoordsElem.innerHTML = `<span class="text-slate-500 font-normal">-- (No beacon in sector)</span>`;
+      }
+      const buyerCoordsElem = document.getElementById("target-buyer-coords");
+      if (buyerCoordsElem) {
+        buyerCoordsElem.innerHTML = state.userLocation.isLiveGPS 
+          ? `<span class="text-emerald-400 font-bold">${state.userLocation.lat.toFixed(5)}, ${state.userLocation.lng.toFixed(5)}</span>`
+          : `<span class="text-slate-500">Live GPS ready</span>`;
+      }
+
+      // Reset pricing and discount badges
+      const origPriceElem = document.getElementById("target-orig-price");
+      if (origPriceElem) origPriceElem.classList.add("hidden");
+      const discountBadge = document.getElementById("target-discount-pct");
+      if (discountBadge) discountBadge.classList.add("hidden");
+
+      // Reset item description
+      const descElem = document.getElementById("target-description");
+      if (descElem) {
+        descElem.textContent = "Select an active beacon from the radar scope or scan your campus sector to view item specifications.";
+      }
+
+      // Reset seller info
+      const sellerNameElem = document.getElementById("target-seller-name");
+      if (sellerNameElem) sellerNameElem.textContent = "Campus Peer";
+      const sellerRatingElem = document.getElementById("target-seller-rating");
+      if (sellerRatingElem) sellerRatingElem.textContent = "--";
+      const sellerAvatarElem = document.getElementById("target-seller-avatar");
+      if (sellerAvatarElem) {
+        sellerAvatarElem.src = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80";
+      }
+      const verifiedIcon = document.getElementById("target-seller-verified");
+      if (verifiedIcon) verifiedIcon.classList.add("hidden");
+      const campusTag = document.getElementById("target-seller-campus-tag");
+      if (campusTag) campusTag.classList.add("hidden");
+
       // Reset DSP-VI Telemetry Bars
       const metricProx = document.getElementById("dsp-metric-prox");
       const barProx = document.getElementById("dsp-bar-prox");
@@ -746,7 +802,7 @@
       if (metricFresh) metricFresh.textContent = "--";
       if (barFresh) barFresh.style.width = "0%";
 
-      // Reset proximity zone badge to avoid stale distance values
+      // Reset proximity zone badge
       const proximityZoneReset = document.getElementById("target-proximity-zone");
       if (proximityZoneReset) {
         proximityZoneReset.textContent = "";

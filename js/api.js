@@ -460,6 +460,10 @@
       if (data && data.items && Array.isArray(data.items)) {
         try {
           localStorage.setItem(FEED_CACHE_KEY, JSON.stringify(data.items));
+          if (data.items.length === 0) {
+            localStorage.setItem("radarmarket_items_v1", JSON.stringify([]));
+            localStorage.setItem(VAULT_KEY, JSON.stringify([]));
+          }
         } catch (e) {}
         return data.items;
       }
