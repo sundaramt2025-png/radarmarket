@@ -13,3 +13,6 @@ node_modules/
 database_local.json
 _intellihelm/
 _radarmarket_backup/
+android/
+capacitor.config.json
+www/

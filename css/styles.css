@@ -1006,3 +1006,16 @@ input[type=range]::-webkit-slider-thumb {
   }
 }
 
+/* High-Tech Shimmer Loading Animation */
+@keyframes shimmerWave {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(90deg, rgba(15, 23, 42, 0.7) 25%, rgba(30, 41, 59, 0.9) 50%, rgba(15, 23, 42, 0.7) 75%);
+  background-size: 200% 100%;
+  animation: shimmerWave 1.8s infinite ease-in-out;
+}
+
+

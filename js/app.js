@@ -461,12 +461,80 @@
    * Recalculate all items through the DSP-VI algorithm, filter, and render
    */
   async function refreshMarket() {
+    renderFeedSkeleton();
     if (window.MarketAPI) {
       state.rawItems = await MarketAPI.getItems();
     } else {
       state.rawItems = MarketData.getMarketItems();
     }
     recalculateAndRender();
+    checkUrlDeepLink();
+  }
+
+  /**
+   * Render High-Tech Skeleton Shimmer Loading Cards in Nearby Feed
+   */
+  function renderFeedSkeleton() {
+    const list = document.getElementById("radar-feed-list");
+    if (!list) return;
+    if (list.children.length === 0 || (!state.rawItems || state.rawItems.length === 0)) {
+      list.innerHTML = `
+        <div class="skeleton-shimmer rounded-xl p-3 border border-slate-800/80 flex items-center gap-3">
+          <div class="w-12 h-12 rounded-lg bg-slate-800/80 shrink-0"></div>
+          <div class="flex-1 space-y-2">
+            <div class="h-3.5 bg-slate-800/80 rounded w-3/4"></div>
+            <div class="h-2.5 bg-slate-800/60 rounded w-1/2"></div>
+            <div class="h-2 bg-slate-800/40 rounded w-1/4"></div>
+          </div>
+        </div>
+        <div class="skeleton-shimmer rounded-xl p-3 border border-slate-800/80 flex items-center gap-3 opacity-80">
+          <div class="w-12 h-12 rounded-lg bg-slate-800/80 shrink-0"></div>
+          <div class="flex-1 space-y-2">
+            <div class="h-3.5 bg-slate-800/80 rounded w-2/3"></div>
+            <div class="h-2.5 bg-slate-800/60 rounded w-1/3"></div>
+            <div class="h-2 bg-slate-800/40 rounded w-1/4"></div>
+          </div>
+        </div>
+        <div class="skeleton-shimmer rounded-xl p-3 border border-slate-800/80 flex items-center gap-3 opacity-60">
+          <div class="w-12 h-12 rounded-lg bg-slate-800/80 shrink-0"></div>
+          <div class="flex-1 space-y-2">
+            <div class="h-3.5 bg-slate-800/80 rounded w-3/5"></div>
+            <div class="h-2.5 bg-slate-800/40 rounded w-2/5"></div>
+            <div class="h-2 bg-slate-800/40 rounded w-1/4"></div>
+          </div>
+        </div>
+      `;
+    }
+  }
+
+  /**
+   * Acquire Deep-Linked Beacon if URL contains ?beacon= or ?item=
+   */
+  let deepLinkHandled = false;
+  function checkUrlDeepLink() {
+    if (deepLinkHandled) return;
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const targetId = urlParams.get("beacon") || urlParams.get("item");
+      if (!targetId || !state.evaluatedItems || state.evaluatedItems.length === 0) return;
+
+      const foundTarget = state.evaluatedItems.find((t) => t.item.id === targetId);
+      if (foundTarget) {
+        deepLinkHandled = true;
+        selectTarget(foundTarget);
+        showToast("BEACON ACQUIRED", `Locked onto "${foundTarget.item.title}"`);
+        if (typeof window.triggerHaptic === "function") window.triggerHaptic("heavy");
+
+        const panel = document.getElementById("selected-target-panel");
+        if (panel && window.innerWidth < 1024) {
+          setTimeout(() => {
+            panel.scrollIntoView({ behavior: "smooth", block: "center" });
+          }, 300);
+        }
+      }
+    } catch (e) {
+      console.warn("checkUrlDeepLink error:", e);
+    }
   }
 
   function recalculateAndRender() {
@@ -1968,6 +2036,9 @@
 
     // 13. Real-time Communication Alerts & Header Inbox
     setupCommunicationAlerts();
+
+    // 14. Share Beacon Viral Modal
+    setupShareBeaconModal();
   }
 
   function switchView(mode) {
@@ -7297,6 +7368,20 @@
     container.innerHTML = `<div class="text-center text-slate-500 text-xs py-4">Connecting to secure signal...</div>`;
     modal.classList.remove("hidden");
 
+    // Contextual Dynamic Bargain Chip
+    const bargainChip = document.getElementById("chat-chip-bargain");
+    if (bargainChip) {
+      const price = Number(item.price) || 0;
+      if (price > 40) {
+        let discount = Math.round((price * 0.12) / 10) * 10;
+        if (discount < 10) discount = 10;
+        const offerTarget = Math.max(10, price - discount);
+        bargainChip.textContent = `Can you do ₹${offerTarget}?`;
+      } else {
+        bargainChip.textContent = "Can you do a ₹10 discount?";
+      }
+    }
+
     let messages = [];
     if (window.MarketAPI) {
       messages = await MarketAPI.getChatMessages(item.id, buyerId);
@@ -8147,6 +8232,132 @@
         Notification.requestPermission().catch(() => {});
       }
     }, { once: true });
+  }
+
+  /**
+   * Setup One-Click Share Beacon Modal with WhatsApp, Telegram, Deep Linking & Native Share
+   */
+  function setupShareBeaconModal() {
+    const shareBtn = document.getElementById("btn-share-target");
+    const modal = document.getElementById("modal-share-beacon");
+    const closeBtn = document.getElementById("btn-close-share-modal");
+    if (!shareBtn || !modal) return;
+
+    function openShareModal() {
+      const target = state.selectedTarget;
+      if (!target || !target.item) {
+        showToast("NO BEACON SELECTED", "Select a beacon on the radar scope first to share.");
+        return;
+      }
+      const item = target.item;
+      const title = item.title || "Campus Listing";
+      const price = item.price || 0;
+      const distM = target.distance || calculateDistanceMeters(
+        state.userLocation.lat,
+        state.userLocation.lng,
+        item.lat,
+        item.lng
+      );
+      const distStr = formatDistance(distM);
+      const location = item.landmark || (state.activeCampus ? state.activeCampus.name : "Campus Central");
+      const shareUrl = `${window.location.origin}${window.location.pathname}?beacon=${item.id}`;
+
+      // Populate preview card in modal
+      const modalTitle = document.getElementById("share-modal-item-title");
+      if (modalTitle) modalTitle.textContent = title;
+      const titleDisplay = document.getElementById("share-modal-title-display");
+      if (titleDisplay) titleDisplay.textContent = title;
+      const priceDisplay = document.getElementById("share-modal-price");
+      if (priceDisplay) priceDisplay.textContent = `₹${price}`;
+      const distDisplay = document.getElementById("share-modal-dist");
+      if (distDisplay) distDisplay.textContent = `${distStr} away`;
+      const locDisplay = document.getElementById("share-modal-location");
+      if (locDisplay) locDisplay.textContent = location;
+      const imgDisplay = document.getElementById("share-modal-item-img");
+      if (imgDisplay) {
+        imgDisplay.src = (item.images && item.images[0]) || item.image || item.photo || "https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?auto=format&fit=crop&w=600&q=80";
+      }
+
+      // Format viral campus message text
+      const viralText = `🎯 *${title}* on RadarMarket\n💰 Price: ₹${price} (${distStr} away)\n📍 Location: ${location}\n⚡ View live beacon: ${shareUrl}`;
+
+      // WhatsApp link
+      const waBtn = document.getElementById("btn-share-whatsapp");
+      if (waBtn) {
+        waBtn.href = `https://api.whatsapp.com/send?text=${encodeURIComponent(viralText)}`;
+        waBtn.onclick = () => {
+          if (typeof window.triggerHaptic === "function") window.triggerHaptic("medium");
+        };
+      }
+
+      // Telegram link
+      const tgBtn = document.getElementById("btn-share-telegram");
+      if (tgBtn) {
+        tgBtn.href = `https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(viralText)}`;
+        tgBtn.onclick = () => {
+          if (typeof window.triggerHaptic === "function") window.triggerHaptic("medium");
+        };
+      }
+
+      // Copy link button
+      const copyBtn = document.getElementById("btn-share-copy-link");
+      const copyText = document.getElementById("share-copy-text");
+      if (copyBtn) {
+        copyBtn.onclick = async () => {
+          try {
+            await navigator.clipboard.writeText(shareUrl);
+            if (copyText) copyText.textContent = "✓ Link Copied to Clipboard!";
+            showToast("LINK COPIED", "Beacon deep link copied to clipboard.");
+            if (typeof window.triggerHaptic === "function") window.triggerHaptic("success");
+            setTimeout(() => {
+              if (copyText) copyText.textContent = "Copy Beacon Deep Link";
+            }, 2500);
+          } catch (err) {
+            showToast("SHARE LINK", shareUrl);
+          }
+        };
+      }
+
+      // Native Web Share API
+      const nativeBtn = document.getElementById("btn-share-native");
+      if (nativeBtn) {
+        nativeBtn.onclick = async () => {
+          if (navigator.share) {
+            try {
+              await navigator.share({
+                title: `${title} - RadarMarket`,
+                text: viralText,
+                url: shareUrl
+              });
+              if (typeof window.triggerHaptic === "function") window.triggerHaptic("success");
+              modal.classList.add("hidden");
+            } catch (e) {
+              // Share cancelled or dismissed
+            }
+          } else {
+            showToast("NATIVE SHARE", "Use WhatsApp, Telegram or Copy Link below.");
+          }
+        };
+      }
+
+      modal.classList.remove("hidden");
+      if (window.lucide) lucide.createIcons();
+      if (typeof window.triggerHaptic === "function") window.triggerHaptic("light");
+    }
+
+    shareBtn.addEventListener("click", openShareModal);
+
+    if (closeBtn) {
+      closeBtn.addEventListener("click", () => {
+        modal.classList.add("hidden");
+      });
+    }
+
+    modal.addEventListener("click", (e) => {
+      if (e.target === modal) {
+        modal.classList.add("hidden");
+      }
+    });
   }
 
   /**
