@@ -88,8 +88,7 @@
       }
     } catch(e) {}
   </script>
-</head>
-<body class="scanline-bg text-slate-100 flex flex-col min-h-screen selection:bg-cyan-500/30 selection:text-cyan-200">
+<body class="scanline-bg text-slate-100 flex flex-col min-h-screen selection:bg-cyan-500/30 selection:text-cyan-200 pb-28 sm:pb-12">
 
   <!-- TOP HUD NAVIGATION BAR -->
   <header class="border-b border-cyan-500/20 bg-slate-950/80 backdrop-blur-md sticky top-0 z-30 px-4 lg:px-8 py-3">
@@ -3112,6 +3111,82 @@
     </div>
   </div>
 
+  <!-- ========================================================================= -->
+  <!-- MOBILE-FIRST APP SHELL: FLOATING BOTTOM NAVIGATION DOCK                   -->
+  <!-- ========================================================================= -->
+  <nav id="mobile-dock-nav" aria-label="Mobile Navigation" class="fixed bottom-3 inset-x-0 mx-auto w-[94%] max-w-md z-40 bg-slate-950/85 backdrop-blur-2xl border border-cyan-500/30 rounded-2xl p-1.5 shadow-[0_12px_45px_rgba(0,0,0,0.85),0_0_25px_rgba(0,229,255,0.18)] transition-all duration-300">
+    <div class="flex items-center justify-around relative">
+
+      <!-- 1. RADAR TAB -->
+      <button 
+        id="dock-tab-radar" 
+        type="button" 
+        class="dock-nav-item flex-1 flex flex-col items-center justify-center py-1 px-1 rounded-xl text-cyan-300 bg-cyan-950/70 border border-cyan-500/40 shadow-[0_0_12px_rgba(0,229,255,0.25)] transition-all duration-200 group active:scale-95 cursor-pointer"
+        title="Sonar Radar Scope"
+      >
+        <div class="relative flex items-center justify-center">
+          <i data-lucide="crosshair" class="w-5 h-5 text-cyan-400 group-hover:scale-110 transition-transform"></i>
+          <span class="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
+        </div>
+        <span class="text-[9px] font-mono font-bold tracking-wider mt-0.5 text-cyan-300">RADAR</span>
+      </button>
+
+      <!-- 2. EXPLORE / FEED TAB -->
+      <button 
+        id="dock-tab-feed" 
+        type="button" 
+        class="dock-nav-item flex-1 flex flex-col items-center justify-center py-1 px-1 rounded-xl text-slate-400 hover:text-slate-200 transition-all duration-200 group active:scale-95 cursor-pointer"
+        title="Browse Campus Listings Feed"
+      >
+        <i data-lucide="layout-grid" class="w-5 h-5 group-hover:text-cyan-400 group-hover:scale-110 transition-transform"></i>
+        <span class="text-[9px] font-mono font-bold tracking-wider mt-0.5">FEED</span>
+      </button>
+
+      <!-- 3. CENTER HERO ACTION: BROADCAST BEACON (+) -->
+      <div class="relative -top-4 px-1 flex flex-col items-center shrink-0">
+        <button 
+          id="dock-btn-broadcast" 
+          type="button" 
+          class="relative w-12 h-12 rounded-2xl bg-gradient-to-tr from-emerald-500 via-teal-400 to-cyan-400 text-slate-950 flex items-center justify-center shadow-[0_0_25px_rgba(0,255,157,0.5),0_8px_20px_rgba(0,0,0,0.6)] border-2 border-slate-950 hover:scale-110 active:scale-95 transition-all duration-200 cursor-pointer group"
+          title="Broadcast a New Listing or Wanted Request"
+        >
+          <i data-lucide="plus" class="w-6 h-6 stroke-[3] group-hover:rotate-90 transition-transform duration-200"></i>
+          <span class="absolute inset-0 rounded-2xl bg-white/20 opacity-0 group-hover:opacity-100 transition-opacity"></span>
+        </button>
+        <span class="text-[9px] font-mono font-extrabold uppercase tracking-widest text-emerald-300 mt-0.5 drop-shadow-[0_0_6px_rgba(0,255,157,0.6)]">POST</span>
+      </div>
+
+      <!-- 4. SIGNALS / CHAT TAB -->
+      <button 
+        id="dock-tab-chat" 
+        type="button" 
+        class="dock-nav-item flex-1 flex flex-col items-center justify-center py-1 px-1 rounded-xl text-slate-400 hover:text-slate-200 transition-all duration-200 group active:scale-95 cursor-pointer relative"
+        title="Private Encrypted Chat Messages"
+      >
+        <div class="relative flex items-center justify-center">
+          <i data-lucide="message-square" class="w-5 h-5 group-hover:text-cyan-400 group-hover:scale-110 transition-transform"></i>
+          <span id="dock-chat-badge" class="hidden absolute -top-1 -right-2 px-1 py-0.2 rounded-full text-[9px] font-bold bg-cyan-400 text-slate-950 border border-cyan-200 shadow-[0_0_8px_rgba(0,229,255,0.7)] animate-pulse">0</span>
+        </div>
+        <span class="text-[9px] font-mono font-bold tracking-wider mt-0.5">CHATS</span>
+      </button>
+
+      <!-- 5. PROFILE & VERIFICATION TAB -->
+      <button 
+        id="dock-tab-profile" 
+        type="button" 
+        class="dock-nav-item flex-1 flex flex-col items-center justify-center py-1 px-1 rounded-xl text-slate-400 hover:text-slate-200 transition-all duration-200 group active:scale-95 cursor-pointer"
+        title="Google Sign-In, Campus Verification & Trust Score"
+      >
+        <div class="relative flex items-center justify-center">
+          <img id="dock-user-avatar" src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80" alt="Profile" class="w-5 h-5 rounded-full object-cover border border-slate-600 group-hover:border-cyan-400 transition" />
+          <span id="dock-verified-dot" class="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-slate-500"></span>
+        </div>
+        <span id="dock-profile-label" class="text-[9px] font-mono font-bold tracking-wider mt-0.5">PROFILE</span>
+      </button>
+
+    </div>
+  </nav>
+
   <!-- SCRIPTS -->
   <script src="js/data.js?v=3.0.3"></script>
   <script src="js/campuses.js?v=3.0.3"></script>
@@ -3123,7 +3198,147 @@
 
   <script>
     // Initialize Lucide icons on page load
-    lucide.createIcons();
+    if (window.lucide && typeof lucide.createIcons === 'function') {
+      lucide.createIcons();
+    }
+
+    // =========================================================================
+    // MOBILE APP SHELL: BOTTOM DOCK CONTROLLER & HAPTICS ENGINE
+    // =========================================================================
+    (function initMobileDock() {
+      // 1. Tactile Haptic Vibration
+      window.triggerHaptic = function(type = 'light') {
+        if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+          try {
+            if (type === 'light') navigator.vibrate([12]);
+            else if (type === 'medium') navigator.vibrate([24]);
+            else if (type === 'pop') navigator.vibrate([35]);
+            else if (type === 'success') navigator.vibrate([15, 30, 20]);
+          } catch(e) {}
+        }
+      };
+
+      const tabRadar = document.getElementById("dock-tab-radar");
+      const tabFeed = document.getElementById("dock-tab-feed");
+      const btnBroadcast = document.getElementById("dock-btn-broadcast");
+      const tabChat = document.getElementById("dock-tab-chat");
+      const tabProfile = document.getElementById("dock-tab-profile");
+      const dockChatBadge = document.getElementById("dock-chat-badge");
+      const dockAvatar = document.getElementById("dock-user-avatar");
+      const dockVerifiedDot = document.getElementById("dock-verified-dot");
+
+      const activeClass = "text-cyan-300 bg-cyan-950/70 border border-cyan-500/40 shadow-[0_0_12px_rgba(0,229,255,0.25)]";
+      const inactiveClass = "text-slate-400 hover:text-slate-200 border-transparent bg-transparent shadow-none";
+
+      function setDockActive(tab) {
+        if (tabRadar) tabRadar.className = `dock-nav-item flex-1 flex flex-col items-center justify-center py-1 px-1 rounded-xl transition-all duration-200 group active:scale-95 cursor-pointer ${tab === 'radar' ? activeClass : inactiveClass}`;
+        if (tabFeed) tabFeed.className = `dock-nav-item flex-1 flex flex-col items-center justify-center py-1 px-1 rounded-xl transition-all duration-200 group active:scale-95 cursor-pointer ${tab === 'feed' ? activeClass : inactiveClass}`;
+      }
+
+      // Radar Tab
+      if (tabRadar) {
+        tabRadar.addEventListener("click", () => {
+          window.triggerHaptic('light');
+          setDockActive('radar');
+          const radarBtn = document.getElementById("view-radar-btn");
+          if (radarBtn) radarBtn.click();
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        });
+      }
+
+      // Feed Tab
+      if (tabFeed) {
+        tabFeed.addEventListener("click", () => {
+          window.triggerHaptic('light');
+          setDockActive('feed');
+          const gridBtn = document.getElementById("view-grid-btn");
+          if (gridBtn) gridBtn.click();
+          const gridContainer = document.getElementById("grid-mode-container");
+          if (gridContainer) {
+            gridContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+        });
+      }
+
+      // Center Hero Broadcast (+)
+      if (btnBroadcast) {
+        btnBroadcast.addEventListener("click", () => {
+          window.triggerHaptic('pop');
+          const sellBtn = document.getElementById("btn-open-sell-modal");
+          if (typeof window.openBroadcastBeaconModal === 'function') {
+            window.openBroadcastBeaconModal();
+          } else if (sellBtn) {
+            sellBtn.click();
+          }
+        });
+      }
+
+      // Chat Messages Tab
+      if (tabChat) {
+        tabChat.addEventListener("click", () => {
+          window.triggerHaptic('light');
+          const inboxBtn = document.getElementById("btn-header-inbox");
+          if (inboxBtn) inboxBtn.click();
+        });
+      }
+
+      // Profile Tab
+      if (tabProfile) {
+        tabProfile.addEventListener("click", () => {
+          window.triggerHaptic('light');
+          const profileBtn = document.getElementById("btn-open-google-auth");
+          if (profileBtn) profileBtn.click();
+        });
+      }
+
+      // Keep Dock Active State in Sync with Top Switchers
+      const topRadarBtn = document.getElementById("view-radar-btn");
+      const topGridBtn = document.getElementById("view-grid-btn");
+      if (topRadarBtn) topRadarBtn.addEventListener("click", () => setDockActive('radar'));
+      if (topGridBtn) topGridBtn.addEventListener("click", () => setDockActive('feed'));
+
+      // Sync Avatar & Verified Status from Header HUD
+      function syncProfileState() {
+        const hudAvatar = document.getElementById("hud-user-avatar");
+        const hudDot = document.getElementById("hud-verified-dot");
+        if (hudAvatar && dockAvatar && hudAvatar.src) {
+          dockAvatar.src = hudAvatar.src;
+        }
+        if (hudDot && dockVerifiedDot) {
+          dockVerifiedDot.className = hudDot.className;
+        }
+
+        // Sync Unread Chat Badge
+        const headerBadge = document.getElementById("header-inbox-badge");
+        if (headerBadge && dockChatBadge) {
+          if (!headerBadge.classList.contains("hidden") && headerBadge.textContent !== "0") {
+            dockChatBadge.textContent = headerBadge.textContent;
+            dockChatBadge.classList.remove("hidden");
+          } else {
+            dockChatBadge.classList.add("hidden");
+          }
+        }
+      }
+
+      // Poll profile / badge changes every second
+      setInterval(syncProfileState, 1200);
+      syncProfileState();
+
+      // Keyboard avoidance on mobile devices: gently hide dock when typing
+      const navDock = document.getElementById("mobile-dock-nav");
+      if (navDock) {
+        document.addEventListener("focusin", (e) => {
+          if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) {
+            navDock.classList.add("translate-y-24", "opacity-0", "pointer-events-none");
+          }
+        });
+        document.addEventListener("focusout", (e) => {
+          if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) {
+            navDock.classList.remove("translate-y-24", "opacity-0", "pointer-events-none");
+          }
+        });
+      }
+    })();
   </script>
 </body>
 </html>

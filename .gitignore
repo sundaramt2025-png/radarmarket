@@ -11,3 +11,5 @@ database.db-wal
 database.db-shm
 node_modules/
 database_local.json
+_intellihelm/
+_radarmarket_backup/
