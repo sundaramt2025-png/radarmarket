@@ -48,24 +48,145 @@ class RadarEngine {
 
   initCanvas() {
     const rect = this.canvas.getBoundingClientRect();
-    const dpr = window.devicePixelRatio || 1;
-    this.width = rect.width;
-    this.height = rect.height;
-    
-    this.canvas.width = this.width * dpr;
-    this.canvas.height = this.height * dpr;
+    if (!rect.width || !rect.height) return;
+
+    // Cap DPR at 2 for mobile thermal efficiency & high refresh rate (90-120Hz)
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const targetWidth = Math.round(rect.width);
+    const targetHeight = Math.round(rect.height);
+
+    if (this.width === targetWidth && this.height === targetHeight && this.dpr === dpr) {
+      return;
+    }
+
+    this.width = targetWidth;
+    this.height = targetHeight;
+    this.dpr = dpr;
+
+    this.canvas.width = Math.round(this.width * dpr);
+    this.canvas.height = Math.round(this.height * dpr);
+    this.ctx.setTransform(1, 0, 0, 1, 0, 0);
     this.ctx.scale(dpr, dpr);
 
     this.centerX = this.width / 2;
     this.centerY = this.height / 2;
     // Keep 20px padding for edge ticks and labels
     this.radius = Math.min(this.centerX, this.centerY) - 20;
+
+    // Pre-render static background scope into offscreen buffer for buttery 120 FPS performance
+    this.buildOffscreenGrid();
+  }
+
+  buildOffscreenGrid() {
+    if (this.width <= 0 || this.height <= 0) return;
+    if (!this.offscreenCanvas) {
+      this.offscreenCanvas = document.createElement("canvas");
+    }
+    const dpr = this.dpr || 1;
+    this.offscreenCanvas.width = Math.round(this.width * dpr);
+    this.offscreenCanvas.height = Math.round(this.height * dpr);
+    const octx = this.offscreenCanvas.getContext("2d");
+    if (!octx) return;
+    octx.setTransform(1, 0, 0, 1, 0, 0);
+    octx.scale(dpr, dpr);
+
+    const cx = this.centerX;
+    const cy = this.centerY;
+    const maxR = this.radius;
+
+    // Outer ring border
+    octx.strokeStyle = "rgba(0, 229, 255, 0.4)";
+    octx.lineWidth = 2;
+    octx.beginPath();
+    octx.arc(cx, cy, maxR, 0, Math.PI * 2);
+    octx.stroke();
+
+    // Concentric range rings
+    const numRings = this.options.rings;
+    octx.lineWidth = 1;
+    octx.setLineDash([4, 4]);
+
+    for (let i = 1; i <= numRings; i++) {
+      const ringR = (maxR / numRings) * i;
+      octx.strokeStyle = i === numRings ? "rgba(0, 229, 255, 0.4)" : "rgba(0, 229, 255, 0.18)";
+      octx.beginPath();
+      octx.arc(cx, cy, ringR, 0, Math.PI * 2);
+      octx.stroke();
+
+      // Ring distance labels along East axis
+      const ringDistMeters = Math.round((this.options.maxRadiusMeters / numRings) * i);
+      const labelText = ringDistMeters >= 1000 ? `${(ringDistMeters / 1000).toFixed(1)}km` : `${ringDistMeters}m`;
+      octx.font = "9px 'JetBrains Mono', monospace";
+      octx.fillStyle = "rgba(0, 229, 255, 0.6)";
+      octx.fillText(labelText, cx + ringR - 22, cy - 4);
+    }
+    octx.setLineDash([]);
+
+    // Crosshairs (N-S, E-W)
+    octx.strokeStyle = "rgba(0, 229, 255, 0.25)";
+    octx.beginPath();
+    octx.moveTo(cx - maxR, cy);
+    octx.lineTo(cx + maxR, cy);
+    octx.moveTo(cx, cy - maxR);
+    octx.lineTo(cx, cy + maxR);
+    octx.stroke();
+
+    // 30-degree subtle radial rays
+    octx.strokeStyle = "rgba(0, 229, 255, 0.08)";
+    for (let deg = 30; deg < 360; deg += 30) {
+      if (deg % 90 === 0) continue;
+      const rad = (deg * Math.PI) / 180;
+      octx.beginPath();
+      octx.moveTo(cx, cy);
+      octx.lineTo(cx + maxR * Math.cos(rad), cy + maxR * Math.sin(rad));
+      octx.stroke();
+    }
+
+    // Outer border tick marks
+    octx.strokeStyle = "rgba(0, 229, 255, 0.5)";
+    for (let deg = 0; deg < 360; deg += 10) {
+      const rad = (deg * Math.PI) / 180;
+      const isMajor = deg % 30 === 0;
+      const tickLen = isMajor ? 8 : 4;
+      const x1 = cx + (maxR - tickLen) * Math.cos(rad);
+      const y1 = cy + (maxR - tickLen) * Math.sin(rad);
+      const x2 = cx + maxR * Math.cos(rad);
+      const y2 = cy + maxR * Math.sin(rad);
+
+      octx.lineWidth = isMajor ? 1.5 : 0.8;
+      octx.beginPath();
+      octx.moveTo(x1, y1);
+      octx.lineTo(x2, y2);
+      octx.stroke();
+    }
+
+    // Compass Cardinal Labels (N, E, S, W)
+    octx.font = "bold 11px 'JetBrains Mono', monospace";
+    octx.textAlign = "center";
+    octx.textBaseline = "middle";
+
+    octx.fillStyle = "#00ff9d";
+    octx.fillText("N (000°)", cx, cy - maxR + 14);
+
+    octx.fillStyle = "rgba(0, 229, 255, 0.8)";
+    octx.fillText("E (090°)", cx + maxR - 24, cy);
+    octx.fillText("S (180°)", cx, cy + maxR - 14);
+    octx.fillText("W (270°)", cx - maxR + 24, cy);
   }
 
   setupListeners() {
-    window.addEventListener("resize", () => {
-      this.initCanvas();
-    });
+    let resizeTimer = null;
+    const handleResize = () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => this.initCanvas(), 80);
+    };
+
+    if (typeof ResizeObserver !== "undefined" && this.canvas.parentElement) {
+      const ro = new ResizeObserver(() => handleResize());
+      ro.observe(this.canvas.parentElement);
+    } else {
+      window.addEventListener("resize", handleResize);
+    }
 
     this.canvas.addEventListener("mousemove", (e) => {
       const rect = this.canvas.getBoundingClientRect();
@@ -168,6 +289,7 @@ class RadarEngine {
 
   setMaxRadius(radiusMeters) {
     this.options.maxRadiusMeters = radiusMeters;
+    this.buildOffscreenGrid();
   }
 
   getScreenCoords(target) {
@@ -191,7 +313,16 @@ class RadarEngine {
 
   start() {
     this.isRunning = true;
-    const rAF = typeof requestAnimationFrame !== "undefined" ? requestAnimationFrame : (cb) => setTimeout(cb, 1000 / 60);
+    this.lastFrameTime = getNow();
+    this.fpsCount = 0;
+    this.fpsTimer = getNow();
+    this.currentFPS = 60;
+    this.detectedMaxHz = 60;
+
+    const rAF = typeof requestAnimationFrame !== "undefined"
+      ? requestAnimationFrame
+      : (cb) => setTimeout(cb, 1000 / 60);
+
     const loop = (now) => {
       if (!this.isRunning) return;
       if (typeof document !== "undefined" && document.hidden) {
@@ -199,14 +330,35 @@ class RadarEngine {
         rAF(loop);
         return;
       }
-      const delta = (now - this.lastFrameTime) / 1000;
+
+      // Delta time in seconds with jitter clamping (prevents tab-resume jumps)
+      const rawDelta = (now - this.lastFrameTime) / 1000;
+      const delta = Math.min(Math.max(rawDelta, 0.001), 0.05);
       this.lastFrameTime = now;
+
+      // Smart Refresh Rate & Live FPS Calculation (Adapts automatically to 60Hz, 90Hz, 120Hz)
+      this.fpsCount++;
+      if (now - this.fpsTimer >= 600) {
+        const calculated = Math.round((this.fpsCount * 1000) / (now - this.fpsTimer));
+        this.currentFPS = calculated;
+        if (calculated > this.detectedMaxHz) {
+          this.detectedMaxHz = calculated >= 110 ? 120 : calculated >= 80 ? 90 : 60;
+        }
+        this.fpsCount = 0;
+        this.fpsTimer = now;
+
+        // Auto-synchronize telemetry HUD if callback provided
+        if (typeof this.options.onFpsUpdate === "function") {
+          this.options.onFpsUpdate(this.currentFPS, this.detectedMaxHz);
+        }
+      }
 
       this.update(delta);
       this.draw();
 
       rAF(loop);
     };
+
     rAF(loop);
   }
 
@@ -272,15 +424,12 @@ class RadarEngine {
     const cy = this.centerY;
     const maxR = this.radius;
 
-    // Outer ring border
-    ctx.save();
-    ctx.strokeStyle = "rgba(0, 229, 255, 0.4)";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(cx, cy, maxR, 0, Math.PI * 2);
-    ctx.stroke();
+    // Single GPU drawImage blit from pre-rendered offscreen buffer (zero per-frame vector overhead)
+    if (this.offscreenCanvas) {
+      ctx.drawImage(this.offscreenCanvas, 0, 0, this.width, this.height);
+    }
 
-    // Expanding Area Sonar Scan Wave Pulse
+    // Dynamic Expanding Area Sonar Scan Wave Pulse (only when scanning)
     if (this.isScanningArea) {
       this.scanRippleRadius = ((this.scanRippleRadius || 0) + 3.5) % maxR;
       ctx.save();
@@ -300,80 +449,6 @@ class RadarEngine {
       ctx.stroke();
       ctx.restore();
     }
-
-    // Concentric range rings
-    const numRings = this.options.rings;
-    ctx.lineWidth = 1;
-    ctx.setLineDash([4, 4]);
-
-    for (let i = 1; i <= numRings; i++) {
-      const ringR = (maxR / numRings) * i;
-      ctx.strokeStyle = i === numRings ? "rgba(0, 229, 255, 0.4)" : "rgba(0, 229, 255, 0.18)";
-      ctx.beginPath();
-      ctx.arc(cx, cy, ringR, 0, Math.PI * 2);
-      ctx.stroke();
-
-      // Ring distance labels along East axis
-      const ringDistMeters = Math.round((this.options.maxRadiusMeters / numRings) * i);
-      const labelText = ringDistMeters >= 1000 ? `${(ringDistMeters / 1000).toFixed(1)}km` : `${ringDistMeters}m`;
-      ctx.font = "9px 'JetBrains Mono', monospace";
-      ctx.fillStyle = "rgba(0, 229, 255, 0.6)";
-      ctx.fillText(labelText, cx + ringR - 22, cy - 4);
-    }
-    ctx.setLineDash([]);
-
-    // Crosshairs (N-S, E-W)
-    ctx.strokeStyle = "rgba(0, 229, 255, 0.25)";
-    ctx.beginPath();
-    ctx.moveTo(cx - maxR, cy);
-    ctx.lineTo(cx + maxR, cy);
-    ctx.moveTo(cx, cy - maxR);
-    ctx.lineTo(cx, cy + maxR);
-    ctx.stroke();
-
-    // 30-degree subtle radial rays
-    ctx.strokeStyle = "rgba(0, 229, 255, 0.08)";
-    for (let deg = 30; deg < 360; deg += 30) {
-      if (deg % 90 === 0) continue;
-      const rad = (deg * Math.PI) / 180;
-      ctx.beginPath();
-      ctx.moveTo(cx, cy);
-      ctx.lineTo(cx + maxR * Math.cos(rad), cy + maxR * Math.sin(rad));
-      ctx.stroke();
-    }
-
-    // Outer border tick marks
-    ctx.strokeStyle = "rgba(0, 229, 255, 0.5)";
-    for (let deg = 0; deg < 360; deg += 10) {
-      const rad = (deg * Math.PI) / 180;
-      const isMajor = deg % 30 === 0;
-      const tickLen = isMajor ? 8 : 4;
-      const x1 = cx + (maxR - tickLen) * Math.cos(rad);
-      const y1 = cy + (maxR - tickLen) * Math.sin(rad);
-      const x2 = cx + maxR * Math.cos(rad);
-      const y2 = cy + maxR * Math.sin(rad);
-
-      ctx.lineWidth = isMajor ? 1.5 : 0.8;
-      ctx.beginPath();
-      ctx.moveTo(x1, y1);
-      ctx.lineTo(x2, y2);
-      ctx.stroke();
-    }
-
-    // Compass Cardinal Labels (N, E, S, W)
-    ctx.font = "bold 11px 'JetBrains Mono', monospace";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-
-    ctx.fillStyle = "#00ff9d";
-    ctx.fillText("N (000°)", cx, cy - maxR + 14);
-
-    ctx.fillStyle = "rgba(0, 229, 255, 0.8)";
-    ctx.fillText("E (090°)", cx + maxR - 24, cy);
-    ctx.fillText("S (180°)", cx, cy + maxR - 14);
-    ctx.fillText("W (270°)", cx - maxR + 24, cy);
-
-    ctx.restore();
   }
 
   drawSweepTrail() {
@@ -393,19 +468,46 @@ class RadarEngine {
     const currentCanvasAngle = this.angle - Math.PI / 2;
     const trailSpan = (42 * Math.PI) / 180; // 42-degree phosphor trail
 
-    // Phosphor sweep trail gradient
-    const steps = 24;
-    for (let i = 0; i < steps; i++) {
-      const stepAngleStart = currentCanvasAngle - (trailSpan / steps) * (i + 1);
-      const stepAngleEnd = currentCanvasAngle - (trailSpan / steps) * i;
-      const alpha = (1 - i / steps) * 0.16;
+    // Phosphor sweep trail gradient (Hardware-accelerated conic gradient when available)
+    let conicDrawn = false;
+    if (typeof ctx.createConicGradient === "function") {
+      try {
+        const startRad = currentCanvasAngle - trailSpan;
+        const conic = ctx.createConicGradient(startRad, cx, cy);
+        const spanFraction = trailSpan / (Math.PI * 2);
+        conic.addColorStop(0, "rgba(0, 255, 157, 0)");
+        conic.addColorStop(spanFraction * 0.5, "rgba(0, 255, 157, 0.05)");
+        conic.addColorStop(spanFraction, "rgba(0, 255, 157, 0.18)");
+        conic.addColorStop(Math.min(1, spanFraction + 0.002), "rgba(0, 255, 157, 0)");
+        conic.addColorStop(1, "rgba(0, 255, 157, 0)");
 
-      ctx.beginPath();
-      ctx.moveTo(cx, cy);
-      ctx.arc(cx, cy, maxR, stepAngleStart, stepAngleEnd);
-      ctx.closePath();
-      ctx.fillStyle = `rgba(0, 255, 157, ${alpha})`;
-      ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.arc(cx, cy, maxR, startRad, currentCanvasAngle);
+        ctx.closePath();
+        ctx.fillStyle = conic;
+        ctx.fill();
+        conicDrawn = true;
+      } catch (e) {
+        conicDrawn = false;
+      }
+    }
+
+    // High-performance 12-step arc fallback for older canvas implementations
+    if (!conicDrawn) {
+      const steps = 12;
+      for (let i = 0; i < steps; i++) {
+        const stepAngleStart = currentCanvasAngle - (trailSpan / steps) * (i + 1);
+        const stepAngleEnd = currentCanvasAngle - (trailSpan / steps) * i;
+        const alpha = (1 - i / steps) * 0.16;
+
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.arc(cx, cy, maxR, stepAngleStart, stepAngleEnd);
+        ctx.closePath();
+        ctx.fillStyle = `rgba(0, 255, 157, ${alpha})`;
+        ctx.fill();
+      }
     }
 
     // Primary Sweep Line
@@ -632,13 +734,14 @@ class RadarEngine {
     const ctx = this.ctx;
     ctx.save();
     ctx.font = "10px 'JetBrains Mono', monospace";
-    ctx.fillStyle = "rgba(0, 229, 255, 0.6)";
+    ctx.fillStyle = "rgba(0, 229, 255, 0.7)";
     ctx.textAlign = "left";
     const inRangeCount = this.targets.filter(t => t.inRadarRange).length;
     const totalCount = this.targets.length;
-    let statusText = `SCAN RPM: ${this.options.rpm} | ACTIVE BLIPS: ${inRangeCount} (${totalCount} in sector)`;
+    const hzStr = this.detectedMaxHz > 60 ? ` (${this.detectedMaxHz}Hz)` : "";
+    let statusText = `SCAN RPM: ${this.options.rpm} | ${this.currentFPS || 60} FPS${hzStr} | BLIPS: ${inRangeCount} (${totalCount} in sector)`;
     if (inRangeCount === 0 && totalCount > 0) {
-      statusText = `SCAN RPM: ${this.options.rpm} | SECTOR CONTACTS: ${totalCount} (Perimeter Ring - Expand Range)`;
+      statusText = `SCAN RPM: ${this.options.rpm} | ${this.currentFPS || 60} FPS${hzStr} | SECTOR: ${totalCount} (Perimeter Ring)`;
     }
     ctx.fillText(statusText, 16, this.height - 12);
 

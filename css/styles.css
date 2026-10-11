@@ -1075,5 +1075,53 @@ input[type=range]::-webkit-slider-thumb {
   }
 }
 
+/* =========================================================================
+   GPU HARDWARE ACCELERATION & HIGH-REFRESH RATE (90Hz / 120Hz / 144Hz) OPTIMIZATION
+   ========================================================================= */
+#radar-canvas {
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+  will-change: transform;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  touch-action: none;
+}
+
+.radar-scope-box {
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+  will-change: transform;
+  contain: layout paint;
+}
+
+#mobile-dock-nav {
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+  will-change: transform;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+/* Butter-smooth momentum scrolling on iOS and Android */
+.overflow-y-auto,
+.overflow-x-auto,
+#deals-feed-container,
+#chat-messages-container,
+#active-chats-list {
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+  overscroll-behavior-y: contain;
+}
+
+/* Reduced motion preference respect */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 
 

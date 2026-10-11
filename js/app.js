@@ -246,6 +246,16 @@
         },
         onHoverTarget: (target) => {
           handleRadarHover(target);
+        },
+        onFpsUpdate: (fps, maxHz) => {
+          const hudFps = document.getElementById("hud-fps-display");
+          if (hudFps) {
+            hudFps.textContent = maxHz > 60 ? `${fps} FPS (${maxHz}Hz)` : `${fps} FPS`;
+          }
+          const scopeFps = document.getElementById("scope-fps-badge");
+          if (scopeFps) {
+            scopeFps.textContent = maxHz > 60 ? `${fps} FPS • ${maxHz}Hz` : `${fps} FPS`;
+          }
         }
       });
     } catch (err) {

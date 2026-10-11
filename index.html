@@ -128,6 +128,11 @@
           <i data-lucide="radio" class="w-3.5 h-3.5 text-amber-400"></i>
           <span>SCAN: <strong class="text-amber-300">24 RPM</strong></span>
         </div>
+        <div class="w-px h-3 bg-slate-700"></div>
+        <div class="flex items-center gap-1.5 text-slate-400">
+          <i data-lucide="zap" class="w-3.5 h-3.5 text-emerald-400"></i>
+          <span><strong id="hud-fps-display" class="text-emerald-300 font-bold">60 FPS</strong></span>
+        </div>
       </div>
 
       <!-- Action Tools: Mobile Connect, Profile, Audio Sonar, Post Item & Location Picker -->
@@ -345,6 +350,7 @@
             <div class="flex items-center gap-2">
               <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
               <span id="sonar-sweep-status" class="text-emerald-400 font-bold uppercase">SONAR SWEEP ACTIVE</span>
+              <span id="scope-fps-badge" class="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-cyan-950/80 text-cyan-300 border border-cyan-500/30">60 FPS</span>
             </div>
             <div class="flex items-center gap-2">
               <!-- Live GPS Scan Surroundings Button -->
