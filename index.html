@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <title>RadarMarket | Local Stationery & Second-Hand Books Radar</title>
   
   <!-- PWA Manifest & Mobile App Meta Tags -->
@@ -91,31 +91,31 @@
 <body class="scanline-bg text-slate-100 flex flex-col min-h-screen selection:bg-cyan-500/30 selection:text-cyan-200 pb-28 sm:pb-12">
 
   <!-- TOP HUD NAVIGATION BAR -->
-  <header class="border-b border-cyan-500/20 bg-slate-950/80 backdrop-blur-md sticky top-0 z-30 px-4 lg:px-8 py-3">
-    <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4">
+  <header class="border-b border-cyan-500/20 bg-slate-950/80 backdrop-blur-md sticky top-0 z-30 px-3 sm:px-6 py-2.5 sm:py-3 w-full max-w-full overflow-hidden">
+    <div class="max-w-7xl mx-auto flex items-center justify-between gap-2 sm:gap-4 w-full min-w-0">
       
       <!-- Brand Logo with Radar Beacon Icon -->
-      <div class="flex items-center gap-3">
-        <div class="relative flex items-center justify-center w-10 h-10 rounded-xl bg-cyan-950/70 border border-cyan-400/40 text-cyan-400 shadow-[0_0_15px_rgba(0,229,255,0.25)]">
-          <i data-lucide="radar" class="w-6 h-6 animate-pulse"></i>
-          <span class="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-emerald-400 live-pulse"></span>
+      <div class="flex items-center gap-2 sm:gap-3 shrink-0">
+        <div class="relative flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-cyan-950/70 border border-cyan-400/40 text-cyan-400 shadow-[0_0_15px_rgba(0,229,255,0.25)]">
+          <i data-lucide="radar" class="w-5 h-5 sm:w-6 sm:h-6 animate-pulse"></i>
+          <span class="absolute -top-1 -right-1 w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-emerald-400 live-pulse"></span>
         </div>
         <div>
-          <div class="flex items-center gap-2">
-            <span class="font-bold text-lg tracking-wider font-mono bg-gradient-to-r from-cyan-400 via-emerald-300 to-teal-200 bg-clip-text text-transparent">
+          <div class="flex items-center gap-1.5 sm:gap-2">
+            <span class="font-bold text-base sm:text-lg tracking-wider font-mono bg-gradient-to-r from-cyan-400 via-emerald-300 to-teal-200 bg-clip-text text-transparent">
               RADAR<span class="text-emerald-400">MARKET</span>
             </span>
-            <span id="app-version-badge" class="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-500/40 font-bold tracking-wider">v3.0.3 GOOGLE MAPS</span>
+            <span id="app-version-badge" class="hidden xs:inline text-[9px] sm:text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-500/40 font-bold tracking-wider">v3.0.3</span>
           </div>
-          <p class="text-xs text-slate-400 hidden sm:block">Stationery & Used Books Local Sonar Grid</p>
+          <p class="text-[11px] text-slate-400 hidden md:block">Stationery & Used Books Local Sonar Grid</p>
         </div>
       </div>
 
       <!-- Telemetry Info Pill -->
-      <div class="hidden md:flex items-center gap-4 px-4 py-1.5 rounded-lg bg-slate-900/90 border border-slate-800 text-xs font-mono">
+      <div class="hidden md:flex items-center gap-4 px-4 py-1.5 rounded-lg bg-slate-900/90 border border-slate-800 text-xs font-mono shrink-0">
         <div id="btn-hud-location-click" class="flex items-center gap-1.5 text-slate-400 cursor-pointer hover:text-cyan-300 transition" title="Tap to calibrate or pinpoint your exact campus on map">
           <i data-lucide="map-pin" class="w-3.5 h-3.5 text-cyan-400"></i>
-          <span id="hud-location-text" class="text-cyan-300 font-bold animate-pulse">SEARCH YOUR COLLAGE HERE....</span>
+          <span id="hud-location-text" class="text-cyan-300 font-bold animate-pulse max-w-[160px] truncate">SEARCH YOUR COLLAGE HERE....</span>
           <i data-lucide="crosshair" class="w-3 h-3 text-slate-500 hover:text-cyan-400"></i>
         </div>
         <div class="w-px h-3 bg-slate-700"></div>
@@ -131,72 +131,65 @@
       </div>
 
       <!-- Action Tools: Mobile Connect, Profile, Audio Sonar, Post Item & Location Picker -->
-      <div class="flex items-center gap-2 sm:gap-3">
+      <div class="flex items-center gap-1.5 sm:gap-2.5 shrink-0 min-w-0">
         
-        <!-- Mobile Connect QR Button -->
-        <button id="btn-open-mobile-modal" class="px-2.5 py-2 rounded-lg bg-cyan-950/80 hover:bg-cyan-900/60 border border-cyan-500/40 text-cyan-300 transition-all flex items-center gap-1.5 text-xs font-mono shadow-[0_0_10px_rgba(0,229,255,0.15)]" title="Connect Phone or another laptop">
-          <i data-lucide="smartphone" class="w-4 h-4 text-cyan-400"></i>
-          <span class="hidden sm:inline">Connect Phone</span>
-        </button>
-
-        <!-- PWA Install App Button (Auto-shown on supported browsers) -->
-        <button id="btn-pwa-install" class="hidden px-2.5 py-2 rounded-lg bg-emerald-950/90 hover:bg-emerald-900/70 border border-emerald-500/50 text-emerald-300 transition-all flex items-center gap-1.5 text-xs font-mono shadow-[0_0_12px_rgba(0,255,157,0.25)] animate-pulse" title="Install RadarMarket to your phone or desktop">
-          <i data-lucide="download" class="w-4 h-4 text-emerald-400"></i>
-          <span class="hidden sm:inline">Install App</span>
-        </button>
-
-        <!-- Google Identity & Verified Profile Pill -->
-        <button id="btn-open-google-auth" class="px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-850 border border-slate-700 hover:border-cyan-400/50 text-slate-200 transition-all flex items-center gap-2 text-xs font-mono shadow-[0_0_12px_rgba(0,229,255,0.1)]" title="Google Account & Campus Verification">
-          <div id="hud-user-avatar-wrap" class="relative">
-            <img id="hud-user-avatar" src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80" class="w-5 h-5 rounded-full object-cover border border-cyan-400" />
-            <span id="hud-verified-dot" class="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-slate-500"></span>
-          </div>
-          <span id="user-profile-name" class="max-w-[100px] truncate font-medium">Guest</span>
-          <span id="hud-verified-badge" class="hidden px-1.5 py-0.2 rounded text-[9px] font-bold uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">Verified</span>
-          <svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24">
-            <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-            <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-            <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" fill="#FBBC05"/>
-            <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" fill="#EA4335"/>
-          </svg>
-        </button>
-
-        <!-- Audio Sonar Toggle -->
-        <button id="btn-audio-toggle" class="p-2 sm:px-3 sm:py-2 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 hover:text-cyan-300 transition-all flex items-center gap-1.5 text-xs font-mono" title="Toggle Sonar Audio Ping">
-          <i data-lucide="volume-x" id="audio-icon" class="w-4 h-4"></i>
-          <span class="hidden lg:inline" id="audio-text">SONAR OFF</span>
-        </button>
-
         <!-- Pan-India Campus / College Selector Button -->
-        <button id="btn-open-campus-search" type="button" class="px-2.5 py-2 rounded-lg bg-slate-900 hover:bg-slate-850 border border-slate-700 hover:border-cyan-400/80 text-slate-200 hover:text-cyan-300 transition-all flex items-center gap-1.5 text-xs font-mono group cursor-pointer" title="Search and choose college/campus across India">
-          <i data-lucide="graduation-cap" class="w-4 h-4 text-cyan-400 group-hover:scale-110 transition-transform"></i>
-          <span id="current-campus-display" class="max-w-[150px] sm:max-w-[190px] truncate font-bold text-cyan-300">SEARCH YOUR COLLAGE HERE....</span>
-          <i data-lucide="chevron-down" class="w-3.5 h-3.5 text-slate-400 group-hover:text-cyan-400"></i>
+        <button id="btn-open-campus-search" type="button" class="px-2 sm:px-2.5 py-1.5 sm:py-2 rounded-lg bg-slate-900 hover:bg-slate-850 border border-slate-700 hover:border-cyan-400/80 text-slate-200 hover:text-cyan-300 transition-all flex items-center gap-1 sm:gap-1.5 text-xs font-mono group cursor-pointer max-w-[140px] sm:max-w-none" title="Search and choose college/campus across India">
+          <i data-lucide="graduation-cap" class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-400 shrink-0 group-hover:scale-110 transition-transform"></i>
+          <span id="current-campus-display" class="max-w-[85px] sm:max-w-[160px] md:max-w-[200px] truncate font-bold text-cyan-300 text-[11px] sm:text-xs">Search Campus</span>
+          <i data-lucide="chevron-down" class="w-3 h-3 text-slate-400 shrink-0 group-hover:text-cyan-400"></i>
         </button>
         <select id="location-select" class="hidden">
           <option value="gps_real" selected>🛰️ Live Device GPS (Real-Time)</option>
           <option value="set_pin_location">📍 Pinpoint / Search My Campus...</option>
         </select>
 
-        <!-- My Beacons Drawer Button -->
-        <button id="btn-open-my-beacons" class="px-2.5 py-2 rounded-lg bg-slate-900 hover:bg-slate-850 border border-slate-700 text-slate-300 hover:text-amber-300 transition-all flex items-center gap-1.5 text-xs font-mono" title="View & Manage your active beacons">
+        <!-- Audio Sonar Toggle -->
+        <button id="btn-audio-toggle" class="p-1.5 sm:px-2.5 sm:py-2 rounded-lg bg-slate-900 hover:bg-slate-850 border border-slate-700 text-slate-300 hover:text-cyan-300 transition-all flex items-center gap-1 text-xs font-mono shrink-0" title="Toggle Sonar Audio Ping">
+          <i data-lucide="volume-x" id="audio-icon" class="w-4 h-4 text-cyan-400"></i>
+          <span class="hidden lg:inline" id="audio-text">SONAR OFF</span>
+        </button>
+
+        <!-- Mobile Connect QR Button (Desktop only) -->
+        <button id="btn-open-mobile-modal" class="hidden sm:flex px-2.5 py-2 rounded-lg bg-cyan-950/80 hover:bg-cyan-900/60 border border-cyan-500/40 text-cyan-300 transition-all items-center gap-1.5 text-xs font-mono shadow-[0_0_10px_rgba(0,229,255,0.15)]" title="Connect Phone or another laptop">
+          <i data-lucide="smartphone" class="w-4 h-4 text-cyan-400"></i>
+          <span class="hidden md:inline">Connect Phone</span>
+        </button>
+
+        <!-- PWA Install App Button -->
+        <button id="btn-pwa-install" class="hidden px-2.5 py-2 rounded-lg bg-emerald-950/90 hover:bg-emerald-900/70 border border-emerald-500/50 text-emerald-300 transition-all items-center gap-1.5 text-xs font-mono shadow-[0_0_12px_rgba(0,255,157,0.25)] animate-pulse" title="Install RadarMarket to your phone or desktop">
+          <i data-lucide="download" class="w-4 h-4 text-emerald-400"></i>
+          <span class="hidden md:inline">Install App</span>
+        </button>
+
+        <!-- Google Identity & Verified Profile Pill (Desktop: bottom dock handles mobile) -->
+        <button id="btn-open-google-auth" class="hidden sm:flex px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-850 border border-slate-700 hover:border-cyan-400/50 text-slate-200 transition-all items-center gap-2 text-xs font-mono shadow-[0_0_12px_rgba(0,229,255,0.1)]" title="Google Account & Campus Verification">
+          <div id="hud-user-avatar-wrap" class="relative">
+            <img id="hud-user-avatar" src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80" class="w-5 h-5 rounded-full object-cover border border-cyan-400" />
+            <span id="hud-verified-dot" class="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-slate-500"></span>
+          </div>
+          <span id="user-profile-name" class="max-w-[80px] md:max-w-[100px] truncate font-medium">Guest</span>
+          <span id="hud-verified-badge" class="hidden px-1.5 py-0.2 rounded text-[9px] font-bold uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">Verified</span>
+        </button>
+
+        <!-- My Beacons Drawer Button (Desktop) -->
+        <button id="btn-open-my-beacons" class="hidden md:flex px-2.5 py-2 rounded-lg bg-slate-900 hover:bg-slate-850 border border-slate-700 text-slate-300 hover:text-amber-300 transition-all items-center gap-1.5 text-xs font-mono" title="View & Manage your active beacons">
           <i data-lucide="radio" class="w-4 h-4 text-amber-400"></i>
-          <span class="hidden md:inline">My Beacons</span>
+          <span>My Beacons</span>
           <span id="my-beacons-badge" class="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">0</span>
         </button>
 
-        <!-- Communication / Signals Inbox Button -->
-        <button id="btn-header-inbox" class="relative px-2.5 py-2 rounded-lg bg-slate-900 hover:bg-slate-850 border border-slate-700 text-slate-300 hover:text-cyan-300 transition-all flex items-center gap-1.5 text-xs font-mono" title="Communications & Messages">
+        <!-- Communication / Signals Inbox Button (Desktop) -->
+        <button id="btn-header-inbox" class="hidden sm:flex relative px-2.5 py-2 rounded-lg bg-slate-900 hover:bg-slate-850 border border-slate-700 text-slate-300 hover:text-cyan-300 transition-all items-center gap-1.5 text-xs font-mono" title="Communications & Messages">
           <i data-lucide="message-square" class="w-4 h-4 text-cyan-400"></i>
           <span class="hidden md:inline">Messages</span>
           <span id="header-inbox-badge" class="hidden px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-cyan-500/30 text-cyan-300 border border-cyan-400/60 shadow-[0_0_8px_rgba(0,229,255,0.4)] animate-pulse">0</span>
         </button>
 
-        <!-- Broadcast Beacon / Sell Button -->
-        <button id="btn-open-sell-modal" onclick="window.openBroadcastBeaconModal ? window.openBroadcastBeaconModal() : null" class="px-3 sm:px-3.5 py-2 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-semibold text-xs tracking-wide uppercase font-mono shadow-[0_0_15px_rgba(0,255,157,0.3)] hover:shadow-[0_0_20px_rgba(0,255,157,0.5)] transition flex items-center gap-1.5 shrink-0 cursor-pointer">
+        <!-- Broadcast Beacon / Sell Button (Desktop: mobile has dock hero button) -->
+        <button id="btn-open-sell-modal" onclick="window.openBroadcastBeaconModal ? window.openBroadcastBeaconModal() : null" class="hidden sm:flex px-3 sm:px-3.5 py-2 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-semibold text-xs tracking-wide uppercase font-mono shadow-[0_0_15px_rgba(0,255,157,0.3)] hover:shadow-[0_0_20px_rgba(0,255,157,0.5)] transition items-center gap-1.5 shrink-0 cursor-pointer">
           <i data-lucide="plus-circle" class="w-4 h-4 shrink-0"></i>
-          <span class="hidden sm:inline">Broadcast Beacon</span>
-          <span class="sm:hidden">Broadcast</span>
+          <span>Broadcast</span>
         </button>
 
       </div>
@@ -204,18 +197,18 @@
   </header>
 
   <!-- CONTROLS & FILTER BAR -->
-  <section class="border-b border-cyan-500/15 bg-slate-950/50 px-4 lg:px-8 py-3 z-20">
-    <div class="max-w-7xl mx-auto flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+  <section class="border-b border-cyan-500/15 bg-slate-950/50 px-3 sm:px-4 lg:px-8 py-2.5 sm:py-3 z-20 w-full max-w-full overflow-hidden">
+    <div class="max-w-7xl mx-auto flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2.5 sm:gap-3 w-full min-w-0">
       
       <!-- Search Input & Campus Selector -->
-      <div class="flex items-center gap-2 flex-1 max-w-xl">
-        <div class="relative flex-1">
+      <div class="flex items-center gap-2 flex-1 max-w-xl w-full min-w-0">
+        <div class="relative flex-1 min-w-0">
           <i data-lucide="search" class="w-4 h-4 text-cyan-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
           <input 
             type="text" 
             id="search-input" 
-            placeholder="SEARCH YOUR COLLAGE HERE.... (e.g. IIT, DU, Mumbai Univ, or items)" 
-            class="w-full pl-9 pr-4 py-2 bg-slate-900/90 border border-slate-800 focus:border-cyan-400 rounded-lg text-xs font-mono text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-cyan-400/50 transition"
+            placeholder="Search campus items or colleges..." 
+            class="w-full pl-9 pr-8 py-2 bg-slate-900/90 border border-slate-800 focus:border-cyan-400 rounded-lg text-xs font-mono text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-cyan-400/50 transition truncate"
           />
           <button id="search-clear-btn" class="hidden absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200">
             <i data-lucide="x" class="w-3.5 h-3.5"></i>
@@ -235,18 +228,18 @@
             </div>
           </div>
         </div>
-        <button id="btn-search-bar-campus" type="button" class="px-2.5 py-2 rounded-lg bg-slate-900 hover:bg-slate-850 border border-slate-700 hover:border-cyan-400 text-xs font-mono text-cyan-300 flex items-center gap-1.5 shrink-0 transition cursor-pointer" title="Choose your Indian college / campus">
+        <button id="btn-search-bar-campus" type="button" class="hidden sm:flex px-2.5 py-2 rounded-lg bg-slate-900 hover:bg-slate-850 border border-slate-700 hover:border-cyan-400 text-xs font-mono text-cyan-300 items-center gap-1.5 shrink-0 transition cursor-pointer" title="Choose your Indian college / campus">
           <i data-lucide="graduation-cap" class="w-3.5 h-3.5 text-cyan-400"></i>
-          <span class="hidden sm:inline text-slate-400">Campus:</span>
-          <span id="search-bar-campus-name" class="font-bold max-w-[120px] truncate text-slate-200">Search College</span>
+          <span class="hidden md:inline text-slate-400">Campus:</span>
+          <span id="search-bar-campus-name" class="font-bold max-w-[100px] md:max-w-[130px] truncate text-slate-200">Search College</span>
         </button>
       </div>
 
       <!-- Filter Tabs & Radar Range Slider -->
-      <div class="flex flex-wrap items-center gap-3">
+      <div class="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2 sm:gap-3 w-full md:w-auto min-w-0">
         
-        <!-- Category Filter Pills -->
-        <div class="flex items-center p-0.5 rounded-lg bg-slate-900 border border-slate-800 text-xs font-mono overflow-x-auto scrollbar-none">
+        <!-- Category Filter Pills (Horizontal Scroll on Mobile) -->
+        <div class="w-full sm:w-auto flex items-center p-0.5 rounded-lg bg-slate-900 border border-slate-800 text-xs font-mono overflow-x-auto scrollbar-none shrink-0">
           <button class="filter-category-btn px-3 py-1.5 rounded-md text-cyan-400 bg-cyan-950/80 border border-cyan-500/30 transition shrink-0" data-category="all">
             ALL
           </button>
@@ -273,58 +266,62 @@
           </button>
         </div>
 
-        <!-- Bounty Board Quick-Access Button -->
-        <button id="btn-open-bounty-board" class="px-2.5 py-1.5 rounded-lg bg-pink-950/70 hover:bg-pink-900/60 border border-pink-500/50 hover:border-pink-400 text-pink-300 font-bold font-mono text-xs flex items-center gap-1.5 transition shadow-[0_0_12px_rgba(255,0,119,0.2)] hover:shadow-[0_0_20px_rgba(255,0,119,0.4)]" title="View all Wanted Requests on campus">
-          <i data-lucide="target" class="w-3.5 h-3.5 animate-pulse"></i>
-          <span>BOUNTY BOARD</span>
-          <span id="bounty-board-badge" class="hidden px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-pink-500/30 text-pink-200 border border-pink-400/50"></span>
-        </button>
+        <div class="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full sm:w-auto justify-between sm:justify-start min-w-0">
+          <!-- Bounty Board Quick-Access Button -->
+          <button id="btn-open-bounty-board" class="px-2.5 py-1.5 rounded-lg bg-pink-950/70 hover:bg-pink-900/60 border border-pink-500/50 hover:border-pink-400 text-pink-300 font-bold font-mono text-xs flex items-center gap-1.5 transition shadow-[0_0_12px_rgba(255,0,119,0.2)] hover:shadow-[0_0_20px_rgba(255,0,119,0.4)] shrink-0" title="View all Wanted Requests on campus">
+            <i data-lucide="target" class="w-3.5 h-3.5 animate-pulse"></i>
+            <span>BOUNTY</span>
+            <span id="bounty-board-badge" class="hidden px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-pink-500/30 text-pink-200 border border-pink-400/50"></span>
+          </button>
 
-        <!-- Proximity Tiers & Radar Range Slider -->
-        <div class="flex items-center gap-1.5 bg-slate-900/90 border border-slate-800 px-2.5 py-1.5 rounded-lg text-xs font-mono">
-          <!-- Proximity Mode Tiers -->
-          <div class="flex items-center gap-1">
-            <button id="tier-campus-btn" type="button" class="proximity-tier-btn active px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-500/50 text-[10px] font-bold transition cursor-pointer" data-tier="campus" title="Campus Mode (1 km walking distance)">
-              🎓 1KM CAMPUS
+          <!-- Proximity Tiers & Radar Range Slider -->
+          <div class="flex items-center gap-1.5 bg-slate-900/90 border border-slate-800 px-2 py-1.5 rounded-lg text-xs font-mono shrink-0 overflow-x-auto scrollbar-none">
+            <!-- Proximity Mode Tiers -->
+            <div class="flex items-center gap-1 shrink-0">
+              <button id="tier-campus-btn" type="button" class="proximity-tier-btn active px-1.5 sm:px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-500/50 text-[10px] font-bold transition cursor-pointer" data-tier="campus" title="Campus Mode (1 km walking distance)">
+                1KM
+              </button>
+              <button id="tier-society-btn" type="button" class="proximity-tier-btn px-1.5 sm:px-2 py-0.5 rounded text-slate-400 hover:text-slate-200 border border-transparent text-[10px] font-bold transition cursor-pointer" data-tier="society" title="Society & Neighborhood Mode (5 km radius)">
+                5KM
+              </button>
+              <button id="tier-city-btn" type="button" class="proximity-tier-btn px-1.5 sm:px-2 py-0.5 rounded text-slate-400 hover:text-slate-200 border border-transparent text-[10px] font-bold transition cursor-pointer" data-tier="city" title="City Cluster Mode (25 km radius)">
+                25KM
+              </button>
+            </div>
+            <div class="h-4 w-px bg-slate-800 mx-0.5"></div>
+            <input 
+              type="range" 
+              id="range-slider" 
+              min="200" 
+              max="25000" 
+              step="100" 
+              value="1000" 
+              class="w-14 sm:w-20 cursor-pointer"
+            />
+            <span id="range-value-display" class="text-emerald-400 font-bold min-w-[42px] text-right text-[11px]">1.0 km</span>
+          </div>
+
+          <!-- Dual View Mode Switcher -->
+          <div class="flex items-center p-0.5 rounded-lg bg-slate-900 border border-slate-800 text-xs font-mono shrink-0">
+            <button id="view-radar-btn" class="px-2 sm:px-2.5 py-1.5 rounded-md bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 flex items-center gap-1 transition cursor-pointer" title="Sci-Fi Radar Telemetry HUD">
+              <i data-lucide="crosshair" class="w-3.5 h-3.5"></i>
+              <span class="text-[11px] sm:text-xs">RADAR</span>
             </button>
-            <button id="tier-society-btn" type="button" class="proximity-tier-btn px-2 py-0.5 rounded text-slate-400 hover:text-slate-200 border border-transparent text-[10px] font-bold transition cursor-pointer" data-tier="society" title="Society & Neighborhood Mode (5 km radius)">
-              🏘️ 5KM SOCIETY
+            <button id="view-grid-btn" class="px-2 sm:px-2.5 py-1.5 rounded-md text-slate-400 hover:text-slate-200 flex items-center gap-1 transition cursor-pointer" title="Low-Bandwidth Card List Feed">
+              <i data-lucide="list" class="w-3.5 h-3.5"></i>
+              <span class="text-[11px] sm:text-xs">FEED</span>
             </button>
-            <button id="tier-city-btn" type="button" class="proximity-tier-btn px-2 py-0.5 rounded text-slate-400 hover:text-slate-200 border border-transparent text-[10px] font-bold transition cursor-pointer" data-tier="city" title="City Cluster Mode (25 km radius)">
-              🏙️ 25KM CITY
+            <button id="view-map-btn" class="px-2 sm:px-2.5 py-1.5 rounded-md text-slate-400 hover:text-slate-200 flex items-center gap-1 transition cursor-pointer" title="Google Maps Navigation">
+              <i data-lucide="map" class="w-3.5 h-3.5"></i>
+              <span class="text-[11px] sm:text-xs">MAP</span>
             </button>
           </div>
-          <div class="h-4 w-px bg-slate-800 mx-1 hidden sm:block"></div>
-          <span class="text-slate-400 text-[11px] uppercase hidden md:inline">RADIUS:</span>
-          <input 
-            type="range" 
-            id="range-slider" 
-            min="200" 
-            max="25000" 
-            step="100" 
-            value="1000" 
-            class="w-16 sm:w-24 cursor-pointer"
-          />
-          <span id="range-value-display" class="text-emerald-400 font-bold min-w-[50px] text-right">1.0 km</span>
         </div>
 
-        <!-- Dual View Mode Switcher -->
-        <div class="flex items-center p-0.5 rounded-lg bg-slate-900 border border-slate-800 text-xs font-mono">
-          <button id="view-radar-btn" class="px-2.5 py-1.5 rounded-md bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 flex items-center gap-1.5 transition cursor-pointer" title="Sci-Fi Radar Telemetry HUD">
-            <i data-lucide="crosshair" class="w-3.5 h-3.5"></i>
-            <span class="hidden sm:inline">RADAR HUD</span>
-            <span class="sm:hidden">RADAR</span>
-          </button>
-          <button id="view-grid-btn" class="px-2.5 py-1.5 rounded-md text-slate-400 hover:text-slate-200 flex items-center gap-1.5 transition cursor-pointer" title="Low-Bandwidth Card List Feed">
-            <i data-lucide="list" class="w-3.5 h-3.5"></i>
-            <span class="hidden sm:inline">CARD FEED</span>
-            <span class="sm:hidden">FEED</span>
-          </button>
-          <button id="view-map-btn" class="px-2.5 py-1.5 rounded-md text-slate-400 hover:text-slate-200 flex items-center gap-1.5 transition cursor-pointer" title="Google Maps Navigation">
-            <i data-lucide="map" class="w-3.5 h-3.5"></i>
-            <span>MAP</span>
-          </button>
-        </div>
+      </div>
+
+    </div>
+  </section>
 
       </div>
 
@@ -537,6 +534,7 @@
           </div>
 
           <!-- Product Image & Quick Spatial Metrics -->
+          <div class="flex flex-col sm:flex-row gap-3 mb-4">
             <div class="relative group cursor-pointer shrink-0" id="target-image-container" title="Click to inspect item photo in high resolution">
               <img 
                 id="target-image" 
