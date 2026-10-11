@@ -8369,7 +8369,7 @@
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => {
         navigator.serviceWorker
-          .register("/sw.js?v=3.0.2")
+          .register("/sw.js?v=3.0.4")
           .then((reg) => {
             console.log("[PWA] Service Worker registered with scope:", reg.scope);
             // Force active update check on every load

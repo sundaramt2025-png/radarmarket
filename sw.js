@@ -3,17 +3,17 @@
  * Provides instant app launching, asset caching, and offline support.
  */
 
-const CACHE_NAME = 'radarmarket-cache-v3.0.3';
+const CACHE_NAME = 'radarmarket-cache-v3.0.4';
 const PRECACHE_ASSETS = [
   '/',
   '/index.html',
-  '/css/styles.css?v=3.0.3',
-  '/js/campuses.js?v=3.0.3',
-  '/js/app.js?v=3.0.3',
-  '/js/algorithm.js?v=3.0.3',
-  '/js/api.js?v=3.0.3',
-  '/js/data.js?v=3.0.3',
-  '/js/radar.js?v=3.0.3',
+  '/css/styles.css?v=3.0.4',
+  '/js/campuses.js?v=3.0.4',
+  '/js/app.js?v=3.0.4',
+  '/js/algorithm.js?v=3.0.4',
+  '/js/api.js?v=3.0.4',
+  '/js/data.js?v=3.0.4',
+  '/js/radar.js?v=3.0.4',
   '/manifest.json',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
@@ -26,7 +26,7 @@ self.addEventListener('install', (event) => {
   self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      console.log('[PWA Service Worker] Precaching shell assets v3.0.3');
+      console.log('[PWA Service Worker] Precaching shell assets v3.0.4');
       return cache.addAll(PRECACHE_ASSETS).catch((err) => {
         console.warn('[PWA Service Worker] Precache warning:', err);
       });
@@ -66,18 +66,51 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 2. HTML & Core Scripts: Network-First so updates appear instantly
-  if (request.mode === 'navigate' || url.pathname.endsWith('.html') || url.pathname.endsWith('.js') || url.pathname === '/') {
+  // 2. HTML Navigation: Instant Cold-Start Race
+  // If Render is in free-tier sleep mode (taking 1-3 min), serve cached shell after 1.2s so the app opens instantly!
+  if (request.mode === 'navigate' || url.pathname === '/' || url.pathname.endsWith('.html')) {
     event.respondWith(
-      fetch(request)
-        .then((networkResponse) => {
-          if (networkResponse && networkResponse.status === 200) {
-            const clone = networkResponse.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
-          }
-          return networkResponse;
-        })
-        .catch(() => caches.match(request))
+      caches.match(request).then((cached) => {
+        const networkFetch = fetch(request)
+          .then((networkResponse) => {
+            if (networkResponse && networkResponse.status === 200) {
+              const clone = networkResponse.clone();
+              caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+            }
+            return networkResponse;
+          })
+          .catch(() => cached);
+
+        if (!cached) {
+          return networkFetch;
+        }
+
+        // Return cached shell if network takes longer than 1.2s
+        return Promise.race([
+          networkFetch,
+          new Promise((resolve) => setTimeout(() => resolve(cached), 1200))
+        ]);
+      })
+    );
+    return;
+  }
+
+  // 3. Core Static JS Scripts & CSS
+  if (url.pathname.endsWith('.js') || url.pathname.endsWith('.css')) {
+    event.respondWith(
+      caches.match(request).then((cached) => {
+        const networkFetch = fetch(request)
+          .then((networkResponse) => {
+            if (networkResponse && networkResponse.status === 200) {
+              const clone = networkResponse.clone();
+              caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+            }
+            return networkResponse;
+          })
+          .catch(() => cached);
+
+        return cached || networkFetch;
+      })
     );
     return;
   }
