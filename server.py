@@ -1715,9 +1715,46 @@ def manage_me():
     user["upi_vpa"] = user.get("upi_vpa") or ""
     return jsonify({"success": True, "user": user})
 
+def haversine_meters(lat1, lon1, lat2, lon2):
+    try:
+        if lat1 is None or lon1 is None or lat2 is None or lon2 is None:
+            return float('inf')
+        R = 6371000.0
+        phi1 = math.radians(float(lat1))
+        phi2 = math.radians(float(lat2))
+        delta_phi = math.radians(float(lat2) - float(lat1))
+        delta_lambda = math.radians(float(lon2) - float(lon1))
+        a = math.sin(delta_phi / 2.0)**2 + math.cos(phi1) * math.cos(phi2) * math.sin(delta_lambda / 2.0)**2
+        c = 2.0 * math.atan2(math.sqrt(a), math.sqrt(1.0 - a))
+        return R * c
+    except Exception:
+        return float('inf')
+
 @app.route('/api/items', methods=['GET'])
 def list_items():
     """List all active items. Prioritizes persistent cloud PostgreSQL."""
+    req_lat = request.args.get('lat')
+    req_lng = request.args.get('lng')
+    req_radius = request.args.get('radius_meters')
+
+    def apply_geo_filter(raw_items):
+        if not (req_lat and req_lng):
+            return raw_items
+        try:
+            u_lat = float(req_lat)
+            u_lng = float(req_lng)
+            max_r = float(req_radius) if req_radius else 25000.0
+            res = []
+            for it in raw_items:
+                d = haversine_meters(u_lat, u_lng, it.get('lat'), it.get('lng'))
+                if math.isfinite(d):
+                    it['distance'] = round(d)
+                if d <= max_r * 1.15:
+                    res.append(it)
+            return res
+        except Exception:
+            return raw_items
+
     pg = get_pg_conn()
     if pg:
         try:
@@ -1763,6 +1800,7 @@ def list_items():
             # Background sync to local SQLite so offline fallback has latest records
             try: sync_pg_to_sqlite(items)
             except Exception: pass
+            items = apply_geo_filter(items)
             return jsonify({"success": True, "items": items, "count": len(items)})
         except Exception as e:
             print("[PostgreSQL list_items Error, falling back to SQLite]:", e)
@@ -1802,6 +1840,7 @@ def list_items():
         item["upi_id"] = item.get("upi_id") or ""
         items.append(item)
 
+    items = apply_geo_filter(items)
     return jsonify({"success": True, "items": items, "count": len(items)})
 
 @app.route('/api/my-items', methods=['GET'])

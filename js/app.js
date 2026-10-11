@@ -561,14 +561,24 @@
     // 2. Apply anti-collision spatial jitter for overlapping coordinates
     state.evaluatedItems = RadarAlgorithm.applyRadarClusterSolver(evaluated);
 
-    // 3. Filter by category / beacon_type, search query & strict Campus Radius (500m to 2km)
+    // 3. Filter by category / beacon_type, search query & strict Location Radar Radius
     state.filteredItems = state.evaluatedItems.filter((entry) => {
-      // Strict Campus Perimeter Fence: 500m to 5000m (5 km)
-      // When a campus is selected, products within the selected radar radius are displayed
-      if (state.activeCampus) {
-        const campusMaxRadius = Math.max(500, state.maxRadiusMeters || 1000);
-        if (entry.distance > campusMaxRadius) {
-          return false; // Strictly exclude items outside the selected college/campus perimeter!
+      // Geospatial Perimeter Filter:
+      // When user location is set (campus, live GPS, or custom pinned spot),
+      // strictly filter to items that are located within the active radar scan perimeter!
+      const hasValidUserCoords = typeof state.userLocation?.lat === "number" && !isNaN(state.userLocation.lat) &&
+                                 typeof state.userLocation?.lng === "number" && !isNaN(state.userLocation.lng);
+
+      if (hasValidUserCoords) {
+        // Items with invalid/infinite distance are not at this location
+        if (!isFinite(entry.distance)) {
+          return false;
+        }
+
+        // Radar sector scan fence: respect range slider (e.g. 500m to 25km), with a 15% perimeter margin
+        const scanMaxRadius = Math.max(500, (state.maxRadiusMeters || 1000) * 1.15);
+        if (entry.distance > scanMaxRadius) {
+          return false; // Strictly exclude items located outside the active location/radar sector!
         }
       }
 
@@ -2623,8 +2633,22 @@
         state.userLocation = {
           lat,
           lng,
-          name: `📍 Live GPS (±${accuracy}m)`
+          accuracy,
+          name: `📍 Live GPS (±${accuracy}m)`,
+          isLiveGPS: true,
+          isManual: false
         };
+
+        if (window.IndianCampuses && typeof window.IndianCampuses.getNearestCampus === "function") {
+          const nearest = window.IndianCampuses.getNearestCampus(lat, lng);
+          if (nearest && nearest.distanceMeters <= 5000) {
+            state.activeCampus = nearest;
+            updateCampusUI(nearest);
+          } else {
+            state.activeCampus = null;
+            updateCampusUI(null);
+          }
+        }
 
         if (bannerText) bannerText.textContent = "TRIANGULATING CAMPUS SELLERS IN PROXIMITY...";
         if (bannerAccuracy) bannerAccuracy.textContent = `±${accuracy}m ACCURACY`;
@@ -4376,6 +4400,24 @@
             isManual: true
           }));
         } catch (e) {}
+        if (window.IndianCampuses && typeof window.IndianCampuses.getNearestCampus === "function") {
+          const nearest = window.IndianCampuses.getNearestCampus(selected.lat, selected.lng);
+          if (nearest && nearest.distanceMeters <= 5000) {
+            state.activeCampus = nearest;
+            updateCampusUI(nearest);
+          } else {
+            state.activeCampus = {
+              id: `custom_loc_${Date.now()}`,
+              name: selected.landmark || "Custom Location",
+              shortName: selected.landmark || "Custom Point",
+              city: "Custom Location",
+              state: "India",
+              lat: selected.lat,
+              lng: selected.lng
+            };
+            updateCampusUI(state.activeCampus);
+          }
+        }
 
         const hudLoc = document.getElementById("hud-location-text");
         if (hudLoc) {
@@ -5694,6 +5736,9 @@
         if (isNaN(finalLat) || !isFinite(finalLat)) finalLat = 19.1334;
         if (isNaN(finalLng) || !isFinite(finalLng)) finalLng = 72.9133;
 
+        const localityId = state.activeCampus?.id || (state.userLocation?.campusId || "");
+        const localityType = state.activeCampus ? "campus" : (state.userLocation?.isLiveGPS ? "gps" : "custom");
+
         const itemPayload = {
           title,
           category,
@@ -5709,6 +5754,8 @@
           lng: finalLng,
           landmark: safeLandmark,
           safe_landmark: safeLandmark,
+          locality_id: localityId,
+          locality_type: localityType,
           description,
           image,
           beacon_type: beaconType,

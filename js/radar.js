@@ -195,6 +195,7 @@ class RadarEngine {
 
       let found = null;
       for (const target of this.targets) {
+        if (!target || !isFinite(target.distance) || target.distance > this.options.maxRadiusMeters * 1.25) continue;
         const pos = this.getScreenCoords(target);
         const dist = Math.hypot(mouseX - pos.x, mouseY - pos.y);
         if (dist <= 18) {
@@ -378,6 +379,7 @@ class RadarEngine {
 
     // Check target sweep intersection (in-range targets and perimeter boundary contacts)
     for (const target of this.targets) {
+      if (!target || !isFinite(target.distance) || target.distance > this.options.maxRadiusMeters * 1.25) continue;
       const targetDeg = (target.bearing + (target.radarBearingOffset || 0) + 360) % 360;
 
       let swept = false;
@@ -531,7 +533,12 @@ class RadarEngine {
     const now = getNow();
 
     for (const target of this.targets) {
-      // Targets beyond maxRadius are clamped to boundary perimeter ring
+      if (!target || !target.item) continue;
+      // Do not plot targets that have undefined/infinite distance or exceed radar sector range
+      if (!isFinite(target.distance) || target.distance > this.options.maxRadiusMeters * 1.25) {
+        continue;
+      }
+      // Targets within sector boundary are mapped realistically
       const coords = this.getScreenCoords(target);
       const isHovered = this.hoveredTarget && this.hoveredTarget.item.id === target.item.id;
       const isSelected = this.selectedTargetId === target.item.id;

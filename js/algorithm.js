@@ -25,12 +25,16 @@ function toDeg(radians) {
  * Haversine Formula: calculates great-circle distance between two GPS coordinates in meters
  */
 function calculateDistanceMeters(lat1, lon1, lat2, lon2) {
-  if (lat1 == null || lon1 == null || lat2 == null || lon2 == null) return 0;
-  if (isNaN(lat1) || isNaN(lon1) || isNaN(lat2) || isNaN(lon2)) return 0;
-  const dLat = toRad(lat2 - lat1);
-  const dLon = toRad(lon2 - lon1);
-  const phi1 = toRad(lat1);
-  const phi2 = toRad(lat2);
+  if (lat1 == null || lon1 == null || lat2 == null || lon2 == null) return Infinity;
+  const nLat1 = Number(lat1);
+  const nLon1 = Number(lon1);
+  const nLat2 = Number(lat2);
+  const nLon2 = Number(lon2);
+  if (isNaN(nLat1) || isNaN(nLon1) || isNaN(nLat2) || isNaN(nLon2)) return Infinity;
+  const dLat = toRad(nLat2 - nLat1);
+  const dLon = toRad(nLon2 - nLon1);
+  const phi1 = toRad(nLat1);
+  const phi2 = toRad(nLat2);
 
   const a =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
@@ -45,10 +49,14 @@ function calculateDistanceMeters(lat1, lon1, lat2, lon2) {
  */
 function calculateBearingDegrees(lat1, lon1, lat2, lon2) {
   if (lat1 == null || lon1 == null || lat2 == null || lon2 == null) return 0;
-  if (isNaN(lat1) || isNaN(lon1) || isNaN(lat2) || isNaN(lon2)) return 0;
-  const phi1 = toRad(lat1);
-  const phi2 = toRad(lat2);
-  const deltaLambda = toRad(lon2 - lon1);
+  const nLat1 = Number(lat1);
+  const nLon1 = Number(lon1);
+  const nLat2 = Number(lat2);
+  const nLon2 = Number(lon2);
+  if (isNaN(nLat1) || isNaN(nLon1) || isNaN(nLat2) || isNaN(nLon2)) return 0;
+  const phi1 = toRad(nLat1);
+  const phi2 = toRad(nLat2);
+  const deltaLambda = toRad(nLon2 - nLon1);
 
   const y = Math.sin(deltaLambda) * Math.cos(phi2);
   const x =
@@ -63,6 +71,9 @@ function calculateBearingDegrees(lat1, lon1, lat2, lon2) {
  * Format meters into human-readable distance (e.g., "350 m" or "1.4 km")
  */
 function formatDistance(meters) {
+  if (meters == null || isNaN(meters) || !isFinite(meters) || meters >= 9999999) {
+    return "Out of sector";
+  }
   if (meters < 1000) {
     return `${Math.round(meters)} m`;
   }
@@ -73,6 +84,7 @@ function formatDistance(meters) {
  * Estimate walking time based on distance (standard walking speed ~80 meters / min)
  */
 function estimateWalkingTime(meters) {
+  if (meters == null || !isFinite(meters)) return "Distant";
   if (meters < 70) {
     return "< 1 min walk";
   }
@@ -87,6 +99,9 @@ function estimateWalkingTime(meters) {
  * Categorize distance into visual proximity tier
  */
 function calculateProximityTier(meters) {
+  if (!isFinite(meters) || meters > 50000) {
+    return { tier: "distant", label: "Distant Sector", colorClass: "text-slate-500", bgClass: "bg-slate-900 border-slate-800" };
+  }
   if (meters <= 150) {
     return { tier: "immediate", label: "Immediate (< 2 min)", colorClass: "text-emerald-400", bgClass: "bg-emerald-950/80 border-emerald-500/40" };
   }
@@ -105,23 +120,32 @@ function calculateProximityTier(meters) {
  */
 function evaluateItemAlgorithm(item, userLocation, maxRadiusMeters, searchQuery = "") {
   // 1. Distance & Bearing
+  const userLat = userLocation ? userLocation.lat : null;
+  const userLng = userLocation ? userLocation.lng : null;
+  const itemLat = item ? item.lat : null;
+  const itemLng = item ? item.lng : null;
+
   const distance = calculateDistanceMeters(
-    userLocation.lat,
-    userLocation.lng,
-    item.lat,
-    item.lng
+    userLat,
+    userLng,
+    itemLat,
+    itemLng
   );
   const bearing = calculateBearingDegrees(
-    userLocation.lat,
-    userLocation.lng,
-    item.lat,
-    item.lng
+    userLat,
+    userLng,
+    itemLat,
+    itemLng
   );
 
   // 2. Proximity Factor (Exponential Distance Decay: S_prox in [0, 100])
-  const normalizedDistanceRatio = Math.min(1.0, distance / Math.max(100, maxRadiusMeters));
+  const normalizedDistanceRatio = isFinite(distance)
+    ? Math.min(1.0, distance / Math.max(100, maxRadiusMeters))
+    : 1.0;
   // Lambda decay factor: lambda = 1.6
-  const proximityScore = Math.max(0, 100 * Math.exp(-1.6 * normalizedDistanceRatio));
+  const proximityScore = isFinite(distance)
+    ? Math.max(0, 100 * Math.exp(-1.6 * normalizedDistanceRatio))
+    : 0;
 
   // 3. Value Index Factor (S_value in [0, 100])
   // Evaluates discount ratio adjusted by item condition rating
@@ -213,7 +237,7 @@ function evaluateItemAlgorithm(item, userLocation, maxRadiusMeters, searchQuery 
     proximityTier: calculateProximityTier(distance),
     bearing,
     bearingFormatted: `${Math.round(bearing)}°`,
-    inRadarRange: distance <= maxRadiusMeters,
+    inRadarRange: isFinite(distance) && distance <= maxRadiusMeters,
     algorithmScore: finalAlgorithmScore,
     rssi,
     signalClass,
