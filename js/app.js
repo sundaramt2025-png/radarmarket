@@ -901,8 +901,12 @@
     panel.classList.remove("opacity-50");
 
     const item = target.item;
+    const isSos = item.beacon_type === "sos" || (Array.isArray(item.tags) && item.tags.includes("sos"));
     const catBadge = document.getElementById("target-category-badge");
-    if (item.beacon_type === "wanted") {
+    if (isSos) {
+      catBadge.className = "text-[10px] font-mono px-2 py-0.5 rounded font-bold uppercase bg-rose-950 text-rose-300 border border-rose-500/60 animate-pulse";
+      catBadge.textContent = "🚨 URGENT SOS BOUNTY";
+    } else if (item.beacon_type === "wanted") {
       catBadge.className = "text-[10px] font-mono px-2 py-0.5 rounded font-bold uppercase bg-pink-950 text-pink-300 border border-pink-500/40";
       catBadge.textContent = "🚨 WANTED REQUEST";
     } else if (item.category === "electronics") {
@@ -1110,6 +1114,17 @@
       reserveBtn.className = "w-full py-2 px-3 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-emerald-500/50 text-emerald-400 font-bold font-mono text-xs tracking-wider uppercase transition flex items-center justify-center gap-1.5";
     }
 
+    const signalBtn = document.getElementById("btn-signal-seller");
+    if (signalBtn) {
+      if (isSos) {
+        signalBtn.className = "w-full py-2 px-3 rounded-lg bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-bold font-mono text-xs tracking-wider uppercase transition shadow-[0_0_20px_rgba(255,0,85,0.4)] flex items-center justify-center gap-1.5 cursor-pointer";
+        signalBtn.innerHTML = `<i data-lucide="flame" class="w-4 h-4 text-white animate-pulse"></i><span>Claim ₹${item.price} Bounty</span>`;
+      } else {
+        signalBtn.className = "w-full py-2 px-3 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold font-mono text-xs tracking-wider uppercase transition shadow-[0_0_15px_rgba(0,229,255,0.25)] flex items-center justify-center gap-1.5 cursor-pointer";
+        signalBtn.innerHTML = `<i data-lucide="message-square" class="w-4 h-4"></i><span>Signal Seller</span>`;
+      }
+    }
+
     lucide.createIcons();
   }
 
@@ -1236,16 +1251,19 @@
       const item = target.item;
       const isSelected = state.selectedTarget && state.selectedTarget.item.id === item.id;
       const inRange = target.inRadarRange;
+      const isSos = item.beacon_type === "sos" || (Array.isArray(item.tags) && item.tags.includes("sos"));
 
       const itemCard = document.createElement("div");
-      itemCard.className = `p-2.5 rounded-lg border transition cursor-pointer flex items-center justify-between gap-3 ${
-        isSelected
-          ? "bg-cyan-950/60 border-cyan-400/80 shadow-[0_0_12px_rgba(0,229,255,0.2)]"
-          : "bg-slate-900/60 border-slate-800/80 hover:bg-slate-850 hover:border-slate-700"
-      }`;
+      const cardBgClass = isSelected
+        ? (isSos ? "bg-rose-950/80 border-rose-400 shadow-[0_0_16px_rgba(255,0,85,0.4)]" : "bg-cyan-950/60 border-cyan-400/80 shadow-[0_0_12px_rgba(0,229,255,0.2)]")
+        : (isSos ? "bg-rose-950/30 border-rose-500/60 hover:bg-rose-950/50 hover:border-rose-400 shadow-[0_0_10px_rgba(255,0,85,0.15)]" : "bg-slate-900/60 border-slate-800/80 hover:bg-slate-850 hover:border-slate-700");
+
+      itemCard.className = `p-2.5 rounded-lg border transition cursor-pointer flex flex-col gap-2 ${cardBgClass}`;
       itemCard.dataset.itemId = item.id;
+      if (isSos) itemCard.dataset.isSos = "true";
 
       const categoryDotClass =
+        isSos ? "bg-[#ff0044] animate-ping" :
         item.beacon_type === "wanted" ? "bg-[#ff0077]" :
         item.category === "stationery" ? "bg-[#00ff9d]" :
         item.category === "books" ? "bg-[#00e5ff]" :
@@ -1256,31 +1274,43 @@
       const itemImg = item.image || (PRESET_PHOTOS[item.category] || PRESET_PHOTOS.stationery)[0];
 
       itemCard.innerHTML = `
-        <div class="flex items-center gap-2.5 min-w-0">
-          <div class="relative shrink-0 cursor-zoom-in feed-img-container" title="Click to inspect photo">
-            <img src="${itemImg}" alt="${item.title}" class="w-10 h-10 rounded-md object-cover border border-slate-700 hover:border-cyan-400 bg-slate-950 transition" />
-            <span class="absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-slate-950 ${categoryDotClass}"></span>
+        <div class="flex items-center justify-between gap-3">
+          <div class="flex items-center gap-2.5 min-w-0">
+            <div class="relative shrink-0 cursor-zoom-in feed-img-container" title="Click to inspect photo">
+              <img src="${itemImg}" alt="${item.title}" class="w-10 h-10 rounded-md object-cover border border-slate-700 hover:border-cyan-400 bg-slate-950 transition" />
+              <span class="absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-slate-950 ${categoryDotClass}"></span>
+            </div>
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-1.5 flex-wrap">
+                ${isSos ? '<span class="px-1.5 py-0.2 rounded font-mono font-bold text-[9px] bg-rose-500/20 text-rose-300 border border-rose-500/50 animate-pulse">🚨 EXAM SOS</span>' : ''}
+                <h4 class="text-xs font-bold text-slate-200 truncate ${isSelected ? (isSos ? 'text-rose-300' : 'text-cyan-300') : ''}">${item.title}</h4>
+              </div>
+              <div class="flex items-center gap-1.5 text-[10px] font-mono text-slate-400 mt-0.5 flex-wrap">
+                <span class="px-1.5 py-0.2 rounded font-bold ${target.distance <= 500 ? 'bg-emerald-950 text-emerald-300 border border-emerald-500/40' : (target.proximityTier?.bgClass || 'bg-cyan-950 text-cyan-300')}">📍 ${target.distanceFormatted}</span>
+                ${target.distance <= 500 ? '<span class="text-[9px] font-bold text-emerald-400">🟢 &lt;500m</span>' : ''}
+                <span class="text-slate-300 font-semibold">• ${target.walkingTime}</span>
+                <span class="text-slate-500 hidden sm:inline">• ${item.landmark || 'Campus'}</span>
+              </div>
+              <div class="text-[10px] text-slate-400 truncate mt-0.5 font-mono">
+                ${isSos ? 'Poster: ' : 'Seller: '}<strong class="text-slate-300">${item.seller?.name || item.seller_name || 'Campus Student'}</strong> <span class="text-amber-400">(${(item.seller?.rating || 4.9).toFixed(1)} ★)</span>
+              </div>
+            </div>
           </div>
-          <div class="min-w-0 flex-1">
-            <h4 class="text-xs font-bold text-slate-200 truncate ${isSelected ? 'text-cyan-300' : ''}">${item.title}</h4>
-            <div class="flex items-center gap-1.5 text-[10px] font-mono text-slate-400 mt-0.5 flex-wrap">
-              <span class="px-1.5 py-0.2 rounded font-bold ${target.distance <= 500 ? 'bg-emerald-950 text-emerald-300 border border-emerald-500/40' : (target.proximityTier?.bgClass || 'bg-cyan-950 text-cyan-300')}">📍 ${target.distanceFormatted}</span>
-              ${target.distance <= 500 ? '<span class="text-[9px] font-bold text-emerald-400">🟢 &lt;500m</span>' : ''}
-              <span class="text-slate-300 font-semibold">• ${target.walkingTime}</span>
-              <span class="text-slate-500 hidden sm:inline">• ${item.landmark || 'Campus'}</span>
-            </div>
-            <div class="text-[10px] text-slate-400 truncate mt-0.5 font-mono">
-              Seller: <strong class="text-slate-300">${item.seller?.name || item.seller_name || 'Campus Student'}</strong> <span class="text-amber-400">(${(item.seller?.rating || 4.9).toFixed(1)} ★)</span>
-            </div>
+          
+          <div class="text-right shrink-0 font-mono">
+            <div class="text-xs font-bold ${isSos ? 'text-rose-400' : 'text-emerald-400'}">${isSos ? 'BOUNTY: ' : ''}₹${item.price}</div>
+            <div class="text-[10px] font-bold ${
+              target.algorithmScore >= 80 ? 'text-emerald-400' : target.algorithmScore >= 60 ? 'text-cyan-400' : 'text-amber-400'
+            }">SCORE: ${target.algorithmScore}</div>
           </div>
         </div>
-        
-        <div class="text-right shrink-0 font-mono">
-          <div class="text-xs font-bold text-emerald-400">₹${item.price}</div>
-          <div class="text-[10px] font-bold ${
-            target.algorithmScore >= 80 ? 'text-emerald-400' : target.algorithmScore >= 60 ? 'text-cyan-400' : 'text-amber-400'
-          }">SCORE: ${target.algorithmScore}</div>
-        </div>
+
+        ${isSos ? `
+          <button type="button" class="btn-claim-sos-feed w-full py-1 px-2 rounded-lg bg-gradient-to-r from-rose-600 via-pink-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-mono font-bold text-[10px] uppercase flex items-center justify-center gap-1.5 transition shadow-[0_0_12px_rgba(255,0,85,0.35)] cursor-pointer">
+            <i data-lucide="flame" class="w-3.5 h-3.5 animate-pulse text-white"></i>
+            <span>I Have This! Claim ₹${item.price} Bounty</span>
+          </button>
+        ` : ''}
       `;
 
       const imgTrigger = itemCard.querySelector(".feed-img-container");
@@ -1291,6 +1321,15 @@
             const safeImg = item.image || (PRESET_PHOTOS[item.category] || PRESET_PHOTOS.stationery)[0];
             window.openPhotoLightbox(safeImg, item.title, item.condition || "Authentic Photo");
           }
+        });
+      }
+
+      const claimSosBtn = itemCard.querySelector(".btn-claim-sos-feed");
+      if (claimSosBtn) {
+        claimSosBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          selectTarget(target);
+          openChatModal(target);
         });
       }
 
@@ -1306,13 +1345,26 @@
 
   function highlightFeedItem(itemId) {
     const list = document.getElementById("radar-feed-list");
+    if (!list) return;
     const cards = list.querySelectorAll("[data-item-id]");
     cards.forEach((card) => {
+      const isSos = card.dataset.isSos === "true";
       if (card.dataset.itemId === itemId) {
-        card.className = card.className.replace(/bg-slate-900\/60|border-slate-800\/80/g, "");
-        card.classList.add("bg-cyan-950/60", "border-cyan-400/80", "shadow-[0_0_12px_rgba(0,229,255,0.2)]");
+        if (isSos) {
+          card.classList.remove("bg-rose-950/30", "border-rose-500/60");
+          card.classList.add("bg-rose-950/80", "border-rose-400", "shadow-[0_0_16px_rgba(255,0,85,0.4)]");
+        } else {
+          card.classList.remove("bg-slate-900/60", "border-slate-800/80");
+          card.classList.add("bg-cyan-950/60", "border-cyan-400/80", "shadow-[0_0_12px_rgba(0,229,255,0.2)]");
+        }
       } else {
-        card.classList.remove("bg-cyan-950/60", "border-cyan-400/80", "shadow-[0_0_12px_rgba(0,229,255,0.2)]");
+        if (isSos) {
+          card.classList.remove("bg-rose-950/80", "border-rose-400", "shadow-[0_0_16px_rgba(255,0,85,0.4)]");
+          card.classList.add("bg-rose-950/30", "border-rose-500/60");
+        } else {
+          card.classList.remove("bg-cyan-950/60", "border-cyan-400/80", "shadow-[0_0_12px_rgba(0,229,255,0.2)]");
+          card.classList.add("bg-slate-900/60", "border-slate-800/80");
+        }
       }
     });
   }
@@ -1414,10 +1466,13 @@
 
     state.filteredItems.forEach((target) => {
       const item = target.item;
+      const isSos = item.beacon_type === "sos" || (Array.isArray(item.tags) && item.tags.includes("sos"));
       const origPrice = item.original_price || item.originalPrice;
 
       const card = document.createElement("div");
-      card.className = "glass-panel glass-panel-hover p-4 flex flex-col justify-between relative overflow-hidden group";
+      card.className = `glass-panel glass-panel-hover p-4 flex flex-col justify-between relative overflow-hidden group ${
+        isSos ? "border border-rose-500/50 shadow-[0_0_20px_rgba(255,0,85,0.15)]" : ""
+      }`;
 
       const itemImg = item.image || (PRESET_PHOTOS[item.category] || PRESET_PHOTOS.stationery)[0];
 
@@ -1437,6 +1492,7 @@
             </div>
             <div class="absolute top-2 left-2 flex items-center gap-1.5 flex-wrap">
               <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase ${
+                isSos ? 'bg-rose-950 text-rose-300 border border-rose-500/60 animate-pulse' :
                 item.beacon_type === 'wanted' ? 'bg-pink-950 text-pink-300 border border-pink-500/40' :
                 item.category === 'electronics' ? 'bg-cyan-950 text-cyan-300 border border-cyan-500/40' :
                 item.category === 'stationery' ? 'badge-stationery' :
@@ -1448,6 +1504,7 @@
                 item.category === 'tech' ? 'badge-tech' : 'badge-stationery'
               }">
                 ${
+                  isSos ? '🚨 SOS Bounty' :
                   item.beacon_type === 'wanted' ? '🚨 Wanted' :
                   item.category === 'electronics' ? '📱 Gadget' :
                   item.category === 'stationery' ? '✏️ Stationery' :
@@ -1505,7 +1562,7 @@
         <div class="pt-3 border-t border-slate-800/80">
           <div class="flex items-baseline justify-between mb-3">
             <div class="flex items-baseline gap-1.5 font-mono">
-              <span class="text-lg font-bold text-emerald-400">₹${item.price}</span>
+              <span class="text-lg font-bold ${isSos ? 'text-rose-400' : 'text-emerald-400'}">${isSos ? 'Bounty: ' : ''}₹${item.price}</span>
               ${origPrice ? `<span class="text-xs text-slate-500 line-through">₹${origPrice}</span>` : ''}
             </div>
             <div class="flex items-center gap-1 text-xs text-slate-400">
@@ -1514,16 +1571,25 @@
             </div>
           </div>
 
-          <div class="grid grid-cols-2 gap-2">
-            <button class="btn-grid-chat py-1.5 px-2 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-mono text-xs font-bold uppercase transition flex items-center justify-center gap-1">
-              <i data-lucide="message-square" class="w-3.5 h-3.5"></i>
-              <span>Signal</span>
-            </button>
-            <button class="btn-grid-scope py-1.5 px-2 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-200 font-mono text-xs transition flex items-center justify-center gap-1">
-              <i data-lucide="crosshair" class="w-3.5 h-3.5"></i>
-              <span>Scope</span>
-            </button>
-          </div>
+          ${
+            isSos ? `
+              <button class="btn-grid-chat w-full py-2 px-3 rounded-lg bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-mono text-xs font-bold uppercase transition flex items-center justify-center gap-1.5 shadow-[0_0_15px_rgba(255,0,85,0.35)] cursor-pointer">
+                <i data-lucide="flame" class="w-3.5 h-3.5 animate-pulse text-white"></i>
+                <span>Claim ₹${item.price} Bounty</span>
+              </button>
+            ` : `
+              <div class="grid grid-cols-2 gap-2">
+                <button class="btn-grid-chat py-1.5 px-2 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-mono text-xs font-bold uppercase transition flex items-center justify-center gap-1">
+                  <i data-lucide="message-square" class="w-3.5 h-3.5"></i>
+                  <span>Signal</span>
+                </button>
+                <button class="btn-grid-scope py-1.5 px-2 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-200 font-mono text-xs transition flex items-center justify-center gap-1">
+                  <i data-lucide="crosshair" class="w-3.5 h-3.5"></i>
+                  <span>Scope</span>
+                </button>
+              </div>
+            `
+          }
         </div>
       `;
 
@@ -1895,6 +1961,7 @@
     try { updateMyBeaconsBadge(); } catch (e) {}
     try { setupBountyBoardModal(); } catch (e) { console.error("setupBountyBoardModal error:", e); }
     try { updateBountyBadge(); } catch (e) {}
+    try { setupSosBountyModal(); } catch (e) { console.error("setupSosBountyModal error:", e); }
     try { arCompassModalInstance = setupARCompassModal(); } catch (e) { console.error("setupARCompassModal error:", e); }
 
     // AR Live Finder Button in Spotlight Panel
@@ -7958,6 +8025,224 @@
               wantedRadio.dispatchEvent(new Event("change"));
             }
           }, 300);
+        }
+      });
+    }
+  }
+
+  /**
+   * Setup Urgent Campus SOS Bounty Modal (Exam Night & Lab Emergency Mode)
+   */
+  function setupSosBountyModal() {
+    const modal = document.getElementById("modal-sos-bounty");
+    const openBtn = document.getElementById("btn-open-sos-beacon");
+    const closeBtn = document.getElementById("btn-close-sos-modal");
+    const form = document.getElementById("form-sos-bounty");
+    const campusDisplay = document.getElementById("sos-target-campus-name");
+    const presetBtns = modal ? modal.querySelectorAll(".sos-preset-btn") : [];
+    const titleInput = document.getElementById("sos-input-title");
+    const urgencySelect = document.getElementById("sos-select-urgency");
+    const categorySelect = document.getElementById("sos-select-category");
+    const priceInput = document.getElementById("sos-input-price");
+    const landmarkInput = document.getElementById("sos-input-landmark");
+    const descInput = document.getElementById("sos-input-desc");
+    const submitBtn = document.getElementById("btn-submit-sos-bounty");
+
+    if (!modal) return;
+
+    function refreshCampusInfo() {
+      if (campusDisplay) {
+        const campusName = state.activeCampus
+          ? (state.activeCampus.name || state.activeCampus.shortName)
+          : (state.userLocation.name || "Live Campus Sector");
+        campusDisplay.textContent = `Sector: ${campusName}`;
+      }
+      if (landmarkInput && !landmarkInput.value) {
+        landmarkInput.value = state.selectedPickupCoords?.landmark || (state.activeCampus ? (state.activeCampus.shortName || state.activeCampus.name) : "Hostel Gate / Quad");
+      }
+    }
+
+    if (openBtn) {
+      openBtn.addEventListener("click", () => {
+        refreshCampusInfo();
+        modal.classList.remove("hidden");
+        if (window.triggerHaptic) triggerHaptic([25]);
+        if (titleInput) titleInput.focus();
+        if (window.lucide) lucide.createIcons();
+      });
+    }
+
+    if (closeBtn) {
+      closeBtn.addEventListener("click", () => {
+        modal.classList.add("hidden");
+      });
+    }
+
+    modal.addEventListener("click", (e) => {
+      if (e.target === modal) modal.classList.add("hidden");
+    });
+
+    // 1-Tap Emergency Preset Buttons
+    presetBtns.forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.preventDefault();
+        const presetTitle = btn.dataset.title;
+        const presetBudget = btn.dataset.budget;
+        const presetCat = btn.dataset.category;
+
+        if (titleInput) titleInput.value = presetTitle || "";
+        if (priceInput) priceInput.value = presetBudget || "300";
+        if (categorySelect && presetCat) categorySelect.value = presetCat;
+
+        // Visual chip highlight
+        presetBtns.forEach(b => {
+          b.classList.remove("bg-rose-950", "border-rose-400", "text-rose-200");
+          b.classList.add("bg-slate-900", "border-slate-700", "text-slate-300");
+        });
+        btn.classList.remove("bg-slate-900", "border-slate-700", "text-slate-300");
+        btn.classList.add("bg-rose-950", "border-rose-400", "text-rose-200");
+
+        if (window.triggerHaptic) triggerHaptic([20]);
+      });
+    });
+
+    // Handle Form Submit
+    if (form) {
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+
+        const title = (titleInput ? titleInput.value : "").trim();
+        const urgency = urgencySelect ? urgencySelect.value : "critical_1h";
+        const category = categorySelect ? categorySelect.value : "stationery";
+        const price = parseFloat(priceInput ? priceInput.value : "0") || 100;
+        const landmark = (landmarkInput ? landmarkInput.value : "").trim() || "Campus Quad";
+        const notes = (descInput ? descInput.value : "").trim();
+
+        if (!title) {
+          showToast("TITLE REQUIRED", "Please enter what you need urgently.");
+          return;
+        }
+
+        if (submitBtn) {
+          submitBtn.disabled = true;
+          submitBtn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin text-white"></i><span>BROADCASTING DISTRESS PULSE...</span>`;
+          if (window.lucide) lucide.createIcons();
+        }
+
+        const finalLat = (state.selectedPickupCoords?.isCustom && state.selectedPickupCoords.lat)
+          ? state.selectedPickupCoords.lat
+          : state.userLocation.lat;
+        const finalLng = (state.selectedPickupCoords?.isCustom && state.selectedPickupCoords.lng)
+          ? state.selectedPickupCoords.lng
+          : state.userLocation.lng;
+
+        const localityId = state.activeCampus ? state.activeCampus.id : (state.userLocation?.isLiveGPS ? "live_gps" : "custom_zone");
+        const localityType = state.activeCampus ? "campus" : (state.userLocation?.isLiveGPS ? "gps" : "custom");
+
+        const urgencyMap = {
+          critical_1h: "Within 1 Hour",
+          tonight_midnight: "Tonight (Midnight)",
+          morning_8am: "Tomorrow 8 AM",
+          today: "Today"
+        };
+        const urgencyLabel = urgencyMap[urgency] || "High Urgency";
+
+        const fullDescription = `🚨 [URGENT SOS - ${urgencyLabel.toUpperCase()}] Needed at ${landmark}. ${notes || "Immediate cash/UPI bounty paid upon delivery."}`;
+
+        const defaultPhoto = (PRESET_PHOTOS[category] || PRESET_PHOTOS.stationery)[0];
+
+        const itemPayload = {
+          title: `🚨 [SOS] ${title}`,
+          category: category,
+          sub_category: "Exam & Lab Emergency",
+          subCategory: "Exam & Lab Emergency",
+          price: price,
+          original_price: Math.round(price * 1.4),
+          originalPrice: Math.round(price * 1.4),
+          condition: "Good",
+          condition_score: 85,
+          conditionScore: 85,
+          lat: finalLat,
+          lng: finalLng,
+          landmark: landmark,
+          safe_landmark: landmark,
+          locality_id: localityId,
+          locality_type: localityType,
+          description: fullDescription,
+          image: defaultPhoto,
+          beacon_type: "sos",
+          item_attributes: {
+            is_sos: true,
+            urgency: urgency,
+            urgency_label: urgencyLabel,
+            bounty_amount: price
+          },
+          tags: ["sos", "urgent", "bounty", category, urgency]
+        };
+
+        try {
+          let newItem = null;
+          if (window.MarketAPI) {
+            newItem = await MarketAPI.createItem(itemPayload);
+          } else {
+            newItem = MarketData.addNewListing(itemPayload);
+          }
+
+          // Reset form & close modal
+          form.reset();
+          presetBtns.forEach(b => {
+            b.classList.remove("bg-rose-950", "border-rose-400", "text-rose-200");
+            b.classList.add("bg-slate-900", "border-slate-700", "text-slate-300");
+          });
+          modal.classList.add("hidden");
+
+          // Reset category filter & search query so the SOS beacon is guaranteed visible
+          state.searchQuery = "";
+          const searchInput = document.getElementById("search-input");
+          if (searchInput) searchInput.value = "";
+          state.selectedCategory = "all";
+          const filterBtns = document.querySelectorAll(".filter-category-btn");
+          filterBtns.forEach((btn) => {
+            if (btn.dataset.category === "all") {
+              btn.className = "filter-category-btn active px-3 py-1.5 rounded-md bg-cyan-950 text-cyan-300 font-bold border border-cyan-500/50 shadow-[0_0_10px_rgba(0,229,255,0.2)] transition shrink-0";
+            } else {
+              btn.className = "filter-category-btn px-3 py-1.5 rounded-md text-slate-400 hover:text-slate-200 transition shrink-0";
+            }
+          });
+
+          // Trigger high-speed active scan sweep & tactile distress pulse
+          if (radarEngine) {
+            radarEngine.triggerActiveSonarSweep();
+          }
+          if (window.triggerHaptic) {
+            triggerHaptic([35, 45, 35]);
+          }
+
+          showToast("🚨 SOS BEACON BROADCASTED!", `Distress pulse active for ₹${price} bounty at ${landmark}!`);
+
+          // Re-fetch or recalculate
+          if (window.MarketAPI && MarketAPI.getItems) {
+            const freshItems = await MarketAPI.getItems(localityId, localityType);
+            if (freshItems && Array.isArray(freshItems)) {
+              state.rawItems = freshItems;
+            }
+          }
+          recalculateAndRender();
+
+          // Auto-select the newly created SOS item
+          if (newItem) {
+            const target = state.evaluatedItems.find(t => t.item.id === newItem.id);
+            if (target) selectTarget(target);
+          }
+        } catch (err) {
+          console.error("SOS Beacon broadcast failed:", err);
+          showToast("BROADCAST FAILED", err.message || "Failed to broadcast SOS beacon.");
+        } finally {
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = `<i data-lucide="flame" class="w-4 h-4 text-white animate-pulse"></i><span>🚨 FIRE URGENT SOS BEACON TO CAMPUS RADAR</span>`;
+            if (window.lucide) lucide.createIcons();
+          }
         }
       });
     }

@@ -396,13 +396,19 @@ class RadarEngine {
         state.pingWaveRadius = 1;
         this.blipStates.set(target.item.id, state);
 
-        // Sound trigger if high match
-        const pitch = 700 + (target.algorithmScore / 100) * 500;
-        this.playSonarPing(pitch, 0.05);
+        // Sound & haptic trigger
+        if (target.item.beacon_type === "sos" || (Array.isArray(target.item.tags) && target.item.tags.includes("sos"))) {
+          this.playSonarPing(1520, 0.12);
+          if (window.navigator && window.navigator.vibrate) {
+            try { window.navigator.vibrate([35, 45, 35]); } catch (e) {}
+          }
+        } else {
+          const pitch = 700 + (target.algorithmScore / 100) * 500;
+          this.playSonarPing(pitch, 0.05);
 
-        // Mobile haptic vibration on strong radar sweep
-        if (target.algorithmScore >= 75 && window.navigator && window.navigator.vibrate) {
-          try { window.navigator.vibrate(15); } catch (e) {}
+          if (target.algorithmScore >= 75 && window.navigator && window.navigator.vibrate) {
+            try { window.navigator.vibrate(15); } catch (e) {}
+          }
         }
       }
     }
@@ -553,16 +559,20 @@ class RadarEngine {
       let blipColor = "#00f0ff"; // Default Cyan
       let glowColor = "rgba(0, 240, 255, 0.8)";
 
-      const isWanted = target.item.beacon_type === "wanted";
+      const isSos = target.item.beacon_type === "sos" || (Array.isArray(target.item.tags) && target.item.tags.includes("sos"));
+      const isWanted = isSos || target.item.beacon_type === "wanted";
       const isSold = target.item.status === "sold";
       const cat = (target.item.category || "").toLowerCase();
 
       if (isSold) {
         blipColor = "#64748b"; // Dim slate for completed deals
         glowColor = "rgba(100, 116, 139, 0.4)";
+      } else if (isSos) {
+        blipColor = "#ff0044"; // Vivid Emergency Crimson for SOS Bounties
+        glowColor = "rgba(255, 0, 68, 1)";
       } else if (isWanted) {
-        blipColor = "#ff0055"; // Neon Crimson for "Wanted / ISO" beacons
-        glowColor = "rgba(255, 0, 85, 0.9)";
+        blipColor = "#ff0077"; // Neon Magenta for "Wanted / ISO" beacons
+        glowColor = "rgba(255, 0, 119, 0.9)";
       } else if (cat === "electronics" || cat === "tech") {
         blipColor = "#00f0ff"; // Cyan for electronics & gadgets
         glowColor = "rgba(0, 240, 255, 0.85)";
@@ -590,6 +600,30 @@ class RadarEngine {
 
       ctx.save();
 
+      // Blip core circle radius
+      const baseRadius = target.algorithmScore >= 80 ? 5.5 : 4;
+      const radius = isHovered || isSelected ? baseRadius + 2.5 : baseRadius;
+
+      // High-priority SOS Distress Pulse Wave (Active for unresolved emergency bounties)
+      if (isSos && !isSold) {
+        const pulseCycle = ((now / 1000) * 2.2) % 1;
+        const pulseR = radius + 3 + pulseCycle * 18;
+        const pulseAlpha = Math.max(0, (1 - pulseCycle) * 0.9);
+        ctx.strokeStyle = `rgba(255, 0, 68, ${pulseAlpha})`;
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.arc(coords.x, coords.y, pulseR, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Secondary tight warning ring
+        const tightPulse = ((now / 1000) * 4.4) % 1;
+        ctx.strokeStyle = `rgba(255, 100, 100, ${Math.max(0, (1 - tightPulse) * 0.6)})`;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(coords.x, coords.y, radius + 2 + tightPulse * 6, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
       // Expanding Sonar Ping Ring Wave after sweep
       if (timeSinceSwept < 1.4 && state.lastSwept > 0) {
         const waveRadius = 4 + timeSinceSwept * 28;
@@ -601,10 +635,6 @@ class RadarEngine {
         ctx.arc(coords.x, coords.y, waveRadius, 0, Math.PI * 2);
         ctx.stroke();
       }
-
-      // Blip core circle
-      const baseRadius = target.algorithmScore >= 80 ? 5.5 : 4;
-      const radius = isHovered || isSelected ? baseRadius + 2.5 : baseRadius;
 
       ctx.shadowColor = glowColor;
       ctx.shadowBlur = 6 + sweepGlow * 12;
@@ -750,6 +780,16 @@ class RadarEngine {
     if (inRangeCount === 0 && totalCount > 0) {
       statusText = `SCAN RPM: ${this.options.rpm} | ${this.currentFPS || 60} FPS${hzStr} | SECTOR: ${totalCount} (Perimeter Ring)`;
     }
+
+    const sosCount = this.targets.filter(t => (t.item && (t.item.beacon_type === "sos" || (Array.isArray(t.item.tags) && t.item.tags.includes("sos")))) && t.item.status !== "sold").length;
+    if (sosCount > 0) {
+      ctx.fillStyle = "#ff0044";
+      ctx.font = "bold 10px 'JetBrains Mono', monospace";
+      ctx.fillText(`🚨 ${sosCount} URGENT SOS BOUNTY${sosCount > 1 ? "IES" : ""} IN SECTOR`, 16, this.height - 28);
+      ctx.fillStyle = "rgba(0, 229, 255, 0.7)";
+      ctx.font = "10px 'JetBrains Mono', monospace";
+    }
+
     ctx.fillText(statusText, 16, this.height - 12);
 
     ctx.textAlign = "right";

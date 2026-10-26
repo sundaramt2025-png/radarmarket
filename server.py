@@ -2033,18 +2033,24 @@ def create_item():
         VALUES ('new_item', ?, ?, ?)
     """, (item_id, json.dumps({"item_id": item_id, "title": data.get('title'), "beacon_type": beacon_type}), now))
 
-    if beacon_type == "wanted":
+    if beacon_type in ("wanted", "sos"):
         cur.execute("""
             INSERT INTO sync_events (event_type, item_id, payload, created_at)
-            VALUES ('new_bounty', ?, ?, ?)
-        """, (item_id, json.dumps({
-            "item_id": item_id,
-            "title": data.get('title') or "Wanted Item",
-            "category": data.get('category') or "stationery",
-            "max_budget": float(data.get('price') or 0),
-            "poster_name": seller_name,
-            "created_at": now
-        }), now))
+            VALUES (?, ?, ?, ?)
+        """, (
+            "new_sos_bounty" if beacon_type == "sos" else "new_bounty",
+            item_id,
+            json.dumps({
+                "item_id": item_id,
+                "title": data.get('title') or "Urgent SOS Bounty",
+                "category": data.get('category') or "stationery",
+                "max_budget": float(data.get('price') or 0),
+                "poster_name": seller_name,
+                "beacon_type": beacon_type,
+                "created_at": now
+            }),
+            now
+        ))
 
     db.commit()
 
