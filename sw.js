@@ -1,132 +1,80 @@
-/**
- * RadarMarket Service Worker (PWA Offline Engine)
- * Provides instant app launching, asset caching, and offline support.
- */
-
-const CACHE_NAME = 'radarmarket-cache-v3.0.4';
-const PRECACHE_ASSETS = [
+// Service Worker for Smart Budget & Saving Manager (PWA & APK support)
+const CACHE_NAME = 'smart-budget-v1.0';
+const STATIC_ASSETS = [
   '/',
   '/index.html',
-  '/css/styles.css?v=3.0.4',
-  '/js/campuses.js?v=3.0.4',
-  '/js/app.js?v=3.0.4',
-  '/js/algorithm.js?v=3.0.4',
-  '/js/api.js?v=3.0.4',
-  '/js/data.js?v=3.0.4',
-  '/js/radar.js?v=3.0.4',
   '/manifest.json',
+  '/icons/icon.svg',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
-  '/icons/icon-maskable.png',
-  '/icons/icon.svg'
+  'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js',
+  'https://cdn.tailwindcss.com',
+  'https://unpkg.com/lucide@latest'
 ];
 
-// Install: Precache shell assets and activate immediately
 self.addEventListener('install', (event) => {
-  self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      console.log('[PWA Service Worker] Precaching shell assets v3.0.4');
-      return cache.addAll(PRECACHE_ASSETS).catch((err) => {
-        console.warn('[PWA Service Worker] Precache warning:', err);
+      return cache.addAll(STATIC_ASSETS).catch((err) => {
+        console.warn('Some cache assets failed to prefetch:', err);
       });
     })
   );
+  self.skipWaiting();
 });
 
-// Activate: Delete all old caches immediately
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) => {
       return Promise.all(
         keys.map((key) => {
           if (key !== CACHE_NAME) {
-            console.log('[PWA Service Worker] Purging stale cache:', key);
             return caches.delete(key);
           }
         })
       );
-    }).then(() => self.clients.claim())
+    })
   );
+  self.clients.claim();
 });
 
-// Fetch: Strategy based on request type
 self.addEventListener('fetch', (event) => {
-  const { request } = event;
-  const url = new URL(request.url);
-
-  // Ignore non-GET and chrome-extension / non-http requests
-  if (request.method !== 'GET' || !url.protocol.startsWith('http')) {
-    return;
-  }
-
-  // 1. NEVER INTERCEPT OR CACHE DYNAMIC API REQUESTS (/api/*)
-  // All multi-device sync, item listings, offers, and chat MUST go directly to the network!
-  if (url.pathname.startsWith('/api/')) {
-    return;
-  }
-
-  // 2. HTML Navigation: Instant Cold-Start Race
-  // If Render is in free-tier sleep mode (taking 1-3 min), serve cached shell after 1.2s so the app opens instantly!
-  if (request.mode === 'navigate' || url.pathname === '/' || url.pathname.endsWith('.html')) {
+  // Let API requests pass through with network-first or cache fallback
+  if (event.request.url.includes('/api/')) {
     event.respondWith(
-      caches.match(request).then((cached) => {
-        const networkFetch = fetch(request)
-          .then((networkResponse) => {
-            if (networkResponse && networkResponse.status === 200) {
-              const clone = networkResponse.clone();
-              caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
-            }
-            return networkResponse;
-          })
-          .catch(() => cached);
-
-        if (!cached) {
-          return networkFetch;
-        }
-
-        // Return cached shell if network takes longer than 1.2s
-        return Promise.race([
-          networkFetch,
-          new Promise((resolve) => setTimeout(() => resolve(cached), 1200))
-        ]);
+      fetch(event.request).catch(() => {
+        return new Response(JSON.stringify({ error: 'Offline mode active', offline: true }), {
+          headers: { 'Content-Type': 'application/json' }
+        });
       })
     );
     return;
   }
 
-  // 3. Core Static JS Scripts & CSS
-  if (url.pathname.endsWith('.js') || url.pathname.endsWith('.css')) {
-    event.respondWith(
-      caches.match(request).then((cached) => {
-        const networkFetch = fetch(request)
-          .then((networkResponse) => {
-            if (networkResponse && networkResponse.status === 200) {
-              const clone = networkResponse.clone();
-              caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
-            }
-            return networkResponse;
-          })
-          .catch(() => cached);
-
-        return cached || networkFetch;
-      })
-    );
-    return;
-  }
-
-  // 3. Static Media & Icons: Stale-While-Revalidate
+  // Static assets: cache first, then network fallback
   event.respondWith(
-    caches.match(request).then((cachedResponse) => {
-      const fetchPromise = fetch(request).then((networkResponse) => {
-        if (networkResponse && networkResponse.status === 200) {
-          const clone = networkResponse.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+    caches.match(event.request).then((cachedResponse) => {
+      if (cachedResponse) {
+        return cachedResponse;
+      }
+      return fetch(event.request).then((networkResponse) => {
+        if (
+          networkResponse &&
+          networkResponse.status === 200 &&
+          event.request.method === 'GET' &&
+          !event.request.url.startsWith('chrome-extension')
+        ) {
+          const responseToCache = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(event.request, responseToCache);
+          });
         }
         return networkResponse;
-      }).catch(() => cachedResponse);
-
-      return cachedResponse || fetchPromise;
+      }).catch(() => {
+        if (event.request.headers.get('accept')?.includes('text/html')) {
+          return caches.match('/index.html');
+        }
+      });
     })
   );
 });

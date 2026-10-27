@@ -1,6 +1,7 @@
 """
-RadarMarket - Production Multi-User Backend Server
-Built with Flask & SQLite. Supports live synchronization across phones and laptops.
+Smart Budget & Saving Manager - Production Backend Server
+SE CSE AIML Java Mini Project Web & Mobile APK Shell
+Group: Hansi Yadav, Diksha Kotre, Sakshi Patil (Academic Year 2026-2027)
 """
 
 import os
@@ -11,13 +12,7 @@ import uuid
 import socket
 import sqlite3
 import hashlib
-import hmac
-import base64
-import re
-import random
-import urllib.request
-import urllib.error
-import urllib.parse
+from datetime import datetime, date
 from flask import Flask, request, jsonify, send_from_directory, g
 
 # Ensure UTF-8 output on Windows
@@ -29,8 +24,9 @@ if sys.platform == "win32":
         pass
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(BASE_DIR, "database.db")
+DB_PATH = os.path.join(BASE_DIR, "smartbudget.db")
 PORT = int(os.environ.get("PORT", 5000))
+DATABASE_URL = os.environ.get("DATABASE_URL")
 
 app = Flask(__name__, static_folder=BASE_DIR)
 
@@ -47,18 +43,21 @@ def get_lan_ip():
     return ip
 
 def get_db():
-    """Thread-safe SQLite database connection."""
+    """Database connection with thread safety."""
+    if DATABASE_URL and 'postgres' in DATABASE_URL:
+        import psycopg2
+        import psycopg2.extras
+        if not hasattr(g, '_pg_conn') or g._pg_conn.closed:
+            conn = psycopg2.connect(DATABASE_URL, sslmode='require')
+            conn.autocommit = True
+            g._pg_conn = conn
+        return g._pg_conn
+
     db = getattr(g, '_database', None)
     if db is None:
         db = g._database = sqlite3.connect(DB_PATH)
         db.row_factory = sqlite3.Row
-        # Enable Write-Ahead Logging for high-concurrency multi-device reads/writes
         db.execute("PRAGMA journal_mode=WAL;")
-        # Auto-heal: verify database schema exists
-        try:
-            db.execute("SELECT 1 FROM items LIMIT 1;")
-        except sqlite3.OperationalError:
-            init_db()
     return db
 
 @app.teardown_appcontext
@@ -66,3234 +65,767 @@ def close_connection(exception):
     db = getattr(g, '_database', None)
     if db is not None:
         db.close()
+    pg = getattr(g, '_pg_conn', None)
+    if pg is not None and not pg.closed:
+        pg.close()
+
+def hash_pw(pw):
+    return hashlib.sha256(pw.encode('utf-8')).hexdigest()
 
 def init_db():
-    """Initialize database tables and seed sample listings if empty."""
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute("PRAGMA journal_mode=WAL;")
-    cur = conn.cursor()
-
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            id TEXT PRIMARY KEY,
-            nickname TEXT NOT NULL,
-            avatar TEXT,
-            lat REAL,
-            lng REAL,
-            created_at REAL,
-            last_active_at REAL
-        );
-    """)
-
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS items (
-            id TEXT PRIMARY KEY,
-            seller_id TEXT NOT NULL,
-            seller_name TEXT NOT NULL,
-            seller_rating REAL DEFAULT 4.9,
-            seller_verified INTEGER DEFAULT 1,
-            seller_avatar TEXT,
-            title TEXT NOT NULL,
-            category TEXT NOT NULL,
-            sub_category TEXT,
-            price REAL NOT NULL,
-            original_price REAL,
-            condition TEXT NOT NULL,
-            condition_score REAL DEFAULT 0.85,
-            lat REAL NOT NULL,
-            lng REAL NOT NULL,
-            landmark TEXT NOT NULL,
-            image TEXT,
-            description TEXT,
-            tags TEXT,
-            is_available INTEGER DEFAULT 1,
-            reserved_by TEXT,
-            created_at REAL NOT NULL
-        );
-    """)
-
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS messages (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            item_id TEXT NOT NULL,
-            sender_id TEXT NOT NULL,
-            sender_name TEXT NOT NULL,
-            text TEXT NOT NULL,
-            created_at REAL NOT NULL
-        );
-    """)
-
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS sync_events (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            event_type TEXT NOT NULL,
-            item_id TEXT,
-            payload TEXT,
-            created_at REAL NOT NULL
-        );
-    """)
-
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS campus_waitlist (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            campus_name TEXT NOT NULL,
-            email TEXT NOT NULL,
-            created_at REAL NOT NULL
-        );
-    """)
-
-    # Schema Migrations for enhanced features
-    try:
-        cur.execute("ALTER TABLE items ADD COLUMN beacon_type TEXT DEFAULT 'sell';")
-    except Exception:
-        pass
-    try:
-        cur.execute("ALTER TABLE items ADD COLUMN status TEXT DEFAULT 'active';")
-    except Exception:
-        pass
-    try:
-        cur.execute("ALTER TABLE items ADD COLUMN upi_id TEXT;")
-    except Exception:
-        pass
-
-    # Google Auth & Verified Student Schema Migrations
-    auth_migrations = [
-        "ALTER TABLE users ADD COLUMN google_id TEXT;",
-        "ALTER TABLE users ADD COLUMN email TEXT;",
-        "ALTER TABLE users ADD COLUMN picture TEXT;",
-        "ALTER TABLE users ADD COLUMN is_verified INTEGER DEFAULT 0;",
-        "ALTER TABLE users ADD COLUMN is_campus_verified INTEGER DEFAULT 0;",
-        "ALTER TABLE users ADD COLUMN auth_provider TEXT DEFAULT 'guest';",
-        "ALTER TABLE users ADD COLUMN session_token TEXT;",
-        "ALTER TABLE items ADD COLUMN seller_email TEXT;",
-        "ALTER TABLE items ADD COLUMN seller_campus_verified INTEGER DEFAULT 0;",
-        "ALTER TABLE items ADD COLUMN seller_google_id TEXT;",
-        "ALTER TABLE messages ADD COLUMN sender_email TEXT;",
-        "ALTER TABLE messages ADD COLUMN sender_avatar TEXT;",
-        "ALTER TABLE items ADD COLUMN handshake_code TEXT;",
-        "ALTER TABLE items ADD COLUMN completed_by TEXT;",
-        "ALTER TABLE items ADD COLUMN completed_at REAL;",
-        "ALTER TABLE users ADD COLUMN trades_completed INTEGER DEFAULT 0;",
-        "ALTER TABLE items ADD COLUMN agreed_price REAL;",
-        "ALTER TABLE items ADD COLUMN accepted_offer_id TEXT;"
-    ]
-    for stmt in auth_migrations:
-        try:
-            cur.execute(stmt)
-        except Exception:
-            pass
-
-    # Offers / Bargaining table
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS offers (
-            id TEXT PRIMARY KEY,
-            item_id TEXT NOT NULL,
-            buyer_id TEXT NOT NULL,
-            buyer_name TEXT NOT NULL,
-            seller_id TEXT NOT NULL,
-            original_price REAL NOT NULL,
-            offer_amount REAL NOT NULL,
-            status TEXT DEFAULT 'pending',
-            created_at REAL NOT NULL,
-            updated_at REAL NOT NULL
-        );
-    """)
-
-    # v3.0 India-Centric Universal Marketplace Schema Migrations
-    v3_migrations = [
-        "ALTER TABLE items ADD COLUMN item_attributes TEXT DEFAULT '{}';",
-        "ALTER TABLE items ADD COLUMN upi_qr_image TEXT;",
-        "ALTER TABLE items ADD COLUMN locality_id TEXT;",
-        "ALTER TABLE items ADD COLUMN locality_type TEXT DEFAULT 'campus';",
-        "ALTER TABLE items ADD COLUMN safe_landmark TEXT;",
-        "ALTER TABLE items ADD COLUMN seller_phone_verified INTEGER DEFAULT 0;",
-        "ALTER TABLE users ADD COLUMN phone_number TEXT;",
-        "ALTER TABLE users ADD COLUMN phone_verified INTEGER DEFAULT 0;",
-        "ALTER TABLE users ADD COLUMN phone_otp TEXT;",
-        "ALTER TABLE users ADD COLUMN phone_otp_expiry REAL;",
-        "ALTER TABLE users ADD COLUMN upi_vpa TEXT;",
-        "ALTER TABLE offers ADD COLUMN upi_tx_ref TEXT;",
-        "ALTER TABLE offers ADD COLUMN buyer_declared_paid INTEGER DEFAULT 0;",
-        "ALTER TABLE offers ADD COLUMN seller_confirmed_paid INTEGER DEFAULT 0;",
-        "ALTER TABLE offers ADD COLUMN payment_mode TEXT DEFAULT 'upi';"
-    ]
-    for stmt in v3_migrations:
-        try:
-            cur.execute(stmt)
-        except Exception:
-            pass
-
-    conn.commit()
-    conn.close()
-    
-    # Restore previous user broadcasts and sessions if database is fresh
-    restore_data_backup()
-
-BACKUP_PATH = os.path.join(BASE_DIR, "data_backup.json")
-
-def get_pg_conn():
-    """Connect to persistent Render PostgreSQL cloud database via DATABASE_URL."""
-    db_url = os.environ.get("DATABASE_URL")
-    if not db_url or not (db_url.startswith("postgres://") or db_url.startswith("postgresql://")):
-        return None
-    try:
+    """Initializes tables and seeds baseline data matching Slide 9."""
+    if DATABASE_URL and 'postgres' in DATABASE_URL:
         import psycopg2
         import psycopg2.extras
-        if db_url.startswith("postgres://"):
-            db_url = db_url.replace("postgres://", "postgresql://", 1)
-        conn = psycopg2.connect(db_url, sslmode='require')
-        return conn
-    except Exception as e:
-        print("[PostgreSQL] Connection warning:", e)
-        return None
-
-def init_pg_schema():
-    """Ensure all required tables and indexes exist in persistent PostgreSQL cloud DB."""
-    pg = get_pg_conn()
-    if not pg:
-        return
-    try:
-        cur = pg.cursor()
-        # 1. Users table
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS users (
-                id VARCHAR(128) PRIMARY KEY,
-                nickname VARCHAR(100) NOT NULL,
-                avatar TEXT,
-                email VARCHAR(255) UNIQUE,
-                picture TEXT,
-                google_id VARCHAR(255) UNIQUE,
-                phone_number VARCHAR(20),
-                phone_verified INTEGER DEFAULT 0,
-                phone_otp VARCHAR(10),
-                phone_otp_expiry DOUBLE PRECISION,
-                trust_score DOUBLE PRECISION DEFAULT 50.0,
-                seller_rating DOUBLE PRECISION DEFAULT 4.9,
-                trades_completed INTEGER DEFAULT 0,
-                is_verified INTEGER DEFAULT 0,
-                is_campus_verified INTEGER DEFAULT 0,
-                auth_provider VARCHAR(50) DEFAULT 'guest',
-                upi_vpa VARCHAR(128),
-                lat DOUBLE PRECISION,
-                lng DOUBLE PRECISION,
-                session_token TEXT,
-                created_at DOUBLE PRECISION NOT NULL,
-                last_active_at DOUBLE PRECISION NOT NULL
-            );
-        """)
-        # 2. Beacons table
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS beacons (
-                id VARCHAR(64) PRIMARY KEY,
-                seller_id VARCHAR(128) NOT NULL,
-                seller_name VARCHAR(100) NOT NULL,
-                seller_rating DOUBLE PRECISION DEFAULT 4.9,
-                seller_verified INTEGER DEFAULT 1,
-                seller_avatar TEXT,
-                seller_email VARCHAR(255),
-                seller_phone_verified INTEGER DEFAULT 0,
-                seller_campus_verified INTEGER DEFAULT 0,
-                seller_google_id VARCHAR(255),
-                title VARCHAR(255) NOT NULL,
-                category VARCHAR(64) NOT NULL,
-                sub_category VARCHAR(100),
-                price DOUBLE PRECISION NOT NULL,
-                original_price DOUBLE PRECISION,
-                discount_pct INTEGER DEFAULT 0,
-                condition VARCHAR(64) NOT NULL,
-                condition_score DOUBLE PRECISION DEFAULT 0.85,
-                dsp_score DOUBLE PRECISION DEFAULT 85.0,
-                lat DOUBLE PRECISION NOT NULL,
-                lng DOUBLE PRECISION NOT NULL,
-                landmark VARCHAR(255) NOT NULL,
-                safe_landmark VARCHAR(255),
-                locality_id VARCHAR(128),
-                locality_type VARCHAR(64) DEFAULT 'campus',
-                image TEXT,
-                description TEXT,
-                tags JSONB DEFAULT '[]'::jsonb,
-                beacon_type VARCHAR(32) DEFAULT 'sell',
-                status VARCHAR(32) DEFAULT 'active',
-                is_available INTEGER DEFAULT 1,
-                reserved_by VARCHAR(128),
-                upi_id VARCHAR(128),
-                upi_qr_image TEXT,
-                item_attributes JSONB DEFAULT '{}'::jsonb,
-                handshake_code VARCHAR(10),
-                agreed_price DOUBLE PRECISION,
-                accepted_offer_id VARCHAR(64),
-                completed_by VARCHAR(128),
-                completed_at DOUBLE PRECISION,
-                created_at DOUBLE PRECISION NOT NULL
-            );
-        """)
-        # 3. Messages table
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS messages (
-                id SERIAL PRIMARY KEY,
-                listing_id VARCHAR(64) NOT NULL,
-                item_id VARCHAR(64) NOT NULL,
-                room_id VARCHAR(256) NOT NULL,
-                sender_id VARCHAR(128) NOT NULL,
-                receiver_id VARCHAR(128) NOT NULL,
-                buyer_id VARCHAR(128) NOT NULL,
-                sender_name VARCHAR(100) NOT NULL,
-                sender_email VARCHAR(255),
-                sender_avatar TEXT,
-                message_text TEXT NOT NULL,
-                text TEXT NOT NULL,
-                created_at DOUBLE PRECISION NOT NULL
-            );
-        """)
-        # 4. Offers table
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS offers (
-                id VARCHAR(64) PRIMARY KEY,
-                item_id VARCHAR(64) NOT NULL,
-                buyer_id VARCHAR(128) NOT NULL,
-                buyer_name VARCHAR(100) NOT NULL,
-                seller_id VARCHAR(128) NOT NULL,
-                original_price DOUBLE PRECISION NOT NULL,
-                offer_amount DOUBLE PRECISION NOT NULL,
-                status VARCHAR(32) DEFAULT 'pending',
-                upi_tx_ref VARCHAR(128),
-                buyer_declared_paid INTEGER DEFAULT 0,
-                seller_confirmed_paid INTEGER DEFAULT 0,
-                payment_mode VARCHAR(32) DEFAULT 'upi',
-                created_at DOUBLE PRECISION NOT NULL,
-                updated_at DOUBLE PRECISION NOT NULL
-            );
-        """)
-        # 5. Transactions table
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS transactions (
-                id VARCHAR(64) PRIMARY KEY,
-                item_id VARCHAR(64) NOT NULL,
-                buyer_id VARCHAR(128) NOT NULL,
-                buyer_name VARCHAR(100) NOT NULL,
-                seller_id VARCHAR(128) NOT NULL,
-                amount DOUBLE PRECISION NOT NULL,
-                original_price DOUBLE PRECISION,
-                upi_tx_ref VARCHAR(128),
-                payment_mode VARCHAR(32) DEFAULT 'upi',
-                order_status VARCHAR(32) DEFAULT 'pending',
-                handshake_code VARCHAR(10),
-                buyer_declared_paid INTEGER DEFAULT 0,
-                seller_confirmed_paid INTEGER DEFAULT 0,
-                created_at DOUBLE PRECISION NOT NULL,
-                updated_at DOUBLE PRECISION NOT NULL
-            );
-        """)
-        try:
-            cur.execute("CREATE OR REPLACE VIEW items AS SELECT * FROM beacons;")
-        except Exception:
-            pass
-
-        pg.commit()
-        pg.close()
-        print("[PostgreSQL] Cloud database schema initialized successfully.")
-    except Exception as e:
-        print("[PostgreSQL Schema Init Error]:", e)
-        try: pg.rollback(); pg.close()
-        except Exception: pass
-
-def save_beacon_to_pg(item_dict):
-    """Directly insert/update a single beacon in persistent PostgreSQL with proper JSONB typing."""
-    pg_conn = get_pg_conn()
-    if not pg_conn:
-        return False
-    try:
-        import psycopg2.extras
-        cur = pg_conn.cursor()
-        
-        tags = item_dict.get('tags') or []
-        if isinstance(tags, str):
-            try: tags = json.loads(tags)
-            except Exception: tags = []
-        elif not isinstance(tags, (list, tuple)):
-            tags = []
-
-        attrs = item_dict.get('item_attributes') or {}
-        if isinstance(attrs, str):
-            try: attrs = json.loads(attrs)
-            except Exception: attrs = {}
-        elif not isinstance(attrs, dict):
-            attrs = {}
-
-        sql = """
-            INSERT INTO beacons (
-                id, seller_id, seller_name, seller_rating, seller_verified, seller_avatar,
-                seller_email, seller_phone_verified, seller_campus_verified, seller_google_id,
-                title, category, sub_category, price, original_price, condition,
-                condition_score, lat, lng, landmark, safe_landmark, locality_id, locality_type,
-                image, description, tags, beacon_type, status, is_available, upi_id,
-                upi_qr_image, item_attributes, handshake_code, created_at
-            ) VALUES (
-                %s, %s, %s, %s, %s, %s,
-                %s, %s, %s, %s,
-                %s, %s, %s, %s, %s, %s,
-                %s, %s, %s, %s, %s, %s, %s,
-                %s, %s, %s, %s, %s, %s, %s,
-                %s, %s, %s, %s
-            )
-            ON CONFLICT (id) DO UPDATE SET
-                title = EXCLUDED.title,
-                category = EXCLUDED.category,
-                sub_category = EXCLUDED.sub_category,
-                price = EXCLUDED.price,
-                original_price = EXCLUDED.original_price,
-                condition = EXCLUDED.condition,
-                condition_score = EXCLUDED.condition_score,
-                lat = EXCLUDED.lat,
-                lng = EXCLUDED.lng,
-                landmark = EXCLUDED.landmark,
-                safe_landmark = EXCLUDED.safe_landmark,
-                locality_id = EXCLUDED.locality_id,
-                locality_type = EXCLUDED.locality_type,
-                image = EXCLUDED.image,
-                description = EXCLUDED.description,
-                tags = EXCLUDED.tags,
-                beacon_type = EXCLUDED.beacon_type,
-                status = EXCLUDED.status,
-                is_available = EXCLUDED.is_available,
-                upi_id = EXCLUDED.upi_id,
-                upi_qr_image = EXCLUDED.upi_qr_image,
-                item_attributes = EXCLUDED.item_attributes,
-                seller_verified = EXCLUDED.seller_verified,
-                seller_campus_verified = EXCLUDED.seller_campus_verified,
-                seller_phone_verified = EXCLUDED.seller_phone_verified;
-        """
-        cur.execute(sql, (
-            item_dict.get('id'),
-            item_dict.get('seller_id') or "guest",
-            item_dict.get('seller_name') or "Student",
-            float(item_dict.get('seller_rating') or 5.0),
-            int(item_dict.get('seller_verified') or 1),
-            item_dict.get('seller_avatar') or "",
-            item_dict.get('seller_email') or "",
-            int(item_dict.get('seller_phone_verified') or 0),
-            int(item_dict.get('seller_campus_verified') or 0),
-            item_dict.get('seller_google_id') or "",
-            item_dict.get('title') or "Listing",
-            item_dict.get('category') or "stationery",
-            item_dict.get('sub_category') or "General",
-            float(item_dict.get('price') or 0),
-            float(item_dict.get('original_price') or item_dict.get('price') or 0),
-            item_dict.get('condition') or "Good",
-            float(item_dict.get('condition_score') or 0.85),
-            float(item_dict.get('lat') or 0),
-            float(item_dict.get('lng') or 0),
-            item_dict.get('landmark') or "",
-            item_dict.get('safe_landmark') or item_dict.get('landmark') or "",
-            item_dict.get('locality_id') or "",
-            item_dict.get('locality_type') or "campus",
-            item_dict.get('image') or "",
-            item_dict.get('description') or "",
-            psycopg2.extras.Json(tags),
-            item_dict.get('beacon_type') or "sell",
-            item_dict.get('status') or "active",
-            int(item_dict.get('is_available', 1) if item_dict.get('status') != 'sold' else 0),
-            item_dict.get('upi_id') or "",
-            item_dict.get('upi_qr_image') or "",
-            psycopg2.extras.Json(attrs),
-            item_dict.get('handshake_code') or "",
-            float(item_dict.get('created_at') or time.time())
-        ))
-        pg_conn.commit()
-        pg_conn.close()
-        print(f"[PostgreSQL] Successfully saved beacon {item_dict.get('id')} to cloud DB.")
-        return True
-    except Exception as e:
-        print(f"[PostgreSQL save_beacon_to_pg Error]:", e)
-        try: pg_conn.rollback(); pg_conn.close()
-        except Exception: pass
-        return False
-
-def save_user_to_pg(user_dict):
-    """Directly insert/update user profile in persistent PostgreSQL."""
-    pg_conn = get_pg_conn()
-    if not pg_conn:
-        return False
-    try:
-        cur = pg_conn.cursor()
-        sql = """
-            INSERT INTO users (
-                id, nickname, avatar, email, picture, google_id, phone_number,
-                phone_verified, is_verified, is_campus_verified, auth_provider,
-                upi_vpa, session_token, created_at, last_active_at
-            ) VALUES (
-                %s, %s, %s, %s, %s, %s, %s,
-                %s, %s, %s, %s,
-                %s, %s, %s, %s
-            )
-            ON CONFLICT (id) DO UPDATE SET
-                nickname = EXCLUDED.nickname,
-                avatar = EXCLUDED.avatar,
-                email = EXCLUDED.email,
-                picture = EXCLUDED.picture,
-                google_id = EXCLUDED.google_id,
-                phone_number = EXCLUDED.phone_number,
-                phone_verified = EXCLUDED.phone_verified,
-                is_verified = EXCLUDED.is_verified,
-                is_campus_verified = EXCLUDED.is_campus_verified,
-                upi_vpa = EXCLUDED.upi_vpa,
-                session_token = EXCLUDED.session_token,
-                last_active_at = EXCLUDED.last_active_at;
-        """
-        cur.execute(sql, (
-            user_dict.get('id'),
-            user_dict.get('nickname') or "Student",
-            user_dict.get('avatar') or "",
-            user_dict.get('email'),
-            user_dict.get('picture') or user_dict.get('avatar') or "",
-            user_dict.get('google_id'),
-            user_dict.get('phone_number') or "",
-            int(user_dict.get('phone_verified') or 0),
-            int(user_dict.get('is_verified') or 0),
-            int(user_dict.get('is_campus_verified') or 0),
-            user_dict.get('auth_provider') or "guest",
-            user_dict.get('upi_vpa') or "",
-            user_dict.get('session_token') or "",
-            float(user_dict.get('created_at') or time.time()),
-            float(user_dict.get('last_active_at') or time.time())
-        ))
-        pg_conn.commit()
-        pg_conn.close()
-        return True
-    except Exception as e:
-        print("[PostgreSQL save_user_to_pg Error]:", e)
-        try: pg_conn.rollback(); pg_conn.close()
-        except Exception: pass
-        return False
-
-def save_message_to_pg(msg_dict):
-    """Directly insert a chat message into persistent PostgreSQL."""
-    pg_conn = get_pg_conn()
-    if not pg_conn:
-        return False
-    try:
-        cur = pg_conn.cursor()
-        sql = """
-            INSERT INTO messages (
-                item_id, listing_id, room_id, sender_id, receiver_id, buyer_id,
-                sender_name, sender_email, sender_avatar, message_text, text, created_at
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        """
-        cur.execute(sql, (
-            msg_dict.get('item_id'),
-            msg_dict.get('listing_id') or msg_dict.get('item_id'),
-            msg_dict.get('room_id'),
-            msg_dict.get('sender_id'),
-            msg_dict.get('receiver_id'),
-            msg_dict.get('buyer_id'),
-            msg_dict.get('sender_name'),
-            msg_dict.get('sender_email') or "",
-            msg_dict.get('sender_avatar') or "",
-            msg_dict.get('text'),
-            msg_dict.get('text'),
-            float(msg_dict.get('created_at') or time.time())
-        ))
-        pg_conn.commit()
-        pg_conn.close()
-        return True
-    except Exception as e:
-        print("[PostgreSQL save_message_to_pg Error]:", e)
-        try: pg_conn.rollback(); pg_conn.close()
-        except Exception: pass
-        return False
-
-def sync_pg_to_sqlite(pg_items):
-    """Mirror PostgreSQL items into local SQLite cache."""
-    if not pg_items:
-        return
-    try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = psycopg2.connect(DATABASE_URL, sslmode='require')
         cur = conn.cursor()
-        for it in pg_items:
-            keys = [k for k in it.keys() if it[k] is not None and k not in ('seller', 'isAvailable', 'discount_pct', 'dsp_score')]
-            placeholders = ", ".join(["?"] * len(keys))
-            cols = ", ".join(keys)
-            vals = [json.dumps(it[k]) if isinstance(it[k], (list, dict)) else it[k] for k in keys]
-            sql = f"INSERT OR REPLACE INTO items ({cols}) VALUES ({placeholders})"
-            cur.execute(sql, vals)
+        with open(os.path.join(BASE_DIR, "schema.sql"), "r", encoding="utf-8") as f:
+            cur.execute(f.read())
         conn.commit()
+        seed_data(conn, is_postgres=True)
+        cur.close()
         conn.close()
-    except Exception as e:
-        print("[PostgreSQL->SQLite Sync Error]:", e)
-
-def save_data_backup():
-    """Mirror SQLite state to durable JSON backup file AND persistent PostgreSQL cloud database."""
-    try:
+    else:
         conn = sqlite3.connect(DB_PATH)
-        conn.row_factory = sqlite3.Row
-        cur = conn.cursor()
-        items = [dict(r) for r in cur.execute("SELECT * FROM items").fetchall()]
-        users = [dict(r) for r in cur.execute("SELECT * FROM users").fetchall()]
-        messages = [dict(r) for r in cur.execute("SELECT * FROM messages").fetchall()]
+        with open(os.path.join(BASE_DIR, "schema.sql"), "r", encoding="utf-8") as f:
+            conn.executescript(f.read())
+        seed_data(conn, is_postgres=False)
         conn.close()
 
-        backup = {
-            "version": 1,
-            "timestamp": time.time(),
-            "items": items,
-            "users": users,
-            "messages": messages
-        }
-        with open(BACKUP_PATH, "w", encoding="utf-8") as f:
-            json.dump(backup, f, indent=2)
-
-        # Mirror directly to persistent PostgreSQL cloud database
-        pg_conn = get_pg_conn()
-        if pg_conn:
-            try:
-                import psycopg2.extras
-                pg_cur = pg_conn.cursor()
-                # 1. Beacons
-                for it in items:
-                    tags = it.get('tags') or []
-                    if isinstance(tags, str):
-                        try: tags = json.loads(tags)
-                        except Exception: tags = []
-                    elif not isinstance(tags, (list, tuple)):
-                        tags = []
-
-                    attrs = it.get('item_attributes') or {}
-                    if isinstance(attrs, str):
-                        try: attrs = json.loads(attrs)
-                        except Exception: attrs = {}
-                    elif not isinstance(attrs, dict):
-                        attrs = {}
-
-                    sql = """
-                        INSERT INTO beacons (
-                            id, seller_id, seller_name, seller_rating, seller_verified, seller_avatar,
-                            seller_email, seller_phone_verified, seller_campus_verified, seller_google_id,
-                            title, category, sub_category, price, original_price, condition,
-                            condition_score, lat, lng, landmark, safe_landmark, locality_id, locality_type,
-                            image, description, tags, beacon_type, status, is_available, upi_id,
-                            upi_qr_image, item_attributes, handshake_code, created_at
-                        ) VALUES (
-                            %s, %s, %s, %s, %s, %s,
-                            %s, %s, %s, %s,
-                            %s, %s, %s, %s, %s, %s,
-                            %s, %s, %s, %s, %s, %s, %s,
-                            %s, %s, %s, %s, %s, %s, %s,
-                            %s, %s, %s, %s
-                        )
-                        ON CONFLICT (id) DO UPDATE SET
-                            title = EXCLUDED.title,
-                            category = EXCLUDED.category,
-                            sub_category = EXCLUDED.sub_category,
-                            price = EXCLUDED.price,
-                            original_price = EXCLUDED.original_price,
-                            condition = EXCLUDED.condition,
-                            condition_score = EXCLUDED.condition_score,
-                            lat = EXCLUDED.lat,
-                            lng = EXCLUDED.lng,
-                            landmark = EXCLUDED.landmark,
-                            safe_landmark = EXCLUDED.safe_landmark,
-                            image = EXCLUDED.image,
-                            description = EXCLUDED.description,
-                            tags = EXCLUDED.tags,
-                            beacon_type = EXCLUDED.beacon_type,
-                            status = EXCLUDED.status,
-                            is_available = EXCLUDED.is_available,
-                            upi_id = EXCLUDED.upi_id,
-                            upi_qr_image = EXCLUDED.upi_qr_image,
-                            item_attributes = EXCLUDED.item_attributes;
-                    """
-                    pg_cur.execute(sql, (
-                        it.get('id'),
-                        it.get('seller_id') or "guest",
-                        it.get('seller_name') or "Student",
-                        float(it.get('seller_rating') or 5.0),
-                        int(it.get('seller_verified') or 1),
-                        it.get('seller_avatar') or "",
-                        it.get('seller_email') or "",
-                        int(it.get('seller_phone_verified') or 0),
-                        int(it.get('seller_campus_verified') or 0),
-                        it.get('seller_google_id') or "",
-                        it.get('title') or "Listing",
-                        it.get('category') or "stationery",
-                        it.get('sub_category') or "General",
-                        float(it.get('price') or 0),
-                        float(it.get('original_price') or it.get('price') or 0),
-                        it.get('condition') or "Good",
-                        float(it.get('condition_score') or 0.85),
-                        float(it.get('lat') or 0),
-                        float(it.get('lng') or 0),
-                        it.get('landmark') or "",
-                        it.get('safe_landmark') or it.get('landmark') or "",
-                        it.get('locality_id') or "",
-                        it.get('locality_type') or "campus",
-                        it.get('image') or "",
-                        it.get('description') or "",
-                        psycopg2.extras.Json(tags),
-                        it.get('beacon_type') or "sell",
-                        it.get('status') or "active",
-                        int(it.get('is_available', 1) if it.get('status') != 'sold' else 0),
-                        it.get('upi_id') or "",
-                        it.get('upi_qr_image') or "",
-                        psycopg2.extras.Json(attrs),
-                        it.get('handshake_code') or "",
-                        float(it.get('created_at') or time.time())
-                    ))
-
-                # 2. Users
-                for u in users:
-                    pg_cur.execute("""
-                        INSERT INTO users (
-                            id, nickname, avatar, email, picture, google_id, phone_number,
-                            phone_verified, is_verified, is_campus_verified, auth_provider,
-                            upi_vpa, session_token, created_at, last_active_at
-                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                        ON CONFLICT (id) DO UPDATE SET
-                            nickname = EXCLUDED.nickname,
-                            avatar = EXCLUDED.avatar,
-                            email = EXCLUDED.email,
-                            picture = EXCLUDED.picture,
-                            google_id = EXCLUDED.google_id,
-                            phone_number = EXCLUDED.phone_number,
-                            phone_verified = EXCLUDED.phone_verified,
-                            is_verified = EXCLUDED.is_verified,
-                            is_campus_verified = EXCLUDED.is_campus_verified,
-                            upi_vpa = EXCLUDED.upi_vpa,
-                            session_token = EXCLUDED.session_token,
-                            last_active_at = EXCLUDED.last_active_at;
-                    """, (
-                        u.get('id'),
-                        u.get('nickname') or "Student",
-                        u.get('avatar') or "",
-                        u.get('email'),
-                        u.get('picture') or u.get('avatar') or "",
-                        u.get('google_id'),
-                        u.get('phone_number') or "",
-                        int(u.get('phone_verified') or 0),
-                        int(u.get('is_verified') or 0),
-                        int(u.get('is_campus_verified') or 0),
-                        u.get('auth_provider') or "guest",
-                        u.get('upi_vpa') or "",
-                        u.get('session_token') or "",
-                        float(u.get('created_at') or time.time()),
-                        float(u.get('last_active_at') or time.time())
-                    ))
-
-                # 3. Messages
-                for m in messages:
-                    room_id = m.get('room_id') or f"chat_{m.get('item_id')}_{m.get('buyer_id') or m.get('sender_id')}"
-                    item_id = m.get('item_id')
-                    sender_id = m.get('sender_id')
-                    receiver_id = m.get('receiver_id') or 'seller'
-                    buyer_id = m.get('buyer_id') or m.get('sender_id')
-                    text = m.get('text') or ''
-                    created_at = m.get('created_at') or time.time()
-                    sql = """
-                        INSERT INTO messages (item_id, listing_id, room_id, sender_id, receiver_id, buyer_id, sender_name, text, message_text, created_at, sender_email, sender_avatar)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                    """
-                    try:
-                        pg_cur.execute(sql, (
-                            item_id, item_id, room_id, sender_id, receiver_id, buyer_id,
-                            m.get('sender_name') or 'Student', text, text, created_at,
-                            m.get('sender_email') or '', m.get('sender_avatar') or ''
-                        ))
-                    except Exception:
-                        pass
-
-                pg_conn.commit()
-                pg_conn.close()
-            except Exception as pg_err:
-                print("[PostgreSQL Sync Error in save_data_backup]:", pg_err)
-                try: pg_conn.rollback(); pg_conn.close()
-                except Exception: pass
-    except Exception as e:
-        print("[backup] Save error:", e)
-
-def restore_data_backup():
-    """Restore state from persistent PostgreSQL cloud database or data_backup.json."""
-    # 1. Attempt to restore from persistent PostgreSQL cloud database
-    pg_conn = get_pg_conn()
-    if pg_conn:
-        try:
-            init_pg_schema()
-            import psycopg2.extras
-            pg_cur = pg_conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-
-            # Restore Beacons
-            pg_cur.execute("SELECT * FROM beacons WHERE status != 'deleted'")
-            pg_items = [dict(r) for r in pg_cur.fetchall()]
-            if pg_items:
-                print(f"[PostgreSQL] Restoring {len(pg_items)} beacons from cloud database...")
-                sync_pg_to_sqlite(pg_items)
-                print(f"[PostgreSQL] ✓ Restored {len(pg_items)} beacons successfully.")
-            else:
-                print("[PostgreSQL] No active beacons found in cloud DB.")
-
-            # Restore Users
-            try:
-                pg_cur.execute("SELECT * FROM users")
-                pg_users = [dict(r) for r in pg_cur.fetchall()]
-                if pg_users:
-                    conn = sqlite3.connect(DB_PATH)
-                    cur = conn.cursor()
-                    for u in pg_users:
-                        keys = [k for k in u.keys() if u[k] is not None]
-                        placeholders = ", ".join(["?"] * len(keys))
-                        cols = ", ".join(keys)
-                        sql = f"INSERT OR REPLACE INTO users ({cols}) VALUES ({placeholders})"
-                        cur.execute(sql, [u[k] for k in keys])
-                    conn.commit()
-                    conn.close()
-                    print(f"[PostgreSQL] ✓ Restored {len(pg_users)} users successfully.")
-            except Exception as u_err:
-                print("[PostgreSQL User Restore Error]:", u_err)
-
-            # Restore Messages
-            try:
-                pg_cur.execute("SELECT * FROM messages ORDER BY created_at ASC")
-                pg_msgs = [dict(r) for r in pg_cur.fetchall()]
-                if pg_msgs:
-                    conn = sqlite3.connect(DB_PATH)
-                    cur = conn.cursor()
-                    for m in pg_msgs:
-                        keys = [k for k in m.keys() if k in ('id', 'item_id', 'sender_id', 'sender_name', 'text', 'created_at', 'sender_email', 'sender_avatar', 'receiver_id', 'buyer_id', 'room_id', 'listing_id', 'message_text')]
-                        placeholders = ", ".join(["?"] * len(keys))
-                        cols = ", ".join(keys)
-                        sql = f"INSERT OR REPLACE INTO messages ({cols}) VALUES ({placeholders})"
-                        cur.execute(sql, [m[k] for k in keys])
-                    conn.commit()
-                    conn.close()
-                    print(f"[PostgreSQL] ✓ Restored {len(pg_msgs)} messages successfully.")
-            except Exception as m_err:
-                print("[PostgreSQL Message Restore Error]:", m_err)
-
-            pg_conn.close()
-            return
-        except Exception as pg_e:
-            print("[PostgreSQL Restore Warning]:", pg_e)
-            try: pg_conn.close()
-            except Exception: pass
-
-    if not os.path.exists(BACKUP_PATH):
+def seed_data(conn, is_postgres=False):
+    """Seed sample data matching PPT Slide 9 (Income ₹30,000, Expenses ₹21,500, Savings ₹8,500, Goal ₹50,000)."""
+    cur = conn.cursor()
+    # Check if user already exists
+    cur.execute("SELECT id FROM users WHERE username = %s" if is_postgres else "SELECT id FROM users WHERE username = ?", ("demo_student",))
+    row = cur.fetchone()
+    if row:
         return
-    try:
-        with open(BACKUP_PATH, "r", encoding="utf-8") as f:
-            backup = json.load(f)
-        items = backup.get("items", [])
-        users = backup.get("users", [])
-        messages = backup.get("messages", [])
-        if not items and not users and not messages:
-            return
 
-        conn = sqlite3.connect(DB_PATH)
-        cur = conn.cursor()
+    user_id = "user_demo_2026"
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    cur_month = datetime.now().strftime("%Y-%m")
+    today = date.today().strftime("%Y-%m-%d")
 
-        cur.execute("SELECT COUNT(*) FROM items")
-        item_count = cur.fetchone()[0]
-        if item_count == 0 and items:
-            print(f"[backup] Restoring {len(items)} items from durable backup...")
-            for it in items:
-                keys = list(it.keys())
-                placeholders = ", ".join(["?"] * len(keys))
-                cols = ", ".join(keys)
-                sql = f"INSERT OR REPLACE INTO items ({cols}) VALUES ({placeholders})"
-                cur.execute(sql, [it[k] for k in keys])
-
-        cur.execute("SELECT COUNT(*) FROM users")
-        user_count = cur.fetchone()[0]
-        if user_count == 0 and users:
-            print(f"[backup] Restoring {len(users)} users from durable backup...")
-            for u in users:
-                keys = list(u.keys())
-                placeholders = ", ".join(["?"] * len(keys))
-                cols = ", ".join(keys)
-                sql = f"INSERT OR REPLACE INTO users ({cols}) VALUES ({placeholders})"
-                cur.execute(sql, [u[k] for k in keys])
-
-        cur.execute("SELECT COUNT(*) FROM messages")
-        msg_count = cur.fetchone()[0]
-        if msg_count == 0 and messages:
-            print(f"[backup] Restoring {len(messages)} messages from durable backup...")
-            for m in messages:
-                keys = list(m.keys())
-                placeholders = ", ".join(["?"] * len(keys))
-                cols = ", ".join(keys)
-                sql = f"INSERT OR REPLACE INTO messages ({cols}) VALUES ({placeholders})"
-                cur.execute(sql, [m[k] for k in keys])
-
-        conn.commit()
-        conn.close()
-        print("[backup] Restoration check completed.")
-    except Exception as e:
-        print("[backup] Restore error:", e)
-
-# Unconditionally initialize database tables on WSGI/Gunicorn import & direct run
-try:
-    init_db()
-except Exception as _init_err:
-    print("[startup] Database initialization warning:", _init_err)
-
-
-# --- STATIC ASSET ROUTES ---
-
-@app.route('/')
-def index():
-    return send_from_directory(BASE_DIR, 'index.html')
-
-@app.route('/<path:path>')
-def static_files(path):
-    return send_from_directory(BASE_DIR, path)
-
-@app.after_request
-def add_cache_control(response):
-    """Ensure mobile browsers and laptops always receive fresh JS, CSS, and HTML."""
-    if request.path == '/' or request.path.endswith(('.html', '.js', '.css', '.json')):
-        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate, max-age=0'
-        response.headers['Pragma'] = 'no-cache'
-        response.headers['Expires'] = '0'
-    return response
-
-# --- REST API ENDPOINTS ---
-
-@app.route('/api/network-info', methods=['GET'])
-def network_info():
-    """Return local host, Wi-Fi LAN, and public tunnel / cloud access URLs."""
-    lan_ip = get_lan_ip()
-    
-    # Check for public reverse proxy headers (Cloudflare, Render, Railway, Nginx)
-    forwarded_proto = request.headers.get('X-Forwarded-Proto', request.scheme)
-    forwarded_host = request.headers.get('X-Forwarded-Host', request.host)
-    current_origin = f"{forwarded_proto}://{forwarded_host}".rstrip('/')
-    
-    # If host is not a private local IP or localhost, it is a public domain
-    is_local = any(h in forwarded_host for h in ['localhost', '127.0.0.1', lan_ip])
-    public_url = current_origin if not is_local else None
-    active_url = public_url or f"http://{lan_ip}:{PORT}"
-
-    return jsonify({
-        "success": True,
-        "lan_ip": lan_ip,
-        "port": PORT,
-        "lan_url": f"http://{lan_ip}:{PORT}",
-        "local_url": f"http://localhost:{PORT}",
-        "public_url": public_url,
-        "active_url": active_url,
-        "is_secure": forwarded_proto == "https"
-    })
-
-# --- ISBN & BOOK METADATA RESOLVER PROXY ---
-
-ISBN_CACHE = {}
-
-def to_isbn10(isbn13):
-    """Convert ISBN-13 (starting with 978) to standard ISBN-10 with modulo 11 checksum."""
-    if not isbn13.startswith('978') or len(isbn13) != 13:
-        return None
-    core = isbn13[3:12]
-    total = sum((10 - i) * int(core[i]) for i in range(9))
-    check = (11 - (total % 11)) % 11
-    return core + ('X' if check == 10 else str(check))
-
-@app.route('/api/isbn/<path:isbn>', methods=['GET'])
-def lookup_isbn_api(isbn):
+    # Insert default user
+    insert_user = """
+    INSERT INTO users (id, username, email, password_hash, full_name, currency, created_at)
+    VALUES (%s, %s, %s, %s, %s, %s, %s)
+    """ if is_postgres else """
+    INSERT INTO users (id, username, email, password_hash, full_name, currency, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
     """
-    Real-time ISBN resolver proxy.
-    Decodes 10-digit and 13-digit textbook barcodes, queries OpenLibrary API,
-    and returns rich book metadata with cover thumbnail and formatted fields.
-    """
-    clean_isbn = re.sub(r'[^0-9X]', '', isbn.upper())
-    if len(clean_isbn) not in (10, 13):
-        return jsonify({
-            "success": False,
-            "error": f"Invalid ISBN format: '{isbn}'. Must be 10 or 13 characters."
-        }), 400
-
-    # In-memory cache hit for instant sub-millisecond response
-    if clean_isbn in ISBN_CACHE:
-        return jsonify({"success": True, "data": ISBN_CACHE[clean_isbn], "cached": True})
-
-    book_data = None
-    query_isbns = [clean_isbn]
-    isbn10 = to_isbn10(clean_isbn) if len(clean_isbn) == 13 else None
-    if isbn10 and isbn10 not in query_isbns:
-        query_isbns.append(isbn10)
-
-    # 1. Primary: OpenLibrary API (search all ISBN representations)
-    bibkeys = ','.join([f'ISBN:{k}' for k in query_isbns])
-    ol_url = f"https://openlibrary.org/api/books?bibkeys={bibkeys}&format=json&jscmd=data"
-    req = urllib.request.Request(ol_url, headers={
-        'User-Agent': 'RadarMarket/2.5 (Campus Second-Hand Textbook Radar; mailto:support@radarmarket.local)'
-    })
-    try:
-        with urllib.request.urlopen(req, timeout=6) as resp:
-            if resp.status == 200:
-                raw = json.loads(resp.read().decode('utf-8'))
-                for qk in query_isbns:
-                    key = f"ISBN:{qk}"
-                    if key in raw and raw[key].get('title'):
-                        b = raw[key]
-                        authors = ', '.join([a.get('name', '') for a in b.get('authors', []) if a.get('name')])
-                        publishers = ', '.join([p.get('name', '') for p in b.get('publishers', []) if p.get('name')])
-                        cover_obj = b.get('cover') or {}
-                        cover_url = cover_obj.get('large') or cover_obj.get('medium') or cover_obj.get('small') or f"https://covers.openlibrary.org/b/isbn/{clean_isbn}-L.jpg"
-                        subjects = [s.get('name', '') for s in b.get('subjects', [])[:5] if s.get('name')]
-                        break
-                else:
-                    b = None
-
-                if b:
-                    # Determine suggested academic subcategory
-                    subcategory = "Textbook"
-                    subjects_lower = " ".join(subjects).lower()
-                    if any(k in subjects_lower for k in ['computer', 'programming', 'software', 'algorithm', 'data structure', 'code']):
-                        subcategory = "Computer Science"
-                    elif any(k in subjects_lower for k in ['math', 'calculus', 'algebra', 'geometry', 'differential', 'statistics']):
-                        subcategory = "Mathematics"
-                    elif any(k in subjects_lower for k in ['physics', 'mechanics', 'quantum', 'optics', 'thermodynamics']):
-                        subcategory = "Physics"
-                    elif any(k in subjects_lower for k in ['chemistry', 'organic', 'chemical']):
-                        subcategory = "Chemistry"
-                    elif any(k in subjects_lower for k in ['electrical', 'electronics', 'circuit', 'signal']):
-                        subcategory = "Electrical Engineering"
-                    elif any(k in subjects_lower for k in ['economics', 'finance', 'business', 'management']):
-                        subcategory = "Economics & Business"
-                    elif any(k in subjects_lower for k in ['literature', 'fiction', 'novel', 'history', 'philosophy']):
-                        subcategory = "Literature & Humanities"
-                    elif subjects:
-                        subcategory = subjects[0][:30]
-
-                    book_data = {
-                        "isbn": clean_isbn,
-                        "title": b.get('title', ''),
-                        "subtitle": b.get('subtitle', ''),
-                        "authors": authors or "Unknown Author",
-                        "publishers": publishers,
-                        "publish_date": b.get('publish_date', ''),
-                        "number_of_pages": b.get('number_of_pages'),
-                        "cover_url": cover_url,
-                        "subjects": subjects,
-                        "suggested_category": "books",
-                        "suggested_subcategory": subcategory,
-                        "source": "OpenLibrary"
-                    }
-    except Exception:
-        pass
-
-    # 2. Fallback: Google Books API (if OpenLibrary missed it)
-    if not book_data or not book_data.get('title'):
-        gb_url = f"https://www.googleapis.com/books/v1/volumes?q=isbn:{clean_isbn}"
-        req_gb = urllib.request.Request(gb_url, headers={'User-Agent': 'RadarMarket/2.5'})
-        try:
-            with urllib.request.urlopen(req_gb, timeout=6) as resp:
-                if resp.status == 200:
-                    gb_raw = json.loads(resp.read().decode('utf-8'))
-                    items = gb_raw.get('items', [])
-                    if items:
-                        vol = items[0].get('volumeInfo', {})
-                        authors = ', '.join(vol.get('authors', []))
-                        categories = vol.get('categories', [])
-                        image_links = vol.get('imageLinks', {})
-                        cover = image_links.get('thumbnail') or image_links.get('smallThumbnail') or f"https://covers.openlibrary.org/b/isbn/{clean_isbn}-L.jpg"
-                        if cover.startswith('http://'):
-                            cover = 'https://' + cover[7:]
-                        
-                        book_data = {
-                            "isbn": clean_isbn,
-                            "title": vol.get('title', ''),
-                            "subtitle": vol.get('subtitle', ''),
-                            "authors": authors or "Unknown Author",
-                            "publishers": vol.get('publisher', ''),
-                            "publish_date": vol.get('publishedDate', ''),
-                            "number_of_pages": vol.get('pageCount'),
-                            "cover_url": cover,
-                            "subjects": categories,
-                            "suggested_category": "books",
-                            "suggested_subcategory": categories[0] if categories else "Textbook",
-                            "description": vol.get('description', ''),
-                            "source": "GoogleBooks"
-                        }
-        except Exception:
-            pass
-
-    if book_data and book_data.get('title'):
-        ISBN_CACHE[clean_isbn] = book_data
-        return jsonify({"success": True, "data": book_data})
-
-    return jsonify({
-        "success": False,
-        "error": f"No book records found for ISBN '{clean_isbn}'. Please enter details manually."
-    }), 404
-
-# ==============================================================================
-# Keep-Alive Heartbeat & Campus Expansion Waitlist (v2.8)
-# ==============================================================================
-
-@app.route('/api/ping', methods=['GET'])
-def api_ping():
-    """Ultra-lightweight keep-alive heartbeat route to prevent free-tier PaaS sleep."""
-    db_status = "local_sqlite"
-    pg = get_pg_conn()
-    if pg:
-        try:
-            c = pg.cursor()
-            c.execute("SELECT 1")
-            db_status = "postgresql_connected"
-            pg.close()
-        except Exception:
-            db_status = "postgresql_error"
-
-    return jsonify({
-        "status": "ok",
-        "timestamp": time.time(),
-        "service": "radarmarket-v3.0.3",
-        "database": db_status,
-        "mode": "production"
-    })
-
-@app.route('/api/db-status', methods=['GET'])
-def api_db_status():
-    """Verify live PostgreSQL connectivity, schema health, and table counts."""
-    pg = get_pg_conn()
-    if not pg:
-        return jsonify({
-            "database": "sqlite_fallback",
-            "connected": False,
-            "message": "DATABASE_URL not active"
-        })
-    try:
-        cur = pg.cursor()
-        cur.execute("SELECT COUNT(*) FROM beacons")
-        beacons_count = cur.fetchone()[0]
-        cur.execute("SELECT COUNT(*) FROM users")
-        users_count = cur.fetchone()[0]
-        cur.execute("SELECT COUNT(*) FROM messages")
-        msgs_count = cur.fetchone()[0]
-        pg.close()
-        return jsonify({
-            "database": "postgresql",
-            "connected": True,
-            "counts": {
-                "beacons": beacons_count,
-                "users": users_count,
-                "messages": msgs_count
-            }
-        })
-    except Exception as e:
-        try: pg.close()
-        except Exception: pass
-        return jsonify({
-            "database": "postgresql_error",
-            "connected": False,
-            "error": str(e)
-        }), 500
-
-@app.route('/api/waitlist', methods=['POST'])
-def add_campus_waitlist():
-    """Register student email for new/unlisted campus expansion alerts."""
-    db = get_db()
-    data = request.get_json() or {}
-    campus_name = str(data.get('campus_name', '')).strip()
-    email = str(data.get('email', '')).strip().lower()
-
-    if not campus_name or not email or '@' not in email:
-        return jsonify({"success": False, "error": "Please provide a valid campus name and email address"}), 400
-
-    now = time.time()
-    cur = db.cursor()
-    cur.execute("INSERT INTO campus_waitlist (campus_name, email, created_at) VALUES (?, ?, ?)", (campus_name, email, now))
-    db.commit()
-    return jsonify({
-        "success": True,
-        "message": f"Successfully joined waitlist for {campus_name}! We'll alert you as soon as trading goes live."
-    })
-
-# --- GOOGLE AUTHENTICATION & IDENTITY HELPERS ---
-
-CAMPUS_DOMAINS = ('.edu', '.ac.in', '.edu.in', '.edu.au', '.ac.uk', 'stanford.edu', 'mit.edu', 'berkeley.edu', 'harvard.edu', 'iitb.ac.in', 'du.ac.in')
-
-def is_campus_email(email):
-    """Detect verified college/university academic student email domain."""
-    if not email or '@' not in email:
-        return False
-    domain = email.lower().split('@')[1]
-    return any(domain.endswith(cd) or domain == cd for cd in CAMPUS_DOMAINS)
-
-def verify_google_token(id_token):
-    """Verify Google OAuth2 ID Token with Google tokeninfo public API (zero-dependency)."""
-    url = f"https://oauth2.googleapis.com/tokeninfo?id_token={id_token}"
-    req = urllib.request.Request(url, headers={'User-Agent': 'RadarMarket/2.4'})
-    try:
-        with urllib.request.urlopen(req, timeout=6) as response:
-            if response.status == 200:
-                data = json.loads(response.read().decode('utf-8'))
-                if 'sub' in data:
-                    return data
-    except Exception as e:
-        print("Google token verification error:", e)
-    return None
-
-# ==============================================================================
-# Cryptographically Signed Stateless Auth Tokens (Survives server redeploys & resets)
-# ==============================================================================
-SECRET_KEY = os.environ.get("SESSION_SECRET", "radarmarket-prod-secret-v3-campus-auth-key-2026")
-
-def generate_signed_token(user_payload):
-    """Generate tamper-proof HMAC-SHA256 signed session token that survives server redeploys."""
-    payload_str = json.dumps(user_payload, separators=(',', ':'), sort_keys=True)
-    b64_part = base64.urlsafe_b64encode(payload_str.encode('utf-8')).decode('utf-8').rstrip('=')
-    signature = hmac.new(SECRET_KEY.encode('utf-8'), b64_part.encode('utf-8'), hashlib.sha256).hexdigest()
-    return f"rmtk.{b64_part}.{signature}"
-
-def verify_signed_token(token):
-    """Verify and decode signed session token. Returns payload dict or None."""
-    if not token or not isinstance(token, str) or not token.startswith("rmtk."):
-        return None
-    parts = token.split(".")
-    if len(parts) != 3:
-        return None
-    _, b64_part, signature = parts
-    try:
-        expected_sig = hmac.new(SECRET_KEY.encode('utf-8'), b64_part.encode('utf-8'), hashlib.sha256).hexdigest()
-        if not hmac.compare_digest(signature, expected_sig):
-            return None
-        rem = len(b64_part) % 4
-        padded = b64_part + ("=" * (4 - rem) if rem else "")
-        payload_str = base64.urlsafe_b64decode(padded.encode('utf-8')).decode('utf-8')
-        payload = json.loads(payload_str)
-        # Check expiration (1 year default)
-        if payload.get("exp") and time.time() > payload["exp"]:
-            return None
-        return payload
-    except Exception as e:
-        print("[auth] Token verification exception:", e)
-        return None
-
-def get_authenticated_user(db):
-    """Resolve currently authenticated user from Bearer session token or device ID."""
-    auth_header = request.headers.get('Authorization', '')
-    session_token = None
-    if auth_header.startswith('Bearer '):
-        session_token = auth_header[7:].strip()
-    
-    cur = db.cursor()
-    if session_token:
-        # 1. Stateless cryptographic token verification (survives database wipe or server redeploy)
-        token_payload = verify_signed_token(session_token)
-        if token_payload and token_payload.get("id"):
-            u_id = token_payload["id"]
-            u_email = token_payload.get("email")
-            if u_email:
-                cur.execute("SELECT * FROM users WHERE id = ? OR email = ?", (u_id, u_email))
-            else:
-                cur.execute("SELECT * FROM users WHERE id = ?", (u_id,))
-            row = cur.fetchone()
-            if row:
-                user = dict(row)
-                if user.get("session_token") != session_token:
-                    cur.execute("UPDATE users SET session_token = ?, last_active_at = ? WHERE id = ?", (session_token, time.time(), user["id"]))
-                    db.commit()
-                return user
-            else:
-                # AUTO-HEAL: Database was wiped on redeploy! Re-insert verified user immediately!
-                now = time.time()
-                cur.execute("""
-                    INSERT OR REPLACE INTO users (
-                        id, nickname, avatar, created_at, last_active_at,
-                        google_id, email, picture, is_verified, is_campus_verified, auth_provider, session_token
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
-                """, (
-                    u_id,
-                    token_payload.get("nickname", "Verified Student"),
-                    token_payload.get("picture") or token_payload.get("avatar"),
-                    now,
-                    now,
-                    token_payload.get("google_id"),
-                    u_email,
-                    token_payload.get("picture") or token_payload.get("avatar"),
-                    token_payload.get("is_campus_verified", 0),
-                    token_payload.get("auth_provider", "google"),
-                    session_token
-                ))
-                db.commit()
-                save_data_backup()
-                cur.execute("SELECT * FROM users WHERE id = ?", (u_id,))
-                new_row = cur.fetchone()
-                if new_row:
-                    return dict(new_row)
-
-        # 2. Legacy database token lookup fallback
-        cur.execute("SELECT * FROM users WHERE session_token = ?", (session_token,))
-        row = cur.fetchone()
-        if row:
-            return dict(row)
-
-        # 3. Cloud PostgreSQL fallback for session_token
-        pg = get_pg_conn()
-        if pg:
-            try:
-                import psycopg2.extras
-                pg_c = pg.cursor(cursor_factory=psycopg2.extras.DictCursor)
-                pg_c.execute("SELECT * FROM users WHERE session_token = %s", (session_token,))
-                pg_u = pg_c.fetchone()
-                if pg_u:
-                    user_dict = dict(pg_u)
-                    keys = [k for k in user_dict.keys() if user_dict[k] is not None]
-                    placeholders = ", ".join(["?"] * len(keys))
-                    cols = ", ".join(keys)
-                    cur.execute(f"INSERT OR REPLACE INTO users ({cols}) VALUES ({placeholders})", [user_dict[k] for k in keys])
-                    db.commit()
-                    pg.close()
-                    return user_dict
-                pg.close()
-            except Exception:
-                try: pg.close()
-                except Exception: pass
-            
-    device_id = request.headers.get('X-Device-Id') or request.args.get('device_id')
-    if device_id:
-        cur.execute("SELECT * FROM users WHERE id = ?", (device_id,))
-        row = cur.fetchone()
-        if row:
-            return dict(row)
-
-        pg = get_pg_conn()
-        if pg:
-            try:
-                import psycopg2.extras
-                pg_c = pg.cursor(cursor_factory=psycopg2.extras.DictCursor)
-                pg_c.execute("SELECT * FROM users WHERE id = %s", (device_id,))
-                pg_u = pg_c.fetchone()
-                if pg_u:
-                    user_dict = dict(pg_u)
-                    keys = [k for k in user_dict.keys() if user_dict[k] is not None]
-                    placeholders = ", ".join(["?"] * len(keys))
-                    cols = ", ".join(keys)
-                    cur.execute(f"INSERT OR REPLACE INTO users ({cols}) VALUES ({placeholders})", [user_dict[k] for k in keys])
-                    db.commit()
-                    pg.close()
-                    return user_dict
-                pg.close()
-            except Exception:
-                try: pg.close()
-                except Exception: pass
-            
-    return None
-
-@app.route('/api/auth/google', methods=['POST'])
-def auth_google():
-    """
-    Authenticate with Google Identity Services ID Token, Google OAuth, or direct Email ID.
-    Transfers prior guest listings and emits persistent cross-device identity.
-    """
-    db = get_db()
-    data = request.get_json() or {}
-    credential = data.get('credential')
-    input_email = data.get('email')
-    input_name = data.get('name')
-    input_picture = data.get('picture')
-    input_google_id = data.get('google_id')
-    device_id = request.headers.get('X-Device-Id') or data.get('device_id')
-    now = time.time()
-
-    google_id = None
-    email = None
-    name = None
-    picture = None
-    auth_provider = 'google'
-
-    if credential:
-        payload = verify_google_token(credential)
-        if not payload:
-            return jsonify({"success": False, "error": "Invalid or expired Google Token"}), 401
-        google_id = payload.get('sub')
-        email = payload.get('email', '')
-        name = payload.get('name', 'Google User')
-        picture = payload.get('picture', '')
-        auth_provider = 'google'
-    elif input_email and '@' in str(input_email):
-        email = str(input_email).strip().lower()
-        if input_name and str(input_name).strip():
-            name = str(input_name).strip()
-        else:
-            prefix = email.split('@')[0].replace('.', ' ').replace('_', ' ').replace('-', ' ')
-            name = prefix.title()
-        
-        # High quality initials avatar if no picture provided
-        picture = input_picture or f"https://api.dicebear.com/7.x/initials/svg?seed={urllib.parse.quote(name)}&backgroundColor=00e5ff,00ff9d,4285f4&textColor=0f172a"
-        
-        if input_google_id and str(input_google_id).strip():
-            google_id = str(input_google_id).strip()
-        else:
-            google_id = "usr-email-" + hashlib.md5(email.encode('utf-8')).hexdigest()[:14]
-            
-        if email.endswith('@gmail.com'):
-            auth_provider = 'google'
-        elif is_campus_email(email):
-            auth_provider = 'campus'
-        else:
-            auth_provider = 'email'
-    else:
-        return jsonify({"success": False, "error": "Please provide a valid Email address or Google credential"}), 400
-
-    is_campus = 1 if is_campus_email(email) else 0
-
-    cur = db.cursor()
-    cur.execute("SELECT * FROM users WHERE google_id = ? OR email = ?", (google_id, email))
-    existing_user = cur.fetchone()
-
-    user_id = None
-    if existing_user:
-        user_id = existing_user['id']
-    elif device_id:
-        cur.execute("SELECT * FROM users WHERE id = ?", (device_id,))
-        guest_row = cur.fetchone()
-        if guest_row and not guest_row['google_id']:
-            user_id = device_id
-
-    if not user_id:
-        user_id = "usr-" + uuid.uuid4().hex[:10]
-
-    # Generate persistent signed cryptographic token (valid for 1 year, survives server redeploys)
-    token_payload = {
-        "id": user_id,
-        "google_id": google_id,
-        "email": email,
-        "nickname": name,
-        "picture": picture,
-        "avatar": picture,
-        "is_campus_verified": is_campus,
-        "is_verified": 1,
-        "auth_provider": auth_provider,
-        "iat": now,
-        "exp": now + 365 * 24 * 3600
-    }
-    session_token = generate_signed_token(token_payload)
-
-    if existing_user or (device_id and user_id == device_id):
-        cur.execute("""
-            UPDATE users SET 
-                google_id = ?,
-                nickname = ?,
-                email = ?,
-                picture = ?,
-                avatar = ?,
-                is_verified = 1,
-                is_campus_verified = ?,
-                auth_provider = ?,
-                session_token = ?,
-                last_active_at = ?
-            WHERE id = ?
-        """, (google_id, name, email, picture, picture, is_campus, auth_provider, session_token, now, user_id))
-    else:
-        cur.execute("""
-            INSERT INTO users (
-                id, nickname, avatar, lat, lng, created_at, last_active_at,
-                google_id, email, picture, is_verified, is_campus_verified, auth_provider, session_token
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
-        """, (user_id, name, picture, None, None, now, now, google_id, email, picture, is_campus, auth_provider, session_token))
-
-    # Link existing items broadcasted on this device or session to this google account
-    if device_id:
-        cur.execute("""
-            UPDATE items SET 
-                seller_google_id = ?,
-                seller_email = ?,
-                seller_verified = 1,
-                seller_campus_verified = ?,
-                seller_name = ?,
-                seller_avatar = ?
-            WHERE seller_id = ? OR seller_google_id = ?
-        """, (google_id, email, is_campus, name, picture, device_id, google_id))
-
-    db.commit()
-    cur.execute("SELECT * FROM users WHERE id = ?", (user_id,))
-    updated_user = dict(cur.fetchone())
-    save_user_to_pg(updated_user)
-    save_data_backup()
-    safe_user = {
-        "id": updated_user["id"],
-        "google_id": updated_user["google_id"],
-        "nickname": updated_user["nickname"],
-        "email": updated_user["email"],
-        "picture": updated_user.get("picture") or updated_user.get("avatar"),
-        "avatar": updated_user.get("avatar") or updated_user.get("picture"),
-        "is_verified": bool(updated_user.get("is_verified", 1)),
-        "is_campus_verified": bool(updated_user.get("is_campus_verified", 0)),
-        "phone_verified": bool(updated_user.get("phone_verified", 0)),
-        "phone_number": updated_user.get("phone_number") or "",
-        "upi_vpa": updated_user.get("upi_vpa") or "",
-        "auth_provider": updated_user.get("auth_provider", "google")
-    }
-
-    return jsonify({
-        "success": True,
-        "user": safe_user,
-        "session_token": session_token
-    })
-
-@app.route('/api/auth/session', methods=['GET'])
-def get_auth_session():
-    """Validate current session token and return user identity (with auto-heal for server redeploys)."""
-    db = get_db()
-    auth_header = request.headers.get('Authorization', '')
-    if not auth_header.startswith('Bearer '):
-        return jsonify({"success": True, "authenticated": False, "user": None})
-
-    session_token = auth_header[7:].strip()
-    
-    # 1. Stateless cryptographic verification
-    token_payload = verify_signed_token(session_token)
-    if token_payload and token_payload.get("id"):
-        cur = db.cursor()
-        u_id = token_payload["id"]
-        u_email = token_payload.get("email")
-        if u_email:
-            cur.execute("SELECT * FROM users WHERE id = ? OR email = ?", (u_id, u_email))
-        else:
-            cur.execute("SELECT * FROM users WHERE id = ?", (u_id,))
-        row = cur.fetchone()
-        if not row:
-            # Auto-heal user into database after redeploy
-            now = time.time()
-            cur.execute("""
-                INSERT OR REPLACE INTO users (
-                    id, nickname, avatar, created_at, last_active_at,
-                    google_id, email, picture, is_verified, is_campus_verified, auth_provider, session_token
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
-            """, (
-                u_id,
-                token_payload.get("nickname", "Verified Student"),
-                token_payload.get("picture") or token_payload.get("avatar"),
-                now,
-                now,
-                token_payload.get("google_id"),
-                u_email,
-                token_payload.get("picture") or token_payload.get("avatar"),
-                token_payload.get("is_campus_verified", 0),
-                token_payload.get("auth_provider", "google"),
-                session_token
-            ))
-            db.commit()
-            save_data_backup()
-            cur.execute("SELECT * FROM users WHERE id = ?", (u_id,))
-            row = cur.fetchone()
-
-        if row:
-            user = dict(row)
-            safe_user = {
-                "id": user["id"],
-                "google_id": user.get("google_id"),
-                "nickname": user["nickname"],
-                "email": user.get("email"),
-                "picture": user.get("picture") or user.get("avatar"),
-                "avatar": user.get("avatar") or user.get("picture"),
-                "is_verified": bool(user.get("is_verified", 1)),
-                "is_campus_verified": bool(user.get("is_campus_verified", 0)),
-                "phone_verified": bool(user.get("phone_verified", 0)),
-                "phone_number": user.get("phone_number") or "",
-                "upi_vpa": user.get("upi_vpa") or "",
-                "auth_provider": user.get("auth_provider", "google")
-            }
-            return jsonify({"success": True, "authenticated": True, "user": safe_user})
-
-    # 2. Legacy database lookup fallback
-    cur = db.cursor()
-    cur.execute("SELECT * FROM users WHERE session_token = ?", (session_token,))
-    row = cur.fetchone()
-    if not row:
-        return jsonify({"success": True, "authenticated": False, "user": None})
-
-    user = dict(row)
-    safe_user = {
-        "id": user["id"],
-        "google_id": user.get("google_id"),
-        "nickname": user["nickname"],
-        "email": user.get("email"),
-        "picture": user.get("picture") or user.get("avatar"),
-        "avatar": user.get("avatar") or user.get("picture"),
-        "is_verified": bool(user.get("is_verified", 0)),
-        "is_campus_verified": bool(user.get("is_campus_verified", 0)),
-        "phone_verified": bool(user.get("phone_verified", 0)),
-        "phone_number": user.get("phone_number") or "",
-        "upi_vpa": user.get("upi_vpa") or "",
-        "auth_provider": user.get("auth_provider", "guest")
-    }
-    return jsonify({"success": True, "authenticated": True, "user": safe_user})
-
-@app.route('/api/auth/logout', methods=['POST'])
-def auth_logout():
-    """Clear session token for the user."""
-    db = get_db()
-    auth_header = request.headers.get('Authorization', '')
-    if auth_header.startswith('Bearer '):
-        session_token = auth_header[7:].strip()
-        cur = db.cursor()
-        token_payload = verify_signed_token(session_token)
-        if token_payload and token_payload.get("id"):
-            cur.execute("UPDATE users SET session_token = NULL WHERE id = ?", (token_payload["id"],))
-        else:
-            cur.execute("UPDATE users SET session_token = NULL WHERE session_token = ?", (session_token,))
-        db.commit()
-        save_data_backup()
-    return jsonify({"success": True, "message": "Logged out successfully"})
-
-@app.route('/api/me', methods=['GET', 'POST'])
-def manage_me():
-    """Get or update current user device identity."""
-    db = get_db()
-    auth_user = get_authenticated_user(db)
-    device_id = request.headers.get('X-Device-Id') or request.args.get('device_id')
-    now = time.time()
-
-    if not device_id and not auth_user:
-        device_id = "dev-" + uuid.uuid4().hex[:10]
-
-    user_lookup_id = auth_user["id"] if auth_user else device_id
-
-    cur = db.cursor()
-    cur.execute("SELECT * FROM users WHERE id = ?", (user_lookup_id,))
-    row = cur.fetchone()
-
-    if request.method == 'POST':
-        data = request.get_json() or {}
-        nickname = data.get('nickname', '').strip()
-        avatar = data.get('avatar', '').strip()
-        lat = data.get('lat')
-        lng = data.get('lng')
-        phone_number = data.get('phone_number')
-        upi_vpa = data.get('upi_vpa')
-
-        if row:
-            cur.execute("""
-                UPDATE users SET 
-                    nickname = COALESCE(NULLIF(?, ''), nickname),
-                    avatar = COALESCE(NULLIF(?, ''), avatar),
-                    lat = COALESCE(?, lat),
-                    lng = COALESCE(?, lng),
-                    phone_number = COALESCE(?, phone_number),
-                    upi_vpa = COALESCE(?, upi_vpa),
-                    last_active_at = ?
-                WHERE id = ?
-            """, (nickname, avatar, lat, lng, phone_number, upi_vpa, now, user_lookup_id))
-        else:
-            default_name = nickname or f"Student #{user_lookup_id[-4:]}"
-            cur.execute("""
-                INSERT INTO users (id, nickname, avatar, lat, lng, phone_number, upi_vpa, created_at, last_active_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (user_lookup_id, default_name, avatar, lat, lng, phone_number, upi_vpa, now, now))
-        db.commit()
-
-        cur.execute("SELECT * FROM users WHERE id = ?", (user_lookup_id,))
-        user = dict(cur.fetchone())
-        user["is_verified"] = bool(user.get("is_verified", 0))
-        user["is_campus_verified"] = bool(user.get("is_campus_verified", 0))
-        user["phone_verified"] = bool(user.get("phone_verified", 0))
-        user["phone_number"] = user.get("phone_number") or ""
-        user["upi_vpa"] = user.get("upi_vpa") or ""
-        return jsonify({"success": True, "user": user})
-
-    # GET request
-    if not row:
-        default_name = f"Student #{user_lookup_id[-4:]}"
-        cur.execute("""
-            INSERT INTO users (id, nickname, avatar, created_at, last_active_at)
-            VALUES (?, ?, ?, ?, ?)
-        """, (user_lookup_id, default_name, None, now, now))
-        db.commit()
-        save_data_backup()
-        cur.execute("SELECT * FROM users WHERE id = ?", (user_lookup_id,))
-        row = cur.fetchone()
-    else:
-        cur.execute("UPDATE users SET last_active_at = ? WHERE id = ?", (now, user_lookup_id))
-        db.commit()
-
-    user = dict(row)
-    user["is_verified"] = bool(user.get("is_verified", 0))
-    user["is_campus_verified"] = bool(user.get("is_campus_verified", 0))
-    user["phone_verified"] = bool(user.get("phone_verified", 0))
-    user["phone_number"] = user.get("phone_number") or ""
-    user["upi_vpa"] = user.get("upi_vpa") or ""
-    return jsonify({"success": True, "user": user})
-
-def haversine_meters(lat1, lon1, lat2, lon2):
-    try:
-        if lat1 is None or lon1 is None or lat2 is None or lon2 is None:
-            return float('inf')
-        R = 6371000.0
-        phi1 = math.radians(float(lat1))
-        phi2 = math.radians(float(lat2))
-        delta_phi = math.radians(float(lat2) - float(lat1))
-        delta_lambda = math.radians(float(lon2) - float(lon1))
-        a = math.sin(delta_phi / 2.0)**2 + math.cos(phi1) * math.cos(phi2) * math.sin(delta_lambda / 2.0)**2
-        c = 2.0 * math.atan2(math.sqrt(a), math.sqrt(1.0 - a))
-        return R * c
-    except Exception:
-        return float('inf')
-
-@app.route('/api/items', methods=['GET'])
-def list_items():
-    """List all active items. Prioritizes persistent cloud PostgreSQL."""
-    req_lat = request.args.get('lat')
-    req_lng = request.args.get('lng')
-    req_radius = request.args.get('radius_meters')
-
-    def apply_geo_filter(raw_items):
-        if not (req_lat and req_lng):
-            return raw_items
-        try:
-            u_lat = float(req_lat)
-            u_lng = float(req_lng)
-            max_r = float(req_radius) if req_radius else 25000.0
-            res = []
-            for it in raw_items:
-                d = haversine_meters(u_lat, u_lng, it.get('lat'), it.get('lng'))
-                if math.isfinite(d):
-                    it['distance'] = round(d)
-                if d <= max_r * 1.15:
-                    res.append(it)
-            return res
-        except Exception:
-            return raw_items
-
-    pg = get_pg_conn()
-    if pg:
-        try:
-            import psycopg2.extras
-            cur = pg.cursor(cursor_factory=psycopg2.extras.DictCursor)
-            cur.execute("SELECT * FROM beacons WHERE status != 'deleted' ORDER BY created_at DESC")
-            rows = cur.fetchall()
-            items = []
-            for r in rows:
-                item = dict(r)
-                if isinstance(item.get("tags"), str):
-                    try: item["tags"] = json.loads(item["tags"])
-                    except Exception: item["tags"] = []
-                elif item.get("tags") is None:
-                    item["tags"] = []
-
-                if isinstance(item.get("item_attributes"), str):
-                    try: item["item_attributes"] = json.loads(item["item_attributes"])
-                    except Exception: item["item_attributes"] = {}
-                elif item.get("item_attributes") is None:
-                    item["item_attributes"] = {}
-
-                item["seller"] = {
-                    "id": item.get("seller_id"),
-                    "name": item.get("seller_name"),
-                    "rating": item.get("seller_rating", 4.9),
-                    "verified": bool(item.get("seller_verified", 1)),
-                    "campus_verified": bool(item.get("seller_campus_verified", 0)),
-                    "phone_verified": bool(item.get("seller_phone_verified", 0)),
-                    "email": item.get("seller_email") or "",
-                    "avatar": item.get("seller_avatar") or ""
-                }
-                item["upi_qr_image"] = item.get("upi_qr_image") or ""
-                item["locality_id"] = item.get("locality_id") or ""
-                item["locality_type"] = item.get("locality_type") or "campus"
-                item["safe_landmark"] = item.get("safe_landmark") or item.get("landmark") or ""
-                item["isAvailable"] = bool(item.get("is_available", 1)) and item.get("status") != "sold"
-                item["beacon_type"] = item.get("beacon_type") or "sell"
-                item["status"] = item.get("status") or "active"
-                item["upi_id"] = item.get("upi_id") or ""
-                items.append(item)
-            pg.close()
-            # Background sync to local SQLite so offline fallback has latest records
-            try: sync_pg_to_sqlite(items)
-            except Exception: pass
-            items = apply_geo_filter(items)
-            return jsonify({"success": True, "items": items, "count": len(items)})
-        except Exception as e:
-            print("[PostgreSQL list_items Error, falling back to SQLite]:", e)
-            try: pg.close()
-            except Exception: pass
-
-    db = get_db()
-    cur = db.cursor()
-    cur.execute("SELECT * FROM items WHERE status != 'deleted' ORDER BY created_at DESC")
-    rows = cur.fetchall()
-
-    items = []
-    for r in rows:
-        item = dict(r)
-        item["seller"] = {
-            "id": item["seller_id"],
-            "name": item["seller_name"],
-            "rating": item["seller_rating"],
-            "verified": bool(item["seller_verified"]),
-            "campus_verified": bool(item.get("seller_campus_verified", 0)),
-            "phone_verified": bool(item.get("seller_phone_verified", 0)),
-            "email": item.get("seller_email") or "",
-            "avatar": item["seller_avatar"]
-        }
-        try:
-            item["item_attributes"] = json.loads(item.get("item_attributes") or "{}")
-        except Exception:
-            item["item_attributes"] = {}
-        item["upi_qr_image"] = item.get("upi_qr_image") or ""
-        item["locality_id"] = item.get("locality_id") or ""
-        item["locality_type"] = item.get("locality_type") or "campus"
-        item["safe_landmark"] = item.get("safe_landmark") or item.get("landmark") or ""
-        item["tags"] = json.loads(item["tags"]) if item["tags"] else []
-        item["isAvailable"] = bool(item.get("is_available", 1)) and item.get("status") != "sold"
-        item["beacon_type"] = item.get("beacon_type") or "sell"
-        item["status"] = item.get("status") or "active"
-        item["upi_id"] = item.get("upi_id") or ""
-        items.append(item)
-
-    items = apply_geo_filter(items)
-    return jsonify({"success": True, "items": items, "count": len(items)})
-
-@app.route('/api/my-items', methods=['GET'])
-def list_my_items():
-    """List all items broadcasted by the requesting device or Google account."""
-    db = get_db()
-    auth_user = get_authenticated_user(db)
-    device_id = request.headers.get('X-Device-Id') or request.args.get('device_id') or "guest"
-
-    pg = get_pg_conn()
-    if pg:
-        try:
-            import psycopg2.extras
-            cur = pg.cursor(cursor_factory=psycopg2.extras.DictCursor)
-            if auth_user and auth_user.get("google_id"):
-                cur.execute("""
-                    SELECT * FROM beacons 
-                    WHERE (seller_google_id = %s OR seller_id = %s) AND status != 'deleted' 
-                    ORDER BY created_at DESC
-                """, (auth_user["google_id"], device_id))
-            else:
-                cur.execute("SELECT * FROM beacons WHERE seller_id = %s AND status != 'deleted' ORDER BY created_at DESC", (device_id,))
-            rows = cur.fetchall()
-            items = []
-            for r in rows:
-                item = dict(r)
-                if isinstance(item.get("tags"), str):
-                    try: item["tags"] = json.loads(item["tags"])
-                    except Exception: item["tags"] = []
-                elif item.get("tags") is None:
-                    item["tags"] = []
-
-                if isinstance(item.get("item_attributes"), str):
-                    try: item["item_attributes"] = json.loads(item["item_attributes"])
-                    except Exception: item["item_attributes"] = {}
-                elif item.get("item_attributes") is None:
-                    item["item_attributes"] = {}
-
-                item["seller"] = {
-                    "id": item.get("seller_id"),
-                    "name": item.get("seller_name"),
-                    "rating": item.get("seller_rating", 4.9),
-                    "verified": bool(item.get("seller_verified", 1)),
-                    "campus_verified": bool(item.get("seller_campus_verified", 0)),
-                    "phone_verified": bool(item.get("seller_phone_verified", 0)),
-                    "email": item.get("seller_email") or "",
-                    "avatar": item.get("seller_avatar") or ""
-                }
-                item["upi_qr_image"] = item.get("upi_qr_image") or ""
-                item["locality_id"] = item.get("locality_id") or ""
-                item["locality_type"] = item.get("locality_type") or "campus"
-                item["safe_landmark"] = item.get("safe_landmark") or item.get("landmark") or ""
-                item["isAvailable"] = bool(item.get("is_available", 1)) and item.get("status") != "sold"
-                item["beacon_type"] = item.get("beacon_type") or "sell"
-                item["status"] = item.get("status") or "active"
-                item["upi_id"] = item.get("upi_id") or ""
-                items.append(item)
-            pg.close()
-            return jsonify({"success": True, "items": items, "count": len(items)})
-        except Exception as e:
-            print("[PostgreSQL list_my_items Error, falling back to SQLite]:", e)
-            try: pg.close()
-            except Exception: pass
-
-    cur = db.cursor()
-    if auth_user and auth_user.get("google_id"):
-        cur.execute("""
-            SELECT * FROM items 
-            WHERE (seller_google_id = ? OR seller_id = ?) AND status != 'deleted' 
-            ORDER BY created_at DESC
-        """, (auth_user["google_id"], device_id))
-    else:
-        cur.execute("SELECT * FROM items WHERE seller_id = ? AND status != 'deleted' ORDER BY created_at DESC", (device_id,))
-    rows = cur.fetchall()
-
-    items = []
-    for r in rows:
-        item = dict(r)
-        item["seller"] = {
-            "id": item["seller_id"],
-            "name": item["seller_name"],
-            "rating": item["seller_rating"],
-            "verified": bool(item["seller_verified"]),
-            "campus_verified": bool(item.get("seller_campus_verified", 0)),
-            "phone_verified": bool(item.get("seller_phone_verified", 0)),
-            "email": item.get("seller_email") or "",
-            "avatar": item["seller_avatar"]
-        }
-        try:
-            item["item_attributes"] = json.loads(item.get("item_attributes") or "{}")
-        except Exception:
-            item["item_attributes"] = {}
-        item["upi_qr_image"] = item.get("upi_qr_image") or ""
-        item["locality_id"] = item.get("locality_id") or ""
-        item["locality_type"] = item.get("locality_type") or "campus"
-        item["safe_landmark"] = item.get("safe_landmark") or item.get("landmark") or ""
-        item["tags"] = json.loads(item["tags"]) if item["tags"] else []
-        item["isAvailable"] = bool(item.get("is_available", 1)) and item.get("status") != "sold"
-        item["beacon_type"] = item.get("beacon_type") or "sell"
-        item["status"] = item.get("status") or "active"
-        item["upi_id"] = item.get("upi_id") or ""
-        items.append(item)
-
-    return jsonify({"success": True, "items": items, "count": len(items)})
-
-@app.route('/api/items', methods=['POST'])
-def create_item():
-    """Broadcast a new listing across all connected devices."""
-    db = get_db()
-    data = request.get_json() or {}
-    auth_user = get_authenticated_user(db)
-    cur = db.cursor()
-
-    device_id = request.headers.get('X-Device-Id') or data.get('seller_id') or "guest"
-    seller_phone_verified = 0
-
-    if auth_user and auth_user.get("is_verified"):
-        seller_name = auth_user.get("nickname") or data.get('seller_name') or "Student"
-        seller_avatar = auth_user.get("picture") or auth_user.get("avatar") or data.get('seller_avatar') or ""
-        seller_email = auth_user.get("email") or ""
-        seller_google_id = auth_user.get("google_id") or ""
-        seller_verified = 1
-        seller_campus_verified = auth_user.get("is_campus_verified", 0)
-        seller_phone_verified = auth_user.get("phone_verified", 0)
-    else:
-        seller_name = data.get('seller_name') or "Anonymous Student"
-        seller_avatar = data.get('seller_avatar') or ""
-        seller_email = ""
-        seller_google_id = ""
-        seller_verified = 1
-        seller_campus_verified = 0
-        cur.execute("SELECT phone_verified FROM users WHERE id = ?", (device_id,))
-        p_row = cur.fetchone()
-        if p_row and p_row[0]:
-            seller_phone_verified = 1
-
-    beacon_type = data.get('beacon_type') or "sell"
-    upi_id = data.get('upi_id') or ""
-    upi_qr_image = data.get('upi_qr_image') or ""
-    locality_id = data.get('locality_id') or ""
-    locality_type = data.get('locality_type') or "campus"
-    safe_landmark = data.get('safe_landmark') or data.get('landmark') or "Live Location"
-    handshake_code = f"{random.randint(1000, 9999)}"
-
-    raw_attr = data.get('item_attributes') or {}
-    if isinstance(raw_attr, dict):
-        item_attributes_json = json.dumps(raw_attr)
-    elif isinstance(raw_attr, str):
-        item_attributes_json = raw_attr
-    else:
-        item_attributes_json = '{}'
-    
-    item_lat = data.get('lat')
-    item_lng = data.get('lng')
-    if item_lat is None or item_lng is None:
-        return jsonify({"success": False, "error": "Live GPS coordinates (lat, lng) are required to broadcast an item."}), 400
-    try:
-        final_lat = float(item_lat)
-        final_lng = float(item_lng)
-    except (ValueError, TypeError):
-        return jsonify({"success": False, "error": "Invalid GPS coordinates format."}), 400
-
-    item_id = "item-" + uuid.uuid4().hex[:10]
-    now = time.time()
-    tags_json = json.dumps(data.get('tags', []))
-
-    cur.execute("""
-        INSERT INTO items (
-            id, seller_id, seller_name, seller_rating, seller_verified, seller_avatar,
-            title, category, sub_category, price, original_price, condition,
-            condition_score, lat, lng, landmark, image, description, tags,
-            is_available, reserved_by, created_at, beacon_type, status, upi_id,
-            seller_email, seller_campus_verified, seller_google_id, handshake_code,
-            item_attributes, upi_qr_image, locality_id, locality_type, safe_landmark, seller_phone_verified
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NULL, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (
-        item_id, device_id, seller_name, 5.0, seller_verified, seller_avatar,
-        data.get('title') or "Untitled Listing", data.get('category') or "stationery", data.get('sub_category') or "General",
-        float(data.get('price') or 0), float(data.get('original_price') or data.get('price') or 0), data.get('condition') or "Good",
-        float(data.get('condition_score', 0.85) or 0.85), final_lat, final_lng,
-        safe_landmark, data.get('image'), data.get('description') or "",
-        tags_json, now, beacon_type, upi_id,
-        seller_email, seller_campus_verified, seller_google_id, handshake_code,
-        item_attributes_json, upi_qr_image, locality_id, locality_type, safe_landmark, int(seller_phone_verified)
+    cur.execute(insert_user, (
+        user_id, "demo_student", "hansi.cse26@campus.edu", hash_pw("budget123"),
+        "Hansi Yadav (SE CSE AIML)", "₹", now_str
     ))
 
-    # Record sync event for real-time delta pushes
-    cur.execute("""
-        INSERT INTO sync_events (event_type, item_id, payload, created_at)
-        VALUES ('new_item', ?, ?, ?)
-    """, (item_id, json.dumps({"item_id": item_id, "title": data.get('title'), "beacon_type": beacon_type}), now))
+    # Incomes matching ₹30,000
+    incomes = [
+        (str(uuid.uuid4()), user_id, 25000.00, "Salary", f"{cur_month}-01", "Bank Transfer", "Monthly Tech Internship Stipend", now_str),
+        (str(uuid.uuid4()), user_id, 5000.00, "Freelance", f"{cur_month}-05", "UPI", "AI Web App Consulting Project", now_str)
+    ]
+    ins_income = """
+    INSERT INTO income (id, user_id, amount, source, date, payment_mode, notes, created_at)
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+    """ if is_postgres else """
+    INSERT INTO income (id, user_id, amount, source, date, payment_mode, notes, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    """
+    for inc in incomes:
+        cur.execute(ins_income, inc)
 
-    if beacon_type in ("wanted", "sos"):
-        cur.execute("""
-            INSERT INTO sync_events (event_type, item_id, payload, created_at)
-            VALUES (?, ?, ?, ?)
-        """, (
-            "new_sos_bounty" if beacon_type == "sos" else "new_bounty",
-            item_id,
-            json.dumps({
-                "item_id": item_id,
-                "title": data.get('title') or "Urgent SOS Bounty",
-                "category": data.get('category') or "stationery",
-                "max_budget": float(data.get('price') or 0),
-                "poster_name": seller_name,
-                "beacon_type": beacon_type,
-                "created_at": now
-            }),
-            now
-        ))
+    # Expenses matching ₹21,500
+    expenses = [
+        (str(uuid.uuid4()), user_id, 7500.00, "Food & Dining", f"{cur_month}-04", "UPI", "Campus Meals & Weekly Groceries", now_str),
+        (str(uuid.uuid4()), user_id, 6000.00, "Housing & Rent", f"{cur_month}-02", "Bank Transfer", "Student Hostel / Accommodation", now_str),
+        (str(uuid.uuid4()), user_id, 3200.00, "Travel & Transport", f"{cur_month}-06", "UPI", "Metro Card & Campus Commute", now_str),
+        (str(uuid.uuid4()), user_id, 2000.00, "Bills & Utilities", f"{cur_month}-08", "UPI", "High-speed Wi-Fi & Electricity", now_str),
+        (str(uuid.uuid4()), user_id, 1800.00, "Shopping", f"{cur_month}-12", "Card", "Stationery & Programming Books", now_str),
+        (str(uuid.uuid4()), user_id, 1000.00, "Entertainment", f"{cur_month}-15", "UPI", "Tech Movies & Weekend Social", now_str)
+    ]
+    ins_expense = """
+    INSERT INTO expenses (id, user_id, amount, category, date, payment_mode, notes, created_at)
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+    """ if is_postgres else """
+    INSERT INTO expenses (id, user_id, amount, category, date, payment_mode, notes, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    """
+    for exp in expenses:
+        cur.execute(ins_expense, exp)
 
-    db.commit()
+    # Budgets (Total: ₹25,000, Food: ₹8,000, Travel: ₹4,000)
+    budgets = [
+        (str(uuid.uuid4()), user_id, "Total", 25000.00, cur_month, 80.0, now_str),
+        (str(uuid.uuid4()), user_id, "Food & Dining", 8000.00, cur_month, 80.0, now_str),
+        (str(uuid.uuid4()), user_id, "Travel & Transport", 4000.00, cur_month, 80.0, now_str),
+        (str(uuid.uuid4()), user_id, "Shopping", 3000.00, cur_month, 80.0, now_str)
+    ]
+    ins_budget = """
+    INSERT INTO budgets (id, user_id, category, monthly_limit, month, alert_threshold_percent, created_at)
+    VALUES (%s, %s, %s, %s, %s, %s, %s)
+    """ if is_postgres else """
+    INSERT INTO budgets (id, user_id, category, monthly_limit, month, alert_threshold_percent, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+    """
+    for b in budgets:
+        cur.execute(ins_budget, b)
 
-    # Retrieve created item
-    cur.execute("SELECT * FROM items WHERE id = ?", (item_id,))
-    created = dict(cur.fetchone())
-    created["seller"] = {
-        "id": created["seller_id"],
-        "name": created["seller_name"],
-        "rating": created["seller_rating"],
-        "verified": bool(created["seller_verified"]),
-        "campus_verified": bool(created.get("seller_campus_verified", 0)),
-        "phone_verified": bool(seller_phone_verified),
-        "email": created.get("seller_email") or "",
-        "avatar": created["seller_avatar"]
-    }
-    try:
-        created["item_attributes"] = json.loads(created.get("item_attributes") or "{}")
-    except Exception:
-        created["item_attributes"] = {}
-    created["upi_qr_image"] = created.get("upi_qr_image") or ""
-    created["locality_id"] = created.get("locality_id") or ""
-    created["locality_type"] = created.get("locality_type") or "campus"
-    created["safe_landmark"] = created.get("safe_landmark") or created.get("landmark") or ""
-    created["tags"] = json.loads(created["tags"]) if created["tags"] else []
-    created["beacon_type"] = beacon_type
-    created["status"] = "active"
-    created["handshake_code"] = handshake_code
+    # Saving Goal (Target ₹50,000, Saved ₹22,500)
+    goal_id = str(uuid.uuid4())
+    ins_goal = """
+    INSERT INTO saving_goals (id, user_id, title, target_amount, saved_amount, target_date, category, status, created_at)
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+    """ if is_postgres else """
+    INSERT INTO saving_goals (id, user_id, title, target_amount, saved_amount, target_date, category, status, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """
+    cur.execute(ins_goal, (
+        goal_id, user_id, "Emergency Fund & Laptop Target", 50000.00, 22500.00,
+        f"{int(cur_month[:4])+1}-03-31", "Education & Tech", "Active", now_str
+    ))
 
-    # Direct persistent write to cloud PostgreSQL
-    save_beacon_to_pg(created)
-    save_data_backup()
-    return jsonify({"success": True, "item": created}), 201
+    # Alert notification
+    ins_alert = """
+    INSERT INTO budget_alerts (id, user_id, category, level, message, is_read, created_at)
+    VALUES (%s, %s, %s, %s, %s, %s, %s)
+    """ if is_postgres else """
+    INSERT INTO budget_alerts (id, user_id, category, level, message, is_read, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+    """
+    cur.execute(ins_alert, (
+        str(uuid.uuid4()), user_id, "Total", "warning",
+        "Budget Status: You have spent ₹21,500 of your ₹25,000 limit (86.0%). Within monthly limit, but keep an eye on dining!",
+        0, now_str
+    ))
 
-@app.route('/api/items/<item_id>/location', methods=['POST'])
-def update_item_location(item_id):
-    """Update seller item coordinates with live GPS fix."""
+    conn.commit()
+
+
+# ==========================================
+# STATIC FILES & PWA ROUTES
+# ==========================================
+
+@app.route("/")
+def index():
+    return send_from_directory(BASE_DIR, "index.html")
+
+@app.route("/manifest.json")
+def manifest():
+    return send_from_directory(BASE_DIR, "manifest.json", mimetype="application/manifest+json")
+
+@app.route("/sw.js")
+def service_worker():
+    return send_from_directory(BASE_DIR, "sw.js", mimetype="application/javascript")
+
+@app.route("/icons/<path:filename>")
+def icons(filename):
+    return send_from_directory(os.path.join(BASE_DIR, "icons"), filename)
+
+@app.route("/api/project-info", methods=["GET"])
+def project_info():
+    """Information for the Academic Java Mini Project Presentation."""
+    return jsonify({
+        "project_name": "Smart Budget & Saving Manager",
+        "category": "Java Mini Project / Full-Stack Web & Android APK Shell",
+        "academic_year": "2026–2027",
+        "class": "SE CSE AIML",
+        "members": [
+            {"name": "Hansi Yadav", "role": "Full-Stack & Logic"},
+            {"name": "Diksha Kotre", "role": "UI/UX & Mobile Shell"},
+            {"name": "Sakshi Patil", "role": "Database & Analytics"}
+        ],
+        "tech_stack": {
+            "ui": "Tailwind CSS, Lucide Icons, Chart.js, HTML5 PWA / Android APK Shell",
+            "backend": "Python Flask (REST API) / Node.js Express Dual-Engine",
+            "database": "SQLite / PostgreSQL / MySQL Compatible",
+            "java_concepts": ["OOP (Inheritance, Polymorphism, Encapsulation)", "JDBC Database Connectivity", "Collections (Lists, HashMaps)", "Exception Handling"]
+        },
+        "features": [
+            "User Authentication & Secure Session",
+            "Income Management with Category & Payment Mode",
+            "Category-wise Expense Tracking",
+            "Monthly Budget Limits & Proactive Alerts",
+            "Saving Goals Progress Tracker with Deposits",
+            "Visual Dashboard & Detailed Analytics (Chart.js)",
+            "AI-Driven Saving Recommendations & Burn-rate Predictor",
+            "Exportable Financial Statements (CSV / Print PDF)"
+        ]
+    })
+
+
+# ==========================================
+# AUTHENTICATION API
+# ==========================================
+
+@app.route("/api/auth/login", methods=["POST"])
+def auth_login():
+    data = request.json or {}
+    username = data.get("username", "").strip()
+    password = data.get("password", "").strip()
+
+    if not username or not password:
+        return jsonify({"error": "Username and password required"}), 400
+
     db = get_db()
-    data = request.get_json() or {}
-    lat = data.get('lat')
-    lng = data.get('lng')
-    if lat is None or lng is None:
-        return jsonify({"error": "Latitude and longitude required"}), 400
-
     cur = db.cursor()
-    cur.execute("UPDATE items SET lat = ?, lng = ? WHERE id = ?", (float(lat), float(lng), item_id))
-    db.commit()
+    pw_h = hash_pw(password)
 
-    pg = get_pg_conn()
-    if pg:
-        try:
-            c = pg.cursor()
-            c.execute("UPDATE beacons SET lat = %s, lng = %s WHERE id = %s", (float(lat), float(lng), item_id))
-            pg.commit()
-            pg.close()
-        except Exception:
-            try: pg.close()
-            except Exception: pass
-
-    save_data_backup()
-    return jsonify({"success": True, "item_id": item_id, "lat": float(lat), "lng": float(lng)})
-
-@app.route('/api/items/<item_id>/status', methods=['POST'])
-def update_item_status(item_id):
-    """Mark item as sold or deleted."""
-    db = get_db()
-    data = request.get_json() or {}
-    new_status = data.get('status', 'sold')
-    now = time.time()
-
-    cur = db.cursor()
-    cur.execute("SELECT * FROM items WHERE id = ?", (item_id,))
-    row = cur.fetchone()
-    if not row:
-        return jsonify({"success": False, "error": "Item not found"}), 404
-
-    is_avail = 0 if new_status in ('sold', 'deleted') else 1
-    cur.execute("UPDATE items SET status = ?, is_available = ? WHERE id = ?", (new_status, is_avail, item_id))
-    cur.execute("""
-        INSERT INTO sync_events (event_type, item_id, payload, created_at)
-        VALUES ('item_status_changed', ?, ?, ?)
-    """, (item_id, json.dumps({"item_id": item_id, "status": new_status}), now))
-    db.commit()
-
-    pg = get_pg_conn()
-    if pg:
-        try:
-            c = pg.cursor()
-            c.execute("UPDATE beacons SET status = %s, is_available = %s WHERE id = %s", (new_status, is_avail, item_id))
-            pg.commit()
-            pg.close()
-        except Exception:
-            try: pg.close()
-            except Exception: pass
-
-    save_data_backup()
-    return jsonify({"success": True, "item_id": item_id, "status": new_status})
-
-@app.route('/api/items/<item_id>/reserve', methods=['POST'])
-def toggle_reserve(item_id):
-    """Atomically reserve or un-reserve an item."""
-    db = get_db()
-    device_id = request.headers.get('X-Device-Id') or request.get_json().get('device_id')
-    now = time.time()
-
-    cur = db.cursor()
-    cur.execute("SELECT * FROM items WHERE id = ?", (item_id,))
-    row = cur.fetchone()
-    if not row:
-        return jsonify({"success": False, "error": "Item not found"}), 404
-
-    item = dict(row)
-    current_reserved = item.get("reserved_by")
-
-    if current_reserved == device_id:
-        new_reserved = None
-        new_avail = 1
-    elif current_reserved is None:
-        new_reserved = device_id
-        new_avail = 0
+    if DATABASE_URL and 'postgres' in DATABASE_URL:
+        cur.execute("SELECT id, username, email, full_name, currency FROM users WHERE username = %s AND password_hash = %s", (username, pw_h))
+        user = cur.fetchone()
     else:
-        return jsonify({
-            "success": False,
-            "error": "Item has already been reserved by another user!"
-        }), 409
+        cur.execute("SELECT id, username, email, full_name, currency FROM users WHERE username = ? AND password_hash = ?", (username, pw_h))
+        user = cur.fetchone()
 
-    cur.execute("UPDATE items SET reserved_by = ?, is_available = ? WHERE id = ?", (new_reserved, new_avail, item_id))
-    cur.execute("""
-        INSERT INTO sync_events (event_type, item_id, payload, created_at)
-        VALUES ('reserve_toggle', ?, ?, ?)
-    """, (item_id, json.dumps({"item_id": item_id, "reserved_by": new_reserved}), now))
-    db.commit()
+    if not user:
+        # Check if demo account shortcut
+        if username in ["demo_student", "demo", "hansi"]:
+            cur.execute("SELECT id, username, email, full_name, currency FROM users WHERE username = 'demo_student'")
+            user = cur.fetchone()
 
-    pg = get_pg_conn()
-    if pg:
-        try:
-            c = pg.cursor()
-            c.execute("UPDATE beacons SET reserved_by = %s, is_available = %s WHERE id = %s", (new_reserved, new_avail, item_id))
-            pg.commit()
-            pg.close()
-        except Exception:
-            try: pg.close()
-            except Exception: pass
+    if not user:
+        return jsonify({"error": "Invalid credentials"}), 401
 
-    save_data_backup()
-    return jsonify({
-        "success": True,
-        "item_id": item_id,
-        "reserved_by": new_reserved,
-        "is_reserved": new_reserved is not None
-    })
-
-@app.route('/api/handshake/<item_id>', methods=['GET'])
-def get_handshake_status(item_id):
-    """Retrieve handshake state for an item. PIN is only visible to the seller."""
-    db = get_db()
-    cur = db.cursor()
-    cur.execute("SELECT * FROM items WHERE id = ?", (item_id,))
-    row = cur.fetchone()
-    if not row:
-        return jsonify({"success": False, "error": "Item not found"}), 404
-
-    item = dict(row)
-    device_id = request.headers.get('X-Device-Id')
-    auth_user = get_authenticated_user(db)
-    user_email = auth_user.get("email") if auth_user else None
-
-    # Check if caller is seller
-    is_seller = (device_id and device_id == item.get("seller_id")) or (user_email and user_email == item.get("seller_email"))
-
-    # Ensure handshake_code exists lazily if created before migration
-    code = item.get("handshake_code")
-    if not code:
-        code = f"{random.randint(1000, 9999)}"
-        cur.execute("UPDATE items SET handshake_code = ? WHERE id = ?", (code, item_id))
-        db.commit()
-
-    is_completed = item.get("status") == "sold"
-
-    # Get seller's total verified trades count
-    cur.execute("SELECT trades_completed FROM users WHERE id = ? OR email = ?", (item.get("seller_id"), item.get("seller_email")))
-    u_row = cur.fetchone()
-    seller_trades = u_row[0] if u_row and u_row[0] else 0
-
-    return jsonify({
-        "success": True,
-        "item_id": item_id,
-        "role": "seller" if is_seller else "buyer",
-        "code": code if is_seller else None,  # Hidden from buyer until seller presents it!
-        "is_completed": is_completed,
-        "status": item.get("status"),
-        "completed_at": item.get("completed_at"),
-        "seller_trades": seller_trades
-    })
-
-@app.route('/api/handshake/<item_id>/verify', methods=['POST'])
-def verify_handshake(item_id):
-    """Buyer submits the 4-digit PIN to confirm receipt of item."""
-    db = get_db()
-    data = request.get_json() or {}
-    submitted_code = str(data.get("code", "")).strip()
-    rating = float(data.get("rating", 5.0))
-    feedback = str(data.get("feedback", "")).strip()
-
-    device_id = request.headers.get('X-Device-Id') or "guest-buyer"
-    auth_user = get_authenticated_user(db)
-    buyer_name = auth_user.get("nickname") if auth_user else (data.get("buyer_name") or "Campus Buyer")
-    now = time.time()
-
-    cur = db.cursor()
-    cur.execute("SELECT * FROM items WHERE id = ?", (item_id,))
-    row = cur.fetchone()
-    if not row:
-        return jsonify({"success": False, "error": "Item not found"}), 404
-
-    item = dict(row)
-
-    if item.get("status") == "sold":
-        return jsonify({
-            "success": True,
-            "already_completed": True,
-            "message": "Handshake already verified for this item!",
-            "completed_at": item.get("completed_at")
-        })
-
-    actual_code = str(item.get("handshake_code") or "").strip()
-    if not actual_code or submitted_code != actual_code:
-        return jsonify({
-            "success": False,
-            "error": "Invalid Handshake PIN. Please check the seller's screen and enter the 4 digits."
-        }), 400
-
-    # Mark item as sold
-    cur.execute("""
-        UPDATE items 
-        SET status = 'sold', is_available = 0, completed_by = ?, completed_at = ?
-        WHERE id = ?
-    """, (device_id, now, item_id))
-
-    # Increment trades_completed for seller
-    cur.execute("""
-        UPDATE users 
-        SET trades_completed = COALESCE(trades_completed, 0) + 1 
-        WHERE id = ? OR email = ?
-    """, (item.get("seller_id"), item.get("seller_email")))
-
-    # Increment trades_completed for buyer
-    if device_id:
-        cur.execute("""
-            UPDATE users 
-            SET trades_completed = COALESCE(trades_completed, 0) + 1 
-            WHERE id = ?
-        """, (device_id,))
-
-    # Post celebratory system message into chat
-    chat_text = f"[HANDSHAKE_VERIFIED:{actual_code}:{int(rating)}:{feedback or 'In-person trade verified!'}]"
-    cur.execute("""
-        INSERT INTO messages (item_id, sender_id, sender_name, text, created_at)
-        VALUES (?, 'system', '🤝 Secure Handshake', ?, ?)
-    """, (item_id, chat_text, now))
-
-    # Record sync event for real-time push to all devices
-    cur.execute("""
-        INSERT INTO sync_events (event_type, item_id, payload, created_at)
-        VALUES ('handshake_completed', ?, ?, ?)
-    """, (item_id, json.dumps({
-        "item_id": item_id,
-        "status": "sold",
-        "completed_by": device_id,
-        "completed_at": now
-    }), now))
-
-    db.commit()
-    save_data_backup()
-
-    return jsonify({
-        "success": True,
-        "verified": True,
-        "item_id": item_id,
-        "status": "sold",
-        "completed_at": now,
-        "message": "Secure Handshake completed! Trade verified and trust scores boosted."
-    })
-
-# ==========================================
-# BOUNTY BOARD — "I HAVE THIS!" MATCH ROUTE
-# ==========================================
-
-@app.route('/api/bounty/<item_id>/match', methods=['POST'])
-def match_bounty(item_id):
-    """Respond to a Wanted/Bounty request with 'I HAVE THIS!'."""
-    db = get_db()
-    cur = db.cursor()
-    data = request.get_json() or {}
-
-    cur.execute("SELECT * FROM items WHERE id = ?", (item_id,))
-    item = cur.fetchone()
-    if not item:
-        return jsonify({"success": False, "error": "Bounty not found"}), 404
-    item = dict(item)
-
-    if item.get("beacon_type") != "wanted":
-        return jsonify({"success": False, "error": "This item is not a bounty request"}), 400
-
-    auth_user = get_authenticated_user(db)
-    responder_id = request.headers.get('X-Device-Id') or data.get('responder_id') or "guest"
-    responder_name = (auth_user.get("nickname") if auth_user else None) or data.get('responder_name') or "Campus Student"
-
-    if responder_id == item.get('seller_id'):
-        return jsonify({"success": False, "error": "You cannot respond to your own bounty"}), 400
-
-    now = time.time()
-
-    # Post a system chat message into the bounty chat thread
-    chat_text = f"[BOUNTY_MATCH:{responder_id}:{responder_name}]"
-    cur.execute("""
-        INSERT INTO messages (item_id, sender_id, sender_name, text, created_at)
-        VALUES (?, ?, ?, ?, ?)
-    """, (item_id, responder_id, responder_name, chat_text, now))
-
-    # Emit bounty_matched sync event
-    cur.execute("""
-        INSERT INTO sync_events (event_type, item_id, payload, created_at)
-        VALUES ('bounty_matched', ?, ?, ?)
-    """, (item_id, json.dumps({
-        "item_id": item_id,
-        "responder_id": responder_id,
-        "responder_name": responder_name,
-        "bounty_title": item.get("title", "Item"),
-        "matched_at": now
-    }), now))
-
-    db.commit()
-
-    return jsonify({
-        "success": True,
-        "message": f"{responder_name} responded to your bounty! Open the chat to connect.",
-        "item_id": item_id,
-        "responder_name": responder_name
-    })
-
-# ==========================================
-# MAKE AN OFFER / QUICK BARGAINING ROUTES
-# ==========================================
-
-@app.route('/api/offers/<item_id>', methods=['POST'])
-def create_offer(item_id):
-    """Submit a discounted price offer on a listing."""
-    db = get_db()
-    cur = db.cursor()
-    data = request.get_json() or {}
-
-    cur.execute("SELECT * FROM items WHERE id = ?", (item_id,))
-    item = cur.fetchone()
-    if not item:
-        return jsonify({"success": False, "error": "Item not found"}), 404
-    item = dict(item)
-
-    if item.get("status") == "sold":
-        return jsonify({"success": False, "error": "This item has already been marked as SOLD."}), 400
-
-    auth_user = get_authenticated_user(db)
-    buyer_id = request.headers.get('X-Device-Id') or data.get('buyer_id') or "guest-buyer"
-    if auth_user and auth_user.get("is_verified"):
-        buyer_name = auth_user.get("nickname") or data.get('buyer_name') or "Student"
+    if hasattr(user, 'keys'):
+        u_dict = dict(user)
     else:
-        buyer_name = data.get('buyer_name') or "Student"
+        u_dict = {"id": user[0], "username": user[1], "email": user[2], "full_name": user[3], "currency": user[4]}
+
+    return jsonify({"success": True, "user": u_dict})
+
+@app.route("/api/auth/register", methods=["POST"])
+def auth_register():
+    data = request.json or {}
+    username = data.get("username", "").strip()
+    email = data.get("email", "").strip()
+    password = data.get("password", "").strip()
+    full_name = data.get("full_name", username).strip()
+
+    if not username or not password or not email:
+        return jsonify({"error": "All fields are required"}), 400
+
+    db = get_db()
+    cur = db.cursor()
+    new_id = f"user_{uuid.uuid4().hex[:12]}"
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     try:
-        offer_amount = float(data.get('offer_amount') or data.get('offered_price') or data.get('offer_price') or data.get('amount') or 0)
-    except (ValueError, TypeError):
-        return jsonify({"success": False, "error": "Invalid offer amount"}), 400
-
-    if offer_amount <= 0:
-        return jsonify({"success": False, "error": "Offer amount must be greater than ₹0"}), 400
-
-    original_price = float(item.get('price') or 0)
-    seller_id = item.get('seller_id')
-
-    if buyer_id == seller_id:
-        return jsonify({"success": False, "error": "You cannot make an offer on your own listing."}), 400
-
-    offer_id = f"off-{uuid.uuid4().hex[:10]}"
-    now = time.time()
-
-    cur.execute("""
-        INSERT INTO offers (id, item_id, buyer_id, buyer_name, seller_id, original_price, offer_amount, status, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)
-    """, (offer_id, item_id, buyer_id, buyer_name, seller_id, original_price, offer_amount, now, now))
-
-    # Post special offer message into chat
-    chat_text = f"[OFFER:{offer_id}:{offer_amount:g}:{original_price:g}:pending:{buyer_name}]"
-    cur.execute("""
-        INSERT INTO messages (item_id, sender_id, sender_name, text, created_at)
-        VALUES (?, ?, ?, ?, ?)
-    """, (item_id, buyer_id, buyer_name, chat_text, now))
-
-    offer_payload = {
-        "id": offer_id,
-        "offer_id": offer_id,
-        "item_id": item_id,
-        "item_title": item.get("title") or "Campus Item",
-        "buyer_id": buyer_id,
-        "buyer_name": buyer_name,
-        "seller_id": seller_id,
-        "original_price": original_price,
-        "offer_amount": offer_amount,
-        "status": "pending",
-        "created_at": now
-    }
-
-    # Emit sync event for real-time live notification
-    cur.execute("""
-        INSERT INTO sync_events (event_type, item_id, payload, created_at)
-        VALUES ('new_offer', ?, ?, ?)
-    """, (item_id, json.dumps(offer_payload), now))
-
-    db.commit()
-
-    return jsonify({
-        "success": True,
-        "offer": offer_payload
-    }), 201
-
-@app.route('/api/offers/<offer_id>/respond', methods=['POST'])
-def respond_offer(offer_id):
-    """Seller or Buyer responds to an offer: accept, counter, or decline."""
-    db = get_db()
-    cur = db.cursor()
-    data = request.get_json() or {}
-    action = (data.get('action') or '').lower().strip()
-
-    cur.execute("SELECT * FROM offers WHERE id = ?", (offer_id,))
-    offer = cur.fetchone()
-    if not offer:
-        return jsonify({"success": False, "error": "Offer not found"}), 404
-    offer = dict(offer)
-
-    item_id = offer['item_id']
-    cur.execute("SELECT * FROM items WHERE id = ?", (item_id,))
-    item = cur.fetchone()
-    if not item:
-        return jsonify({"success": False, "error": "Listing not found"}), 404
-    item = dict(item)
-
-    now = time.time()
-    auth_user = get_authenticated_user(db)
-    caller_id = request.headers.get('X-Device-Id') or data.get('user_id') or (auth_user['id'] if auth_user else "user")
-    sender_name = data.get('sender_name') or (auth_user.get('nickname') if auth_user else "Seller")
-
-    if action == 'accept':
-        agreed_price = float(offer['offer_amount'])
-        cur.execute("UPDATE offers SET status = 'accepted', updated_at = ? WHERE id = ?", (now, offer_id))
-        cur.execute("UPDATE items SET agreed_price = ?, accepted_offer_id = ? WHERE id = ?", (agreed_price, offer_id, item_id))
-
-        chat_text = f"[OFFER_ACCEPTED:{offer_id}:{agreed_price:g}]"
-        cur.execute("""
-            INSERT INTO messages (item_id, sender_id, sender_name, text, created_at)
-            VALUES (?, ?, ?, ?, ?)
-        """, (item_id, caller_id, sender_name, chat_text, now))
-
-        cur.execute("""
-            INSERT INTO sync_events (event_type, item_id, payload, created_at)
-            VALUES ('offer_accepted', ?, ?, ?)
-        """, (item_id, json.dumps({
-            "offer_id": offer_id,
-            "item_id": item_id,
-            "item_title": item.get("title") or "Campus Item",
-            "seller_id": item.get("seller_id"),
-            "buyer_id": offer.get("buyer_id"),
-            "agreed_price": agreed_price,
-            "status": "accepted"
-        }), now))
-
-        db.commit()
-        return jsonify({
-            "success": True,
-            "status": "accepted",
-            "offer_id": offer_id,
-            "agreed_price": agreed_price,
-            "message": f"Offer accepted at ₹{agreed_price:g}! UPI payment amount updated."
-        })
-
-    elif action == 'counter':
-        try:
-            counter_amount = float(data.get('counter_amount', 0))
-        except (ValueError, TypeError):
-            return jsonify({"success": False, "error": "Invalid counter amount"}), 400
-        if counter_amount <= 0:
-            return jsonify({"success": False, "error": "Counter amount must be greater than ₹0"}), 400
-
-        cur.execute("""
-            UPDATE offers 
-            SET offer_amount = ?, status = 'countered', updated_at = ? 
-            WHERE id = ?
-        """, (counter_amount, now, offer_id))
-
-        chat_text = f"[OFFER_COUNTERED:{offer_id}:{counter_amount:g}]"
-        cur.execute("""
-            INSERT INTO messages (item_id, sender_id, sender_name, text, created_at)
-            VALUES (?, ?, ?, ?, ?)
-        """, (item_id, caller_id, sender_name, chat_text, now))
-
-        cur.execute("""
-            INSERT INTO sync_events (event_type, item_id, payload, created_at)
-            VALUES ('offer_countered', ?, ?, ?)
-        """, (item_id, json.dumps({
-            "offer_id": offer_id,
-            "item_id": item_id,
-            "item_title": item.get("title") or "Campus Item",
-            "seller_id": item.get("seller_id"),
-            "buyer_id": offer.get("buyer_id"),
-            "counter_amount": counter_amount,
-            "status": "countered"
-        }), now))
-
-        db.commit()
-        return jsonify({
-            "success": True,
-            "status": "countered",
-            "offer_id": offer_id,
-            "counter_amount": counter_amount,
-            "message": f"Counter-offer of ₹{counter_amount:g} submitted!"
-        })
-
-    elif action == 'decline':
-        cur.execute("UPDATE offers SET status = 'declined', updated_at = ? WHERE id = ?", (now, offer_id))
-
-        chat_text = f"[OFFER_DECLINED:{offer_id}:{offer['offer_amount']:g}]"
-        cur.execute("""
-            INSERT INTO messages (item_id, sender_id, sender_name, text, created_at)
-            VALUES (?, ?, ?, ?, ?)
-        """, (item_id, caller_id, sender_name, chat_text, now))
-
-        cur.execute("""
-            INSERT INTO sync_events (event_type, item_id, payload, created_at)
-            VALUES ('offer_declined', ?, ?, ?)
-        """, (item_id, json.dumps({
-            "offer_id": offer_id,
-            "item_id": item_id,
-            "item_title": item.get("title") or "Campus Item",
-            "seller_id": item.get("seller_id"),
-            "buyer_id": offer.get("buyer_id"),
-            "status": "declined"
-        }), now))
-
-        db.commit()
-        return jsonify({
-            "success": True,
-            "status": "declined",
-            "offer_id": offer_id,
-            "message": "Offer declined."
-        })
-
-    return jsonify({"success": False, "error": "Invalid action. Must be accept, counter, or decline"}), 400
-
-@app.route('/api/offers/<item_id>', methods=['GET'])
-def get_offers(item_id):
-    """Get active offers and agreed price for an item."""
-    db = get_db()
-    cur = db.cursor()
-    cur.execute("SELECT * FROM offers WHERE item_id = ? ORDER BY created_at DESC", (item_id,))
-    rows = [dict(r) for r in cur.fetchall()]
-
-    cur.execute("SELECT price, agreed_price, accepted_offer_id FROM items WHERE id = ?", (item_id,))
-    item_row = cur.fetchone()
-    original_price = item_row[0] if item_row else None
-    agreed_price = item_row[1] if item_row else None
-    accepted_offer_id = item_row[2] if item_row else None
-
-    return jsonify({
-        "success": True,
-        "offers": rows,
-        "original_price": original_price,
-        "agreed_price": agreed_price,
-        "accepted_offer_id": accepted_offer_id
-    })
-
-# =======================================================
-# PHONE VERIFICATION & INDIAN MOBILE OTP (+91)
-# =======================================================
-
-@app.route('/api/auth/phone/send-otp', methods=['POST'])
-def send_phone_otp():
-    """Generate and send 6-digit OTP to Indian +91 mobile number."""
-    db = get_db()
-    data = request.get_json() or {}
-    raw_phone = str(data.get('phone') or '').strip()
-    
-    # Normalize Indian phone number: remove non-digits
-    clean_digits = re.sub(r'[^0-9]', '', raw_phone)
-    if clean_digits.startswith('91') and len(clean_digits) == 12:
-        phone_10 = clean_digits[2:]
-    elif clean_digits.startswith('0') and len(clean_digits) == 11:
-        phone_10 = clean_digits[1:]
-    else:
-        phone_10 = clean_digits
-
-    if len(phone_10) != 10 or phone_10[0] not in '6789':
-        return jsonify({"success": False, "error": "Please enter a valid 10-digit Indian mobile number."}), 400
-
-    formatted_phone = f"+91 {phone_10[:5]} {phone_10[5:]}"
-    otp = f"{random.randint(100000, 999999)}"
-    now = time.time()
-    expiry = now + 600  # 10 minutes validity
-
-    auth_user = get_authenticated_user(db)
-    device_id = request.headers.get('X-Device-Id') or data.get('device_id') or "guest"
-    user_lookup_id = auth_user["id"] if auth_user else device_id
-
-    cur = db.cursor()
-    cur.execute("SELECT id FROM users WHERE id = ?", (user_lookup_id,))
-    if cur.fetchone():
-        cur.execute("""
-            UPDATE users 
-            SET phone_number = ?, phone_otp = ?, phone_otp_expiry = ?, last_active_at = ?
-            WHERE id = ?
-        """, (phone_10, otp, expiry, now, user_lookup_id))
-    else:
-        cur.execute("""
-            INSERT INTO users (id, nickname, phone_number, phone_otp, phone_otp_expiry, created_at, last_active_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (user_lookup_id, f"Student {phone_10[-4:]}", phone_10, otp, expiry, now, now))
-    db.commit()
-
-    return jsonify({
-        "success": True,
-        "message": f"OTP sent to {formatted_phone}",
-        "phone": phone_10,
-        "formatted_phone": formatted_phone,
-        "debug_otp": otp,  # Instant debug OTP for automated testing and swift verification
-        "expires_in": 600
-    })
-
-@app.route('/api/auth/phone/verify-otp', methods=['POST'])
-def verify_phone_otp():
-    """Verify 6-digit OTP and assign phone_verified badge."""
-    db = get_db()
-    data = request.get_json() or {}
-    raw_phone = str(data.get('phone') or '').strip()
-    user_otp = str(data.get('otp') or '').strip()
-
-    clean_digits = re.sub(r'[^0-9]', '', raw_phone)
-    if clean_digits.startswith('91') and len(clean_digits) == 12:
-        phone_10 = clean_digits[2:]
-    elif clean_digits.startswith('0') and len(clean_digits) == 11:
-        phone_10 = clean_digits[1:]
-    else:
-        phone_10 = clean_digits
-
-    auth_user = get_authenticated_user(db)
-    device_id = request.headers.get('X-Device-Id') or data.get('device_id') or "guest"
-    user_lookup_id = auth_user["id"] if auth_user else device_id
-
-    now = time.time()
-    cur = db.cursor()
-    cur.execute("""
-        SELECT id, phone_otp, phone_otp_expiry, phone_number 
-        FROM users 
-        WHERE id = ? OR phone_number = ?
-    """, (user_lookup_id, phone_10))
-    user_row = cur.fetchone()
-
-    if not user_row:
-        return jsonify({"success": False, "error": "Session or phone record not found. Please request a new OTP."}), 404
-
-    target_id = user_row[0]
-    expected_otp = str(user_row[1] or '').strip()
-    otp_expiry = float(user_row[2] or 0)
-
-    # Master dev fallback / test OTP 123456 or expected OTP
-    if user_otp != expected_otp and user_otp != "123456":
-        return jsonify({"success": False, "error": "Invalid verification code. Please try again."}), 400
-
-    if user_otp != "123456" and now > otp_expiry:
-        return jsonify({"success": False, "error": "This OTP has expired. Please request a new one."}), 400
-
-    # Mark user as phone_verified
-    cur.execute("""
-        UPDATE users 
-        SET phone_verified = 1, phone_number = ?, phone_otp = NULL, phone_otp_expiry = NULL, last_active_at = ?
-        WHERE id = ?
-    """, (phone_10, now, target_id))
-
-    # Also update any items published by this seller to reflect phone_verified = 1
-    cur.execute("""
-        UPDATE items 
-        SET seller_phone_verified = 1 
-        WHERE seller_id = ? OR seller_google_id = ?
-    """, (target_id, target_id))
-
-    db.commit()
-    save_data_backup()
-
-    cur.execute("SELECT * FROM users WHERE id = ?", (target_id,))
-    updated_user = dict(cur.fetchone())
-    updated_user["is_verified"] = bool(updated_user.get("is_verified", 0))
-    updated_user["is_campus_verified"] = bool(updated_user.get("is_campus_verified", 0))
-    updated_user["phone_verified"] = True
-    updated_user["phone_number"] = phone_10
-
-    return jsonify({
-        "success": True,
-        "message": "Phone number successfully verified! 🛡️ Phone-Verified badge unlocked.",
-        "user": updated_user
-    })
-
-# =======================================================
-# UPI P2P SETTLEMENT & 2-STEP CONFIRMATION ROUTES
-# =======================================================
-
-@app.route('/api/payment/declare', methods=['POST'])
-def declare_upi_payment():
-    """Buyer declares UPI transfer completed with optional UTR / Transaction reference."""
-    db = get_db()
-    cur = db.cursor()
-    data = request.get_json() or {}
-    offer_id = data.get('offer_id')
-    item_id = data.get('item_id')
-    upi_tx_ref = str(data.get('upi_tx_ref') or '').strip()
-
-    if not offer_id and not item_id:
-        return jsonify({"success": False, "error": "offer_id or item_id is required."}), 400
-
-    if offer_id:
-        cur.execute("SELECT * FROM offers WHERE id = ?", (offer_id,))
-        offer = cur.fetchone()
-    else:
-        cur.execute("SELECT * FROM offers WHERE item_id = ? ORDER BY created_at DESC LIMIT 1", (item_id,))
-        offer = cur.fetchone()
-
-    if not offer:
-        return jsonify({"success": False, "error": "Associated offer not found."}), 404
-    offer = dict(offer)
-    active_offer_id = offer["id"]
-    active_item_id = offer["item_id"]
-
-    now = time.time()
-    cur.execute("""
-        UPDATE offers 
-        SET buyer_declared_paid = 1, upi_tx_ref = ?, updated_at = ?
-        WHERE id = ?
-    """, (upi_tx_ref, now, active_offer_id))
-
-    # Log payment declared message in chat
-    chat_text = f"[UPI_PAID:{active_offer_id}:{upi_tx_ref}]"
-    buyer_name = offer.get("buyer_name") or "Buyer"
-    cur.execute("""
-        INSERT INTO messages (item_id, sender_id, sender_name, text, created_at)
-        VALUES (?, ?, ?, ?, ?)
-    """, (active_item_id, offer.get("buyer_id"), buyer_name, chat_text, now))
-
-    cur.execute("""
-        INSERT INTO sync_events (event_type, item_id, payload, created_at)
-        VALUES ('payment_declared', ?, ?, ?)
-    """, (active_item_id, json.dumps({
-        "offer_id": active_offer_id,
-        "item_id": active_item_id,
-        "upi_tx_ref": upi_tx_ref,
-        "buyer_id": offer.get("buyer_id"),
-        "seller_id": offer.get("seller_id"),
-        "status": "payment_declared"
-    }), now))
-
-    db.commit()
-    return jsonify({
-        "success": True,
-        "message": "UPI payment declared. Awaiting seller acknowledgment.",
-        "offer_id": active_offer_id,
-        "upi_tx_ref": upi_tx_ref
-    })
-
-@app.route('/api/payment/confirm', methods=['POST'])
-def confirm_upi_payment():
-    """Seller acknowledges receipt of UPI transfer. Marks deal completed and item sold."""
-    db = get_db()
-    cur = db.cursor()
-    data = request.get_json() or {}
-    offer_id = data.get('offer_id')
-    item_id = data.get('item_id')
-
-    if not offer_id and not item_id:
-        return jsonify({"success": False, "error": "offer_id or item_id is required."}), 400
-
-    if offer_id:
-        cur.execute("SELECT * FROM offers WHERE id = ?", (offer_id,))
-        offer = cur.fetchone()
-    else:
-        cur.execute("SELECT * FROM offers WHERE item_id = ? ORDER BY created_at DESC LIMIT 1", (item_id,))
-        offer = cur.fetchone()
-
-    if not offer:
-        return jsonify({"success": False, "error": "Offer not found."}), 404
-    offer = dict(offer)
-    active_offer_id = offer["id"]
-    active_item_id = offer["item_id"]
-
-    cur.execute("SELECT * FROM items WHERE id = ?", (active_item_id,))
-    item = cur.fetchone()
-    if not item:
-        return jsonify({"success": False, "error": "Item not found."}), 404
-    item = dict(item)
-
-    now = time.time()
-    cur.execute("""
-        UPDATE offers 
-        SET seller_confirmed_paid = 1, status = 'completed', updated_at = ?
-        WHERE id = ?
-    """, (now, active_offer_id))
-
-    cur.execute("""
-        UPDATE items 
-        SET status = 'sold', is_available = 0, completed_at = ?, completed_by = ?
-        WHERE id = ?
-    """, (now, offer.get("buyer_id"), active_item_id))
-
-    # Increment seller trades count
-    seller_id = item.get("seller_id")
-    if seller_id:
-        cur.execute("UPDATE users SET trades_completed = trades_completed + 1 WHERE id = ?", (seller_id,))
-
-    chat_text = f"[UPI_CONFIRMED:{active_offer_id}]"
-    cur.execute("""
-        INSERT INTO messages (item_id, sender_id, sender_name, text, created_at)
-        VALUES (?, ?, ?, ?, ?)
-    """, (active_item_id, seller_id, item.get("seller_name", "Seller"), chat_text, now))
-
-    cur.execute("""
-        INSERT INTO sync_events (event_type, item_id, payload, created_at)
-        VALUES ('payment_confirmed', ?, ?, ?)
-    """, (active_item_id, json.dumps({
-        "offer_id": active_offer_id,
-        "item_id": active_item_id,
-        "seller_id": seller_id,
-        "buyer_id": offer.get("buyer_id"),
-        "status": "sold"
-    }), now))
-
-    db.commit()
-    save_data_backup()
-
-    return jsonify({
-        "success": True,
-        "message": "Payment confirmed! Listing marked as SOLD. Trade completed successfully.",
-        "offer_id": active_offer_id,
-        "item_id": active_item_id
-    })
-
-@app.route('/api/chat/<item_id>', methods=['GET'])
-def get_chat(item_id):
-    """Get all conversation messages for an item with strict privacy authorization."""
-    db = get_db()
-    cur = db.cursor()
-    auth_user = get_authenticated_user(db)
-    caller_id = request.headers.get('X-Device-Id') or (auth_user and auth_user.get('id')) or request.args.get('user_id') or "guest"
-    caller_google_id = (auth_user and auth_user.get('google_id')) or ""
-
-    # Verify listing from PostgreSQL or SQLite
-    seller_id = ""
-    seller_google_id = ""
-    pg = get_pg_conn()
-    if pg:
-        try:
-            import psycopg2.extras
-            pg_c = pg.cursor(cursor_factory=psycopg2.extras.DictCursor)
-            pg_c.execute("SELECT id, seller_id, seller_google_id FROM beacons WHERE id = %s", (item_id,))
-            pg_item = pg_c.fetchone()
-            if pg_item:
-                seller_id = pg_item['seller_id'] or ""
-                seller_google_id = pg_item['seller_google_id'] or ""
-        except Exception:
-            pass
-
-    if not seller_id:
-        cur.execute("SELECT id, seller_id, seller_google_id FROM items WHERE id = ?", (item_id,))
-        item = cur.fetchone()
-        if not item:
-            if pg:
-                try: pg.close()
-                except Exception: pass
-            return jsonify({"success": False, "error": "Listing not found", "messages": []}), 404
-        seller_id = item['seller_id'] or ""
-        seller_google_id = item['seller_google_id'] or ""
-
-    is_seller = (caller_id == seller_id or (caller_google_id and caller_google_id == seller_google_id))
-    requested_buyer = request.args.get('buyer_id')
-
-    if pg:
-        try:
-            import psycopg2.extras
-            pg_cur = pg.cursor(cursor_factory=psycopg2.extras.DictCursor)
-            if is_seller:
-                if requested_buyer:
-                    pg_cur.execute("""
-                        SELECT * FROM messages 
-                        WHERE item_id = %s AND (sender_id = %s OR receiver_id = %s OR buyer_id = %s)
-                        ORDER BY created_at ASC
-                    """, (item_id, requested_buyer, requested_buyer, requested_buyer))
-                else:
-                    pg_cur.execute("""
-                        SELECT * FROM messages 
-                        WHERE item_id = %s 
-                        ORDER BY created_at ASC
-                    """, (item_id,))
-            else:
-                buyer_id = caller_id
-                pg_cur.execute("""
-                    SELECT * FROM messages 
-                    WHERE item_id = %s AND (sender_id = %s OR receiver_id = %s OR buyer_id = %s)
-                    ORDER BY created_at ASC
-                """, (item_id, buyer_id, buyer_id, buyer_id))
-
-            messages = [dict(r) for r in pg_cur.fetchall()]
-            pg.close()
-            return jsonify({"success": True, "messages": messages})
-        except Exception as pg_err:
-            try: pg.close()
-            except Exception: pass
-
-    if is_seller:
-        if requested_buyer:
+        if DATABASE_URL and 'postgres' in DATABASE_URL:
             cur.execute("""
-                SELECT * FROM messages 
-                WHERE item_id = ? AND (sender_id = ? OR receiver_id = ? OR buyer_id = ?)
-                ORDER BY created_at ASC
-            """, (item_id, requested_buyer, requested_buyer, requested_buyer))
+            INSERT INTO users (id, username, email, password_hash, full_name, currency, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """, (new_id, username, email, hash_pw(password), full_name, "₹", now_str))
         else:
             cur.execute("""
-                SELECT * FROM messages 
-                WHERE item_id = ? 
-                ORDER BY created_at ASC
-            """, (item_id,))
-    else:
-        buyer_id = caller_id
-        cur.execute("""
-            SELECT * FROM messages 
-            WHERE item_id = ? AND (sender_id = ? OR receiver_id = ? OR buyer_id = ?)
-            ORDER BY created_at ASC
-        """, (item_id, buyer_id, buyer_id, buyer_id))
+            INSERT INTO users (id, username, email, password_hash, full_name, currency, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (new_id, username, email, hash_pw(password), full_name, "₹", now_str))
+            db.commit()
 
-    messages = [dict(r) for r in cur.fetchall()]
-    return jsonify({"success": True, "messages": messages})
+        return jsonify({
+            "success": True,
+            "user": {"id": new_id, "username": username, "email": email, "full_name": full_name, "currency": "₹"}
+        })
+    except Exception as e:
+        return jsonify({"error": "Username or email already exists."}), 409
 
-@app.route('/api/chat/<item_id>', methods=['POST'])
-def send_chat(item_id):
-    """Send a real-time message with strictly scoped room and participant verification."""
+
+# ==========================================
+# DASHBOARD API (Slide 9 Exact Match)
+# ==========================================
+
+@app.route("/api/dashboard", methods=["GET"])
+def get_dashboard():
+    user_id = request.args.get("user_id", "user_demo_2026")
+    month = request.args.get("month", datetime.now().strftime("%Y-%m"))
+
     db = get_db()
-    data = request.get_json() or {}
-    auth_user = get_authenticated_user(db)
-
-    device_id = request.headers.get('X-Device-Id') or data.get('sender_id') or "guest"
-    if auth_user and auth_user.get("is_verified"):
-        sender_name = auth_user.get("nickname") or data.get('sender_name') or "Student"
-        sender_avatar = auth_user.get("picture") or auth_user.get("avatar") or ""
-        sender_email = auth_user.get("email") or ""
-    else:
-        sender_name = data.get('sender_name') or "Student"
-        sender_avatar = ""
-        sender_email = ""
-
-    text = data.get('text', '').strip()
-    now = time.time()
-
-    if not text:
-        return jsonify({"success": False, "error": "Message cannot be empty"}), 400
-
     cur = db.cursor()
-    cur.execute("SELECT id, title, seller_id, seller_name, seller_google_id FROM items WHERE id = ?", (item_id,))
-    item_row = cur.fetchone()
-    if not item_row:
-        return jsonify({"success": False, "error": "Listing not found"}), 404
 
-    seller_id = item_row['seller_id'] or ""
-    seller_name_val = item_row['seller_name'] or "Seller"
-    is_seller = (device_id == seller_id or (auth_user and auth_user.get('google_id') == item_row['seller_google_id']))
+    # Total Income for month
+    if DATABASE_URL and 'postgres' in DATABASE_URL:
+        cur.execute("SELECT COALESCE(SUM(amount), 0) FROM income WHERE user_id = %s AND TO_CHAR(date, 'YYYY-MM') = %s", (user_id, month))
+        tot_income = float(cur.fetchone()[0])
 
-    if is_seller:
-        buyer_id = data.get('buyer_id') or data.get('receiver_id') or "buyer"
-        receiver_id = buyer_id
+        cur.execute("SELECT COALESCE(SUM(amount), 0) FROM expenses WHERE user_id = %s AND TO_CHAR(date, 'YYYY-MM') = %s", (user_id, month))
+        tot_expenses = float(cur.fetchone()[0])
+
+        cur.execute("SELECT category, COALESCE(SUM(amount), 0) FROM expenses WHERE user_id = %s AND TO_CHAR(date, 'YYYY-MM') = %s GROUP BY category ORDER BY 2 DESC", (user_id, month))
+        cat_breakdown = [{"category": row[0], "amount": float(row[1])} for row in cur.fetchall()]
+
+        cur.execute("SELECT monthly_limit, alert_threshold_percent FROM budgets WHERE user_id = %s AND category = 'Total' AND month = %s", (user_id, month))
+        b_row = cur.fetchone()
+        budget_limit = float(b_row[0]) if b_row else 25000.0
+
+        cur.execute("SELECT id, title, target_amount, saved_amount, target_date, status FROM saving_goals WHERE user_id = %s ORDER BY created_at DESC LIMIT 1", (user_id,))
+        g_row = cur.fetchone()
+        saving_goal = {
+            "id": g_row[0], "title": g_row[1], "target_amount": float(g_row[2]),
+            "saved_amount": float(g_row[3]), "target_date": str(g_row[4]), "status": g_row[5]
+        } if g_row else None
     else:
-        buyer_id = device_id
-        receiver_id = seller_id
+        cur.execute("SELECT COALESCE(SUM(amount), 0) FROM income WHERE user_id = ? AND strftime('%Y-%m', date) = ?", (user_id, month))
+        tot_income = float(cur.fetchone()[0])
 
-    room_id = f"chat_{item_id}_{buyer_id}"
+        cur.execute("SELECT COALESCE(SUM(amount), 0) FROM expenses WHERE user_id = ? AND strftime('%Y-%m', date) = ?", (user_id, month))
+        tot_expenses = float(cur.fetchone()[0])
 
-    # Auto-add columns if needed
-    for col, col_def in [('listing_id', 'TEXT'), ('room_id', 'TEXT'), ('receiver_id', 'TEXT'), ('buyer_id', 'TEXT'), ('message_text', 'TEXT')]:
-        try:
-            cur.execute(f"ALTER TABLE messages ADD COLUMN {col} {col_def}")
-        except Exception:
-            pass
+        cur.execute("SELECT category, COALESCE(SUM(amount), 0) FROM expenses WHERE user_id = ? AND strftime('%Y-%m', date) = ? GROUP BY category ORDER BY 2 DESC", (user_id, month))
+        cat_breakdown = [{"category": row[0], "amount": float(row[1])} for row in cur.fetchall()]
 
-    cur.execute("""
-        INSERT INTO messages (
-            item_id, listing_id, room_id, sender_id, receiver_id, buyer_id,
-            sender_name, text, message_text, created_at, sender_email, sender_avatar
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (item_id, item_id, room_id, device_id, receiver_id, buyer_id, sender_name, text, text, now, sender_email, sender_avatar))
+        cur.execute("SELECT monthly_limit, alert_threshold_percent FROM budgets WHERE user_id = ? AND category = 'Total' AND month = ?", (user_id, month))
+        b_row = cur.fetchone()
+        budget_limit = float(b_row[0]) if b_row else 25000.0
 
-    msg_id = cur.lastrowid
-    db.commit()
+        cur.execute("SELECT id, title, target_amount, saved_amount, target_date, status FROM saving_goals WHERE user_id = ? ORDER BY created_at DESC LIMIT 1", (user_id,))
+        g_row = cur.fetchone()
+        saving_goal = {
+            "id": g_row[0], "title": g_row[1], "target_amount": float(g_row[2]),
+            "saved_amount": float(g_row[3]), "target_date": str(g_row[4]), "status": g_row[5]
+        } if g_row else None
 
-    msg_payload = {
-        "id": msg_id,
-        "item_id": item_id,
-        "listing_id": item_id,
-        "room_id": room_id,
-        "sender_id": device_id,
-        "receiver_id": receiver_id,
-        "buyer_id": buyer_id,
-        "sender_name": sender_name,
-        "sender_avatar": sender_avatar,
-        "sender_email": sender_email,
-        "message_text": text,
-        "text": text,
-        "created_at": now
-    }
+    net_savings = tot_income - tot_expenses
+    budget_usage_pct = round((tot_expenses / budget_limit * 100), 1) if budget_limit > 0 else 0
 
-    # Direct persistent write to cloud PostgreSQL
-    save_message_to_pg(msg_payload)
-    save_data_backup()
+    if tot_expenses > budget_limit:
+        budget_status = "Exceeded monthly limit"
+        budget_status_level = "danger"
+    elif budget_usage_pct >= 80.0:
+        budget_status = "Within monthly limit (Approaching cap)"
+        budget_status_level = "warning"
+    else:
+        budget_status = "Within monthly limit"
+        budget_status_level = "safe"
 
     return jsonify({
-        "success": True,
-        "message": msg_payload
-    }), 201
-
-# In-memory cache for campus search results to provide sub-10ms response times
-CAMPUS_SEARCH_CACHE = {}
-
-@app.route('/api/campuses/search', methods=['GET'])
-def search_campuses_api():
-    """
-    High-performance Pan-India College & University Search Proxy.
-    Queries OpenStreetMap Nominatim with proper headers, restricted to India,
-    and returns parsed, verified educational campuses with caching.
-    """
-    q = (request.args.get('q') or '').strip()
-    if not q or len(q) < 2:
-        return jsonify({"success": True, "results": []})
-
-    cache_key = q.lower().strip()
-    if cache_key in CAMPUS_SEARCH_CACHE:
-        return jsonify({"success": True, "results": CAMPUS_SEARCH_CACHE[cache_key], "cached": True})
-
-    results = []
-    
-    clean_q = q
-    has_edu_term = any(w in clean_q.lower() for w in ['college', 'university', 'institute', 'campus', 'iit', 'nit', 'iiit', 'iim', 'school', 'polytechnic', 'vidyapeeth', 'academy'])
-    search_terms = [clean_q]
-    if not has_edu_term:
-        search_terms.append(f"{clean_q} college")
-
-    headers = {
-        "User-Agent": "RadarMarket-CampusDirectory/3.8 (https://radarmarket.onrender.com; campus-finder)",
-        "Accept-Language": "en"
-    }
-
-    for term in search_terms:
-        if len(results) >= 8:
-            break
-        try:
-            params = urllib.parse.urlencode({
-                "format": "json",
-                "q": term,
-                "countrycodes": "in",
-                "limit": "10",
-                "addressdetails": "1"
-            })
-            req_url = f"https://nominatim.openstreetmap.org/search?{params}"
-            req = urllib.request.Request(req_url, headers=headers)
-            with urllib.request.urlopen(req, timeout=4) as resp:
-                data = json.loads(resp.read().decode('utf-8'))
-                for r in (data or []):
-                    addr = r.get("address") or {}
-                    city = addr.get("city") or addr.get("town") or addr.get("suburb") or addr.get("county") or addr.get("state_district") or "India"
-                    state_name = addr.get("state") or "India"
-                    raw_name = r.get("display_name") or ""
-                    short_name = raw_name.split(",")[0].strip()
-
-                    if any(existing['shortName'].lower() == short_name.lower() for existing in results):
-                        continue
-
-                    category = "College / Campus"
-                    if "univ" in short_name.lower() or "univ" in raw_name.lower():
-                        category = "University"
-                    elif "institute" in short_name.lower() or "technology" in short_name.lower():
-                        category = "Institute"
-
-                    results.append({
-                        "id": f"osm-{r.get('place_id') or len(results)}",
-                        "name": raw_name,
-                        "shortName": short_name,
-                        "city": city,
-                        "state": state_name,
-                        "lat": float(r["lat"]),
-                        "lng": float(r["lon"]),
-                        "category": category,
-                        "isLiveGeocoded": True
-                    })
-        except Exception as err:
-            print(f"[Campus Search] Nominatim query failed for '{term}': {err}")
-
-    # Fallback to Photon API if Nominatim returns nothing
-    if len(results) == 0:
-        try:
-            photon_params = urllib.parse.urlencode({
-                "q": f"{q} college",
-                "limit": "8",
-                "bbox": "68.1,8.0,97.4,37.1"
-            })
-            photon_url = f"https://photon.komoot.io/api/?{photon_params}"
-            req = urllib.request.Request(photon_url, headers={"User-Agent": "RadarMarket/3.8"})
-            with urllib.request.urlopen(req, timeout=4) as resp:
-                pdata = json.loads(resp.read().decode('utf-8'))
-                for feat in (pdata.get("features") or []):
-                    props = feat.get("properties") or {}
-                    coords = feat.get("geometry", {}).get("coordinates", [])
-                    if len(coords) >= 2:
-                        name = props.get("name") or props.get("city") or q
-                        city = props.get("city") or props.get("district") or props.get("state") or "India"
-                        state_name = props.get("state") or "India"
-                        results.append({
-                            "id": f"photon-{props.get('osm_id') or len(results)}",
-                            "name": f"{name}, {city}, {state_name}",
-                            "shortName": name,
-                            "city": city,
-                            "state": state_name,
-                            "lat": float(coords[1]),
-                            "lng": float(coords[0]),
-                            "category": "College / Campus",
-                            "isLiveGeocoded": True
-                        })
-        except Exception as perr:
-            print(f"[Campus Search] Photon query failed: {perr}")
-
-    # Save in cache
-    if len(CAMPUS_SEARCH_CACHE) > 500:
-        CAMPUS_SEARCH_CACHE.clear()
-    CAMPUS_SEARCH_CACHE[cache_key] = results
-
-    return jsonify({"success": True, "results": results, "cached": False})
-
-@app.route('/api/sync', methods=['GET'])
-def delta_sync():
-    """
-    Real-Time Delta Sync Endpoint.
-    Clients poll this every 1-2s with ?since=<timestamp>.
-    Returns new events, new items, and new messages since that timestamp.
-    """
-    db = get_db()
-    since = float(request.args.get('since', 0))
-    current_time = time.time()
-
-    cur = db.cursor()
-    cur.execute("""
-        SELECT * FROM sync_events 
-        WHERE created_at > ? 
-        ORDER BY created_at ASC
-    """, (since,))
-    events = [dict(r) for r in cur.fetchall()]
-
-    # Check latest item timestamp to guarantee synchronization across multiple phones
-    cur.execute("SELECT max(created_at), count(*) FROM items WHERE status != 'deleted'")
-    latest_row = cur.fetchone()
-    latest_item_ts = latest_row[0] or 0
-
-    # If any item was added, changed, or client is initializing
-    has_item_changes = (
-        since == 0 or
-        latest_item_ts > since or
-        any(e['event_type'] in ('new_item', 'reserve_toggle', 'item_status_changed', 'offer_accepted') for e in events)
-    )
-
-    items = []
-    if has_item_changes:
-        cur.execute("SELECT * FROM items WHERE status != 'deleted' ORDER BY created_at DESC")
-        for r in cur.fetchall():
-            item = dict(r)
-            item["seller"] = {
-                "id": item["seller_id"],
-                "name": item["seller_name"],
-                "rating": item["seller_rating"],
-                "verified": bool(item["seller_verified"]),
-                "campus_verified": bool(item.get("seller_campus_verified", 0)),
-                "email": item.get("seller_email") or "",
-                "avatar": item["seller_avatar"]
-            }
-            item["tags"] = json.loads(item["tags"]) if item["tags"] else []
-            item["isAvailable"] = bool(item.get("is_available", 1)) and item.get("status") != "sold"
-            item["beacon_type"] = item.get("beacon_type") or "sell"
-            item["status"] = item.get("status") or "active"
-            item["upi_id"] = item.get("upi_id") or ""
-            items.append(item)
-
-    # Any new messages - STRICTLY FILTERED to caller (buyer or seller) to eliminate global leakage
-    device_id = request.headers.get('X-Device-Id') or request.args.get('device_id') or ''
-    auth_user = get_authenticated_user(db)
-    caller_ids = [device_id]
-    if auth_user:
-        if auth_user.get('id'): caller_ids.append(auth_user['id'])
-        if auth_user.get('google_id'): caller_ids.append(auth_user['google_id'])
-    caller_ids = [c for c in caller_ids if c]
-
-    new_messages = []
-    if caller_ids:
-        placeholders = ','.join('?' * len(caller_ids))
-        cur.execute(f"""
-            SELECT m.*, i.title as item_title, i.seller_id as seller_id, i.seller_name as seller_name
-            FROM messages m
-            LEFT JOIN items i ON m.item_id = i.id
-            WHERE m.created_at > ?
-              AND (m.sender_id IN ({placeholders}) OR m.receiver_id IN ({placeholders}) OR i.seller_id IN ({placeholders}))
-            ORDER BY m.created_at ASC
-        """, [since] + caller_ids + caller_ids + caller_ids)
-        new_messages = [dict(r) for r in cur.fetchall()]
-
-    return jsonify({
-        "success": True,
-        "timestamp": current_time,
-        "events": events,
-        "has_item_changes": has_item_changes,
-        "items": items,
-        "new_messages": new_messages
+        "month": month,
+        "income": tot_income,
+        "expenses": tot_expenses,
+        "savings": net_savings,
+        "savings_rate_percent": round((net_savings / tot_income * 100), 1) if tot_income > 0 else 0,
+        "budget_limit": budget_limit,
+        "budget_usage_percent": budget_usage_pct,
+        "budget_status": budget_status,
+        "budget_status_level": budget_status_level,
+        "saving_goal": saving_goal,
+        "category_breakdown": cat_breakdown
     })
 
-def print_banner(lan_ip):
-    print("=" * 66)
-    print("  RADARMARKET - MULTI-DEVICE LIVE PRODUCTION SERVER")
-    print("=" * 66)
-    print(f"  * Local Desktop Access:   http://localhost:{PORT}")
-    print(f"  * Mobile Phone Access:    http://{lan_ip}:{PORT}")
-    print("=" * 66)
-    print("  [✓] SQLite WAL Database initialized: database.db")
-    print("  [✓] Real-time cross-device sync active (Delta Bus)")
-    print("  [✓] Instant QR Code pairing ready in web header")
-    print("  Press Ctrl+C to stop the server safely.")
-    print("=" * 66)
 
-if __name__ == '__main__':
+# ==========================================
+# INCOME MANAGEMENT API
+# ==========================================
+
+@app.route("/api/income", methods=["GET", "POST"])
+def handle_income():
+    db = get_db()
+    cur = db.cursor()
+
+    if request.method == "POST":
+        data = request.json or {}
+        user_id = data.get("user_id", "user_demo_2026")
+        amount = float(data.get("amount", 0))
+        source = data.get("source", "Salary").strip()
+        inc_date = data.get("date", date.today().strftime("%Y-%m-%d"))
+        payment_mode = data.get("payment_mode", "UPI")
+        notes = data.get("notes", "")
+
+        if amount <= 0:
+            return jsonify({"error": "Amount must be greater than 0"}), 400
+
+        new_id = str(uuid.uuid4())
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        if DATABASE_URL and 'postgres' in DATABASE_URL:
+            cur.execute("""
+            INSERT INTO income (id, user_id, amount, source, date, payment_mode, notes, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            """, (new_id, user_id, amount, source, inc_date, payment_mode, notes, now_str))
+        else:
+            cur.execute("""
+            INSERT INTO income (id, user_id, amount, source, date, payment_mode, notes, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (new_id, user_id, amount, source, inc_date, payment_mode, notes, now_str))
+            db.commit()
+
+        return jsonify({"success": True, "id": new_id, "message": "Income recorded successfully"})
+
+    # GET
+    user_id = request.args.get("user_id", "user_demo_2026")
+    if DATABASE_URL and 'postgres' in DATABASE_URL:
+        cur.execute("SELECT id, amount, source, date, payment_mode, notes, created_at FROM income WHERE user_id = %s ORDER BY date DESC, created_at DESC", (user_id,))
+        rows = cur.fetchall()
+        incomes = [{"id": r[0], "amount": float(r[1]), "source": r[2], "date": str(r[3]), "payment_mode": r[4], "notes": r[5]} for r in rows]
+    else:
+        cur.execute("SELECT id, amount, source, date, payment_mode, notes, created_at FROM income WHERE user_id = ? ORDER BY date DESC, created_at DESC", (user_id,))
+        rows = cur.fetchall()
+        incomes = [{"id": r["id"], "amount": float(r["amount"]), "source": r["source"], "date": str(r["date"]), "payment_mode": r["payment_mode"], "notes": r["notes"]} for r in rows]
+
+    return jsonify({"incomes": incomes})
+
+@app.route("/api/income/<inc_id>", methods=["DELETE"])
+def delete_income(inc_id):
+    db = get_db()
+    cur = db.cursor()
+    if DATABASE_URL and 'postgres' in DATABASE_URL:
+        cur.execute("DELETE FROM income WHERE id = %s", (inc_id,))
+    else:
+        cur.execute("DELETE FROM income WHERE id = ?", (inc_id,))
+        db.commit()
+    return jsonify({"success": True, "message": "Income entry deleted"})
+
+
+# ==========================================
+# EXPENSE TRACKING API
+# ==========================================
+
+@app.route("/api/expenses", methods=["GET", "POST"])
+def handle_expenses():
+    db = get_db()
+    cur = db.cursor()
+
+    if request.method == "POST":
+        data = request.json or {}
+        user_id = data.get("user_id", "user_demo_2026")
+        amount = float(data.get("amount", 0))
+        category = data.get("category", "Food & Dining").strip()
+        exp_date = data.get("date", date.today().strftime("%Y-%m-%d"))
+        payment_mode = data.get("payment_mode", "UPI")
+        notes = data.get("notes", "")
+
+        if amount <= 0:
+            return jsonify({"error": "Amount must be greater than 0"}), 400
+
+        new_id = str(uuid.uuid4())
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        if DATABASE_URL and 'postgres' in DATABASE_URL:
+            cur.execute("""
+            INSERT INTO expenses (id, user_id, amount, category, date, payment_mode, notes, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            """, (new_id, user_id, amount, category, exp_date, payment_mode, notes, now_str))
+        else:
+            cur.execute("""
+            INSERT INTO expenses (id, user_id, amount, category, date, payment_mode, notes, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (new_id, user_id, amount, category, exp_date, payment_mode, notes, now_str))
+            db.commit()
+
+        # Check for budget trigger
+        month = exp_date[:7]
+        check_budget_alert(user_id, month, category)
+
+        return jsonify({"success": True, "id": new_id, "message": "Expense recorded successfully"})
+
+    # GET
+    user_id = request.args.get("user_id", "user_demo_2026")
+    if DATABASE_URL and 'postgres' in DATABASE_URL:
+        cur.execute("SELECT id, amount, category, date, payment_mode, notes, created_at FROM expenses WHERE user_id = %s ORDER BY date DESC, created_at DESC", (user_id,))
+        rows = cur.fetchall()
+        expenses = [{"id": r[0], "amount": float(r[1]), "category": r[2], "date": str(r[3]), "payment_mode": r[4], "notes": r[5]} for r in rows]
+    else:
+        cur.execute("SELECT id, amount, category, date, payment_mode, notes, created_at FROM expenses WHERE user_id = ? ORDER BY date DESC, created_at DESC", (user_id,))
+        rows = cur.fetchall()
+        expenses = [{"id": r["id"], "amount": float(r["amount"]), "category": r["category"], "date": str(r["date"]), "payment_mode": r["payment_mode"], "notes": r["notes"]} for r in rows]
+
+    return jsonify({"expenses": expenses})
+
+@app.route("/api/expenses/<exp_id>", methods=["DELETE"])
+def delete_expense(exp_id):
+    db = get_db()
+    cur = db.cursor()
+    if DATABASE_URL and 'postgres' in DATABASE_URL:
+        cur.execute("DELETE FROM expenses WHERE id = %s", (exp_id,))
+    else:
+        cur.execute("DELETE FROM expenses WHERE id = ?", (exp_id,))
+        db.commit()
+    return jsonify({"success": True, "message": "Expense entry deleted"})
+
+def check_budget_alert(user_id, month, category):
+    """Generates proactive alert if spending crosses budget thresholds."""
+    db = get_db()
+    cur = db.cursor()
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    # Check Total budget
+    if DATABASE_URL and 'postgres' in DATABASE_URL:
+        cur.execute("SELECT monthly_limit FROM budgets WHERE user_id = %s AND category = 'Total' AND month = %s", (user_id, month))
+        b = cur.fetchone()
+        tot_limit = float(b[0]) if b else 25000.0
+
+        cur.execute("SELECT COALESCE(SUM(amount), 0) FROM expenses WHERE user_id = %s AND TO_CHAR(date, 'YYYY-MM') = %s", (user_id, month))
+        tot_spent = float(cur.fetchone()[0])
+    else:
+        cur.execute("SELECT monthly_limit FROM budgets WHERE user_id = ? AND category = 'Total' AND month = ?", (user_id, month))
+        b = cur.fetchone()
+        tot_limit = float(b[0]) if b else 25000.0
+
+        cur.execute("SELECT COALESCE(SUM(amount), 0) FROM expenses WHERE user_id = ? AND strftime('%Y-%m', date) = ?", (user_id, month))
+        tot_spent = float(cur.fetchone()[0])
+
+    pct = (tot_spent / tot_limit * 100) if tot_limit > 0 else 0
+    if pct >= 100:
+        msg = f"OVERSPENDING ALERT: You have exceeded your total monthly budget of ₹{tot_limit:,.0f} by ₹{(tot_spent - tot_limit):,.0f}!"
+        level = "danger"
+    elif pct >= 80:
+        msg = f"BUDGET WARNING: You have spent {pct:.1f}% (₹{tot_spent:,.0f}) of your ₹{tot_limit:,.0f} monthly limit."
+        level = "warning"
+    else:
+        return
+
+    ins_alert = """
+    INSERT INTO budget_alerts (id, user_id, category, level, message, is_read, created_at)
+    VALUES (%s, %s, %s, %s, %s, %s, %s)
+    """ if (DATABASE_URL and 'postgres' in DATABASE_URL) else """
+    INSERT INTO budget_alerts (id, user_id, category, level, message, is_read, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+    """
+    cur.execute(ins_alert, (str(uuid.uuid4()), user_id, "Total", level, msg, 0, now_str))
+    if not (DATABASE_URL and 'postgres' in DATABASE_URL):
+        db.commit()
+
+
+# ==========================================
+# BUDGETS API
+# ==========================================
+
+@app.route("/api/budgets", methods=["GET", "POST"])
+def handle_budgets():
+    db = get_db()
+    cur = db.cursor()
+    month = request.args.get("month", datetime.now().strftime("%Y-%m"))
+    user_id = request.args.get("user_id", "user_demo_2026")
+
+    if request.method == "POST":
+        data = request.json or {}
+        user_id = data.get("user_id", "user_demo_2026")
+        category = data.get("category", "Total")
+        limit = float(data.get("monthly_limit", 25000))
+        target_month = data.get("month", month)
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        # Upsert budget
+        if DATABASE_URL and 'postgres' in DATABASE_URL:
+            cur.execute("DELETE FROM budgets WHERE user_id = %s AND category = %s AND month = %s", (user_id, category, target_month))
+            cur.execute("""
+            INSERT INTO budgets (id, user_id, category, monthly_limit, month, alert_threshold_percent, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """, (str(uuid.uuid4()), user_id, category, limit, target_month, 80.0, now_str))
+        else:
+            cur.execute("DELETE FROM budgets WHERE user_id = ? AND category = ? AND month = ?", (user_id, category, target_month))
+            cur.execute("""
+            INSERT INTO budgets (id, user_id, category, monthly_limit, month, alert_threshold_percent, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (str(uuid.uuid4()), user_id, category, limit, target_month, 80.0, now_str))
+            db.commit()
+
+        return jsonify({"success": True, "message": f"Budget for {category} updated to ₹{limit}"})
+
+    # GET
+    if DATABASE_URL and 'postgres' in DATABASE_URL:
+        cur.execute("SELECT id, category, monthly_limit, month, alert_threshold_percent FROM budgets WHERE user_id = %s AND month = %s", (user_id, month))
+        budgets = [{"id": r[0], "category": r[1], "monthly_limit": float(r[2]), "month": r[3], "threshold": float(r[4])} for r in cur.fetchall()]
+    else:
+        cur.execute("SELECT id, category, monthly_limit, month, alert_threshold_percent FROM budgets WHERE user_id = ? AND month = ?", (user_id, month))
+        budgets = [{"id": r["id"], "category": r["category"], "monthly_limit": float(r["monthly_limit"]), "month": r["month"], "threshold": float(r["alert_threshold_percent"])} for r in cur.fetchall()]
+
+    return jsonify({"budgets": budgets})
+
+
+# ==========================================
+# SAVING GOALS API
+# ==========================================
+
+@app.route("/api/saving-goals", methods=["GET", "POST"])
+def handle_goals():
+    db = get_db()
+    cur = db.cursor()
+
+    if request.method == "POST":
+        data = request.json or {}
+        user_id = data.get("user_id", "user_demo_2026")
+        title = data.get("title", "").strip()
+        target_amount = float(data.get("target_amount", 50000))
+        saved_amount = float(data.get("saved_amount", 0))
+        target_date = data.get("target_date", "2027-03-31")
+        category = data.get("category", "General")
+
+        if not title or target_amount <= 0:
+            return jsonify({"error": "Valid title and target amount required"}), 400
+
+        new_id = str(uuid.uuid4())
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        if DATABASE_URL and 'postgres' in DATABASE_URL:
+            cur.execute("""
+            INSERT INTO saving_goals (id, user_id, title, target_amount, saved_amount, target_date, category, status, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """, (new_id, user_id, title, target_amount, saved_amount, target_date, category, "Active", now_str))
+        else:
+            cur.execute("""
+            INSERT INTO saving_goals (id, user_id, title, target_amount, saved_amount, target_date, category, status, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (new_id, user_id, title, target_amount, saved_amount, target_date, category, "Active", now_str))
+            db.commit()
+
+        return jsonify({"success": True, "id": new_id, "message": "Saving Goal created successfully"})
+
+    # GET
+    user_id = request.args.get("user_id", "user_demo_2026")
+    if DATABASE_URL and 'postgres' in DATABASE_URL:
+        cur.execute("SELECT id, title, target_amount, saved_amount, target_date, category, status, created_at FROM saving_goals WHERE user_id = %s ORDER BY created_at DESC", (user_id,))
+        rows = cur.fetchall()
+        goals = [{
+            "id": r[0], "title": r[1], "target_amount": float(r[2]), "saved_amount": float(r[3]),
+            "progress_percent": round(float(r[3]) / float(r[2]) * 100, 1) if float(r[2]) > 0 else 0,
+            "target_date": str(r[4]), "category": r[5], "status": r[6]
+        } for r in rows]
+    else:
+        cur.execute("SELECT id, title, target_amount, saved_amount, target_date, category, status, created_at FROM saving_goals WHERE user_id = ? ORDER BY created_at DESC", (user_id,))
+        rows = cur.fetchall()
+        goals = [{
+            "id": r["id"], "title": r["title"], "target_amount": float(r["target_amount"]), "saved_amount": float(r["saved_amount"]),
+            "progress_percent": round(float(r["saved_amount"]) / float(r["target_amount"]) * 100, 1) if float(r["target_amount"]) > 0 else 0,
+            "target_date": str(r["target_date"]), "category": r["category"], "status": r["status"]
+        } for r in rows]
+
+    return jsonify({"goals": goals})
+
+@app.route("/api/saving-goals/<goal_id>/deposit", methods=["POST"])
+def deposit_to_goal(goal_id):
+    data = request.json or {}
+    amount = float(data.get("amount", 0))
+    user_id = data.get("user_id", "user_demo_2026")
+
+    if amount <= 0:
+        return jsonify({"error": "Deposit amount must be positive"}), 400
+
+    db = get_db()
+    cur = db.cursor()
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    if DATABASE_URL and 'postgres' in DATABASE_URL:
+        cur.execute("UPDATE saving_goals SET saved_amount = saved_amount + %s WHERE id = %s", (amount, goal_id))
+        cur.execute("""
+        INSERT INTO goal_deposits (id, goal_id, user_id, amount, deposit_date, notes, created_at)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
+        """, (str(uuid.uuid4()), goal_id, user_id, amount, date.today().strftime("%Y-%m-%d"), "Contribution from savings", now_str))
+    else:
+        cur.execute("UPDATE saving_goals SET saved_amount = saved_amount + ? WHERE id = ?", (amount, goal_id))
+        cur.execute("""
+        INSERT INTO goal_deposits (id, goal_id, user_id, amount, deposit_date, notes, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (str(uuid.uuid4()), goal_id, user_id, amount, date.today().strftime("%Y-%m-%d"), "Contribution from savings", now_str))
+        db.commit()
+
+    return jsonify({"success": True, "message": f"Successfully deposited ₹{amount:,.0f} towards goal!"})
+
+@app.route("/api/saving-goals/<goal_id>", methods=["DELETE"])
+def delete_goal(goal_id):
+    db = get_db()
+    cur = db.cursor()
+    if DATABASE_URL and 'postgres' in DATABASE_URL:
+        cur.execute("DELETE FROM saving_goals WHERE id = %s", (goal_id,))
+    else:
+        cur.execute("DELETE FROM saving_goals WHERE id = ?", (goal_id,))
+        db.commit()
+    return jsonify({"success": True, "message": "Saving goal removed"})
+
+
+# ==========================================
+# BUDGET ALERTS & NOTIFICATIONS
+# ==========================================
+
+@app.route("/api/alerts", methods=["GET"])
+def get_alerts():
+    user_id = request.args.get("user_id", "user_demo_2026")
+    db = get_db()
+    cur = db.cursor()
+
+    if DATABASE_URL and 'postgres' in DATABASE_URL:
+        cur.execute("SELECT id, category, level, message, is_read, created_at FROM budget_alerts WHERE user_id = %s ORDER BY created_at DESC LIMIT 20", (user_id,))
+        rows = cur.fetchall()
+        alerts = [{"id": r[0], "category": r[1], "level": r[2], "message": r[3], "is_read": bool(r[4]), "created_at": str(r[5])} for r in rows]
+    else:
+        cur.execute("SELECT id, category, level, message, is_read, created_at FROM budget_alerts WHERE user_id = ? ORDER BY created_at DESC LIMIT 20", (user_id,))
+        rows = cur.fetchall()
+        alerts = [{"id": r["id"], "category": r["category"], "level": r["level"], "message": r["message"], "is_read": bool(r["is_read"]), "created_at": str(r["created_at"])} for r in rows]
+
+    return jsonify({"alerts": alerts})
+
+
+# ==========================================
+# REPORTS & AI RECOMMENDATIONS API
+# ==========================================
+
+@app.route("/api/reports", methods=["GET"])
+def get_reports():
+    user_id = request.args.get("user_id", "user_demo_2026")
+    month = request.args.get("month", datetime.now().strftime("%Y-%m"))
+    db = get_db()
+    cur = db.cursor()
+
+    # Expenses by category
+    if DATABASE_URL and 'postgres' in DATABASE_URL:
+        cur.execute("SELECT category, COALESCE(SUM(amount), 0) FROM expenses WHERE user_id = %s AND TO_CHAR(date, 'YYYY-MM') = %s GROUP BY category ORDER BY 2 DESC", (user_id, month))
+        cat_data = [{"category": r[0], "amount": float(r[1])} for r in cur.fetchall()]
+
+        cur.execute("SELECT COALESCE(SUM(amount), 0) FROM income WHERE user_id = %s AND TO_CHAR(date, 'YYYY-MM') = %s", (user_id, month))
+        tot_inc = float(cur.fetchone()[0])
+    else:
+        cur.execute("SELECT category, COALESCE(SUM(amount), 0) FROM expenses WHERE user_id = ? AND strftime('%Y-%m', date) = ? GROUP BY category ORDER BY 2 DESC", (user_id, month))
+        cat_data = [{"category": r[0], "amount": float(r[1])} for r in cur.fetchall()]
+
+        cur.execute("SELECT COALESCE(SUM(amount), 0) FROM income WHERE user_id = ? AND strftime('%Y-%m', date) = ?", (user_id, month))
+        tot_inc = float(cur.fetchone()[0])
+
+    tot_exp = sum(c["amount"] for c in cat_data)
+    net_save = tot_inc - tot_exp
+
+    # Predictive Intelligence / Burn Rate
+    today_day = datetime.now().day
+    days_in_month = 30
+    daily_burn_rate = round(tot_exp / max(today_day, 1), 2)
+    projected_month_expense = round(daily_burn_rate * days_in_month, 2)
+
+    ai_recommendations = []
+    if cat_data:
+        top_cat = cat_data[0]
+        top_cat_share = round((top_cat["amount"] / tot_exp * 100), 1) if tot_exp > 0 else 0
+        ai_recommendations.append(f"Highest Spending Category: {top_cat['category']} accounts for {top_cat_share}% (₹{top_cat['amount']:,.0f}) of total monthly spending.")
+        if top_cat_share > 30:
+            suggested_cut = round(top_cat['amount'] * 0.15, 0)
+            ai_recommendations.append(f"AI Savings Tip: Reducing {top_cat['category']} expenses by 15% would save an extra ₹{suggested_cut:,.0f} towards your goal this month.")
+
+    if projected_month_expense > 25000:
+        ai_recommendations.append(f"Burn-rate Alert: At your current daily pace of ₹{daily_burn_rate:,.0f}/day, projected spending is ₹{projected_month_expense:,.0f}, which exceeds your ₹25,000 threshold.")
+    else:
+        ai_recommendations.append(f"Healthy Spending Trajectory: Projected month-end spend is ₹{projected_month_expense:,.0f}, keeping you well within budget limits.")
+
+    return jsonify({
+        "month": month,
+        "total_income": tot_inc,
+        "total_expenses": tot_exp,
+        "net_savings": net_save,
+        "savings_rate_percent": round((net_save / tot_inc * 100), 1) if tot_inc > 0 else 0,
+        "daily_burn_rate": daily_burn_rate,
+        "projected_month_expense": projected_month_expense,
+        "category_breakdown": cat_data,
+        "ai_recommendations": ai_recommendations
+    })
+
+
+# ==========================================
+# LAUNCHER
+# ==========================================
+
+if __name__ == "__main__":
     init_db()
     lan_ip = get_lan_ip()
-    print_banner(lan_ip)
-    # Run production multi-threaded WSGI server via Werkzeug
-    app.run(host='0.0.0.0', port=PORT, threaded=True, debug=False)
+    print("=" * 65)
+    print(" 🚀 SMART BUDGET & SAVING MANAGER — WEB & APK SERVICE")
+    print(f" 🌐 Local Browser : http://127.0.0.1:{PORT}")
+    print(f" 📱 Mobile / Wi-Fi : http://{lan_ip}:{PORT}")
+    print(" 🎓 Group: Hansi Yadav, Diksha Kotre, Sakshi Patil (SE CSE AIML)")
+    print("=" * 65)
+    app.run(host="0.0.0.0", port=PORT, debug=False)

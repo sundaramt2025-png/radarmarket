@@ -1,15 +1,21 @@
 {
-  "name": "RadarMarket | Campus Trading Radar",
-  "short_name": "RadarMarket",
+  "name": "Smart Budget & Saving Manager",
+  "short_name": "SmartBudget",
   "start_url": "/?source=pwa",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait-primary",
-  "background_color": "#070b12",
-  "theme_color": "#070b12",
-  "description": "Hyper-local campus stationery and second-hand books marketplace with optical barcode scanning.",
-  "categories": ["education", "shopping", "lifestyle"],
+  "background_color": "#064e3b",
+  "theme_color": "#047857",
+  "description": "Track your money, control your budget, and achieve your saving goals with intelligent alerts and financial summaries.",
+  "categories": ["finance", "productivity", "utilities"],
   "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
     {
       "src": "/icons/icon-192.png",
       "sizes": "192x192",
@@ -27,35 +33,36 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
-    },
-    {
-      "src": "/icons/icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any"
     }
   ],
   "shortcuts": [
     {
-      "name": "Scan ISBN Barcode",
-      "short_name": "Scan",
-      "description": "Scan textbook barcode with camera",
-      "url": "/?action=scan",
-      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+      "name": "Add Expense",
+      "short_name": "Expense",
+      "description": "Quickly record a new expense",
+      "url": "/?action=expense",
+      "icons": [{ "src": "/icons/icon.svg", "sizes": "any" }]
     },
     {
-      "name": "New Listing",
-      "short_name": "Sell",
-      "description": "Post a book or stationery for sale",
-      "url": "/?action=new",
-      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+      "name": "Add Income",
+      "short_name": "Income",
+      "description": "Log an income credit",
+      "url": "/?action=income",
+      "icons": [{ "src": "/icons/icon.svg", "sizes": "any" }]
     },
     {
-      "name": "Proximity Radar",
-      "short_name": "Radar",
-      "description": "View live campus radar",
-      "url": "/?action=radar",
-      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+      "name": "Saving Goals",
+      "short_name": "Goals",
+      "description": "View progress on your saving targets",
+      "url": "/?view=goals",
+      "icons": [{ "src": "/icons/icon.svg", "sizes": "any" }]
+    },
+    {
+      "name": "Budget Alerts",
+      "short_name": "Alerts",
+      "description": "Check monthly budget spending limits",
+      "url": "/?view=budgets",
+      "icons": [{ "src": "/icons/icon.svg", "sizes": "any" }]
     }
   ]
 }
