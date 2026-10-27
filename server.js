@@ -19,6 +19,10 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname)));
 
+app.get('/SmartBudget.apk', (req, res) => {
+  res.download(path.join(__dirname, 'SmartBudget.apk'), 'SmartBudget.apk');
+});
+
 function getLanIp() {
   const interfaces = os.networkInterfaces();
   for (const name of Object.keys(interfaces)) {

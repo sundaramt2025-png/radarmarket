@@ -115,10 +115,16 @@
 
       <!-- Quick Action Buttons & Profile Controls -->
       <div class="flex items-center space-x-2 sm:space-x-3">
-        <!-- Install APK / PWA Trigger Button -->
-        <button id="pwa-install-btn" onclick="triggerPwaInstall()" class="hidden sm:flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm tap-scale transition-all">
+        <!-- Download Native APK File Button -->
+        <a href="/SmartBudget.apk" download="SmartBudget.apk" class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-700 hover:bg-emerald-800 text-white shadow-sm tap-scale transition-all">
+          <i data-lucide="package" class="w-3.5 h-3.5"></i>
+          <span>Download .APK</span>
+        </a>
+
+        <!-- Install WebAPK / PWA Trigger Button -->
+        <button id="pwa-install-btn" onclick="triggerPwaInstall()" class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-teal-600 hover:bg-teal-700 text-white shadow-sm tap-scale transition-all">
           <i data-lucide="download" class="w-3.5 h-3.5"></i>
-          <span>Install APK</span>
+          <span>Install WebAPK</span>
         </button>
 
         <!-- Project Info Modal Trigger -->
@@ -1145,12 +1151,14 @@
         </div>
       </div>
 
-      <div class="pt-2 flex space-x-2">
-        <button onclick="executePwaInstallPrompt()" id="modal-install-btn" class="flex-1 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-md tap-scale text-center">
-          📱 Install App Now
-        </button>
-        <button onclick="closeModal('apk-modal')" class="px-4 py-3 rounded-xl border border-slate-300 dark:border-slate-700 font-semibold text-slate-600">
-          Close
+      <div class="pt-2 flex flex-col sm:flex-row gap-2">
+        <a href="/SmartBudget.apk" download="SmartBudget.apk" class="flex-1 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-md tap-scale flex items-center justify-center space-x-2 text-center">
+          <i data-lucide="package" class="w-4 h-4"></i>
+          <span>Download SmartBudget.apk (Native)</span>
+        </a>
+        <button onclick="executePwaInstallPrompt()" id="modal-install-btn" class="flex-1 py-3 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold shadow-md tap-scale flex items-center justify-center space-x-2 text-center">
+          <i data-lucide="smartphone" class="w-4 h-4"></i>
+          <span>1-Click Install WebAPK</span>
         </button>
       </div>
     </div>

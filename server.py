@@ -209,6 +209,10 @@ def seed_data(conn, is_postgres=False):
 def index():
     return send_from_directory(BASE_DIR, "index.html")
 
+@app.route("/SmartBudget.apk")
+def download_apk():
+    return send_from_directory(BASE_DIR, "SmartBudget.apk", as_attachment=True, mimetype="application/vnd.android.package-archive")
+
 @app.route("/manifest.json")
 def manifest():
     return send_from_directory(BASE_DIR, "manifest.json", mimetype="application/manifest+json")
