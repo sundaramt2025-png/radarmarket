@@ -1,7 +1,7 @@
 # 💰 Smart Budget & Saving Manager — Full-Stack Web & Android APK
 
 > **Java Mini Project | SE CSE AIML (Academic Year 2026–2027)**  
-> **Group Members**: Hansi Yadav, Diksha Kotre, Sakshi Patil  
+> **Group Members**: Hansi Yadav, Diksha Kotre, Sakshi Patil, Nibha Yadav  
 > **Workflow**: Income → Budget → Expenses → Savings → Goals → Reports
 
 ---
@@ -56,3 +56,4 @@ npm start
   - **Hansi Yadav** (Full-Stack & Business Logic)
   - **Diksha Kotre** (UI/UX & Mobile App Shell)
   - **Sakshi Patil** (Database Schema & Analytics)
+  - **Nibha Yadav** (AI Recommendation & QA)

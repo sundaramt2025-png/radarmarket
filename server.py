@@ -1,7 +1,7 @@
 """
 Smart Budget & Saving Manager - Production Backend Server
 SE CSE AIML Java Mini Project Web & Mobile APK Shell
-Group: Hansi Yadav, Diksha Kotre, Sakshi Patil (Academic Year 2026-2027)
+Group: Hansi Yadav, Diksha Kotre, Sakshi Patil, Nibha Yadav (Academic Year 2026-2027)
 """
 
 import os
@@ -236,7 +236,8 @@ def project_info():
         "members": [
             {"name": "Hansi Yadav", "role": "Full-Stack & Logic"},
             {"name": "Diksha Kotre", "role": "UI/UX & Mobile Shell"},
-            {"name": "Sakshi Patil", "role": "Database & Analytics"}
+            {"name": "Sakshi Patil", "role": "Database & Analytics"},
+            {"name": "Nibha Yadav", "role": "AI Recommendation & QA"}
         ],
         "tech_stack": {
             "ui": "Tailwind CSS, Lucide Icons, Chart.js, HTML5 PWA / Android APK Shell",
@@ -830,6 +831,6 @@ if __name__ == "__main__":
     print(" 🚀 SMART BUDGET & SAVING MANAGER — WEB & APK SERVICE")
     print(f" 🌐 Local Browser : http://127.0.0.1:{PORT}")
     print(f" 📱 Mobile / Wi-Fi : http://{lan_ip}:{PORT}")
-    print(" 🎓 Group: Hansi Yadav, Diksha Kotre, Sakshi Patil (SE CSE AIML)")
+    print(" 🎓 Group: Hansi Yadav, Diksha Kotre, Sakshi Patil, Nibha Yadav (SE CSE AIML)")
     print("=" * 65)
     app.run(host="0.0.0.0", port=PORT, debug=False)

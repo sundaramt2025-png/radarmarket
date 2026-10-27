@@ -1,7 +1,7 @@
 /**
  * Smart Budget & Saving Manager - Node.js Express Dual-Engine Backend
  * SE CSE AIML Java Mini Project Web & Mobile APK Shell
- * Group: Hansi Yadav, Diksha Kotre, Sakshi Patil (Academic Year 2026-2027)
+ * Group: Hansi Yadav, Diksha Kotre, Sakshi Patil, Nibha Yadav (Academic Year 2026-2027)
  */
 
 const express = require('express');
@@ -138,7 +138,8 @@ app.get('/api/project-info', (req, res) => {
     members: [
       { name: "Hansi Yadav", role: "Full-Stack & Logic" },
       { name: "Diksha Kotre", role: "UI/UX & Mobile Shell" },
-      { name: "Sakshi Patil", role: "Database & Analytics" }
+      { name: "Sakshi Patil", role: "Database & Analytics" },
+      { name: "Nibha Yadav", role: "AI Recommendation & QA" }
     ]
   });
 });
